@@ -50,7 +50,7 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `mvn -q verify` - build, test, Spotless check, coverage gate
 - `mvn spotless:apply` - auto-format
 - `docker compose -f deploy/local/docker-compose.yml up -d` - local Postgres + Redpanda + otel-lgtm
-- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080) and notify-svc (:8081)
+- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080) and notify-svc (:8081)  (if a `pgdata` volume from before Plan 2 exists, run `down -v` once so `init-db.sql` creates the notify db)
 - `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
 

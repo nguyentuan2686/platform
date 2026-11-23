@@ -19,9 +19,11 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
+# Pins the toolchain so rustup does not re-download components listed in rust-toolchain.toml.
+ENV RUSTUP_TOOLCHAIN=1.100.0
 COPY --from=planner /src/recipe.json recipe.json
 # Dependencies only: cached until Cargo.toml/Cargo.lock change.
-RUN cargo chef cook --release --recipe-path recipe.json -p notify-svc
+RUN cargo chef cook --release --locked --recipe-path recipe.json -p notify-svc
 COPY . .
 RUN cargo build --release --locked -p notify-svc
 # `ldd` shows libz.so.1 is the only runtime lib missing from distroless/cc; stage it (arch-independent glob).

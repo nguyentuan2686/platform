@@ -75,6 +75,11 @@ fn to_domain(
 
 #[async_trait]
 impl NotificationRepositoryPort for NotificationRepositoryAdapter {
+    #[tracing::instrument(
+        skip_all,
+        name = "INSERT notify.notifications",
+        fields(otel.kind = "client", db.system = "postgresql", db.operation = "INSERT", db.sql.table = "notifications")
+    )]
     async fn save(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -96,6 +101,11 @@ impl NotificationRepositoryPort for NotificationRepositoryAdapter {
         Ok(())
     }
 
+    #[tracing::instrument(
+        skip_all,
+        name = "SELECT notify.notifications",
+        fields(otel.kind = "client", db.system = "postgresql", db.operation = "SELECT", db.sql.table = "notifications")
+    )]
     async fn list_recent(&self, limit: u32) -> anyhow::Result<Vec<Notification>> {
         let rows: Vec<Row> = sqlx::query_as(
             "SELECT id, order_id, customer_id, channel, message, created_at FROM notifications \
