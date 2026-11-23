@@ -37,7 +37,8 @@ exec docker run --rm -i "${TTY[@]}" \
   -v "$SOCK:/var/run/docker.sock" \
   -e CARGO_TARGET_DIR=/work/target/docker \
   -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
-  -e RUST_LOG="${RUST_LOG:-}" \
-  -e RUST_BACKTRACE="${RUST_BACKTRACE:-}" \
+  --add-host=host.docker.internal:host-gateway \
+  -v platform-cargo-advisory:/usr/local/cargo/advisory-dbs \
+  -e RUST_LOG -e RUST_BACKTRACE \
   -w /work \
   "$IMAGE" cargo "$@"

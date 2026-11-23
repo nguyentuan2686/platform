@@ -28,12 +28,16 @@ case "$file" in
     if command -v rustfmt >/dev/null 2>&1; then
       rustfmt "$file" >/dev/null 2>&1
     else
-      # No native Rust: format the workspace via the Docker toolchain, only if Docker is up and the image exists.
+      # No native Rust: format just this file via the Docker toolchain, detached so the hook returns immediately.
+      # Only if the image already exists (never builds) and Docker is up.
       root="$(cd "$(dirname "$0")/../.." && pwd)"
       tc="$(sed -nE 's/^channel *= *"([^"]+)".*/\1/p' "$root/rust-toolchain.toml" 2>/dev/null | head -n1)"
-      if [ -n "$tc" ] && command -v docker >/dev/null 2>&1 \
-         && timeout 5 docker image inspect "platform-rust-dev:$tc" >/dev/null 2>&1; then
-        timeout 60 "$root/scripts/cargo.sh" fmt --all >/dev/null 2>&1
+      case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) work="$(cd "$root" && pwd -W)"; export MSYS_NO_PATHCONV=1 ;; *) work="$root" ;; esac
+      rel="${file#"$work"/}"
+      if [ -n "$tc" ] && [ "$rel" != "$file" ] && command -v docker >/dev/null 2>&1 \
+         && timeout 2 docker image inspect "platform-rust-dev:$tc" >/dev/null 2>&1; then
+        ( timeout 60 docker run --rm -v "$work:/work" -w /work "platform-rust-dev:$tc" \
+            rustfmt --edition 2021 "$rel" >/dev/null 2>&1 & ) >/dev/null 2>&1
       fi
     fi
     ;;

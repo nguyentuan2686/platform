@@ -14,7 +14,7 @@ scripts/cargo.sh test --workspace                      # unit + integration (tes
 scripts/cargo.sh fmt --all                             # format (use `fmt --check` to verify)
 scripts/cargo.sh clippy --workspace --all-targets -- -D warnings
 scripts/cargo.sh deny check                            # licenses, advisories, sources
-scripts/cargo.sh llvm-cov --workspace --summary-only   # coverage gate >= 80%
+scripts/cargo.sh llvm-cov --workspace --fail-under-lines 80 --ignore-filename-regex '(main\.rs|/tests/)'   # coverage gate
 ```
 First run builds the image; cargo registry/git are named volumes, build output goes to `target/docker/`. On Windows use Git Bash (`scripts/cargo.sh`) or `scripts\cargo.ps1`.
 

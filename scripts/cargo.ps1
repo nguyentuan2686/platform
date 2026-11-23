@@ -11,8 +11,6 @@ if ($LASTEXITCODE -ne 0) {
   docker build -t $Image tools/rust-dev
 }
 
-$rustLog = if ($env:RUST_LOG) { $env:RUST_LOG } else { '' }
-$bt = if ($env:RUST_BACKTRACE) { $env:RUST_BACKTRACE } else { '' }
 docker run --rm -i `
   -v "${Root}:/work" `
   -v platform-cargo-registry:/usr/local/cargo/registry `
@@ -20,6 +18,8 @@ docker run --rm -i `
   -v //var/run/docker.sock:/var/run/docker.sock `
   -e CARGO_TARGET_DIR=/work/target/docker `
   -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
-  -e "RUST_LOG=$rustLog" -e "RUST_BACKTRACE=$bt" `
+  --add-host=host.docker.internal:host-gateway `
+  -v platform-cargo-advisory:/usr/local/cargo/advisory-dbs `
+  -e RUST_LOG -e RUST_BACKTRACE `
   -w /work $Image cargo @args
 exit $LASTEXITCODE
