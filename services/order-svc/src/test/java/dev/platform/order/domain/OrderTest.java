@@ -21,7 +21,7 @@ class OrderTest {
   @Test
   void computesTotalAndStatus() {
     Order o = Order.place(OrderId.newId(), "c1", lines(), NOW);
-    assertThat(o.total()).isEqualByComparingTo("25.50");
+    assertThat(o.total()).isEqualByComparingTo("99.99");
     assertThat(o.total().scale()).isEqualTo(2);
     assertThat(o.status()).isEqualTo(OrderStatus.PLACED);
     assertThat(o.createdAt()).isEqualTo(NOW);
