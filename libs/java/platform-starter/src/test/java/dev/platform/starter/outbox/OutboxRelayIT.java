@@ -57,7 +57,6 @@ import tools.jackson.databind.json.JsonMapper;
     classes = OutboxRelayIT.App.class,
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
     properties = {
-      "spring.flyway.locations=classpath:db/platform",
       // The scheduled relay must not race the explicit publishPending() calls in these tests.
       "platform.outbox.poll-interval=1h",
       "platform.outbox.send-timeout=2s",

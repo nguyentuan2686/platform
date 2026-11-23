@@ -21,9 +21,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.lifecycle.Startables;
@@ -35,7 +37,6 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
-      "spring.flyway.locations=classpath:db/migration,classpath:db/platform",
       // Fast relay + bounded producer waits so the broker-down test finishes quickly.
       "platform.outbox.poll-interval=200ms",
       "platform.outbox.send-timeout=2s",
@@ -72,6 +73,7 @@ class OrderFlowIT {
           + "{\"sku\":\"sku-2\",\"quantity\":1,\"unitPrice\":5.50}]}";
 
   @LocalServerPort int port;
+  @Autowired JdbcTemplate jdbc;
 
   @Value("${spring.kafka.bootstrap-servers}")
   String bootstrap;
@@ -140,7 +142,28 @@ class OrderFlowIT {
   void unknown_order_is_404_problem() throws Exception {
     HttpResponse<String> response = get("/orders/" + UUID.randomUUID());
     assertThat(response.statusCode()).isEqualTo(404);
-    assertThat(JSON.readTree(response.body()).has("trace_id")).isTrue();
+    JsonNode problem = JSON.readTree(response.body());
+    assertThat(problem.has("trace_id")).isTrue();
+    assertThat(problem.get("type").asString()).isEqualTo("urn:problem:not-found");
+  }
+
+  @Test
+  void platform_and_service_migrations_keep_separate_histories() {
+    // Platform (starter) migrations: own history table, run automatically.
+    assertThat(
+            jdbc.queryForList(
+                "select version from platform_schema_history where success and version is not null"
+                    + " and type <> 'BASELINE'",
+                String.class))
+        .containsExactly("1");
+    // Service history holds only the service's own migrations.
+    List<String> service =
+        jdbc.queryForList(
+            "select script from flyway_schema_history where success and type <> 'BASELINE'",
+            String.class);
+    assertThat(service).contains("V1__orders.sql").noneMatch(s -> s.contains("outbox"));
+    assertThat(jdbc.queryForObject("select count(*) from outbox_event where false", Integer.class))
+        .isZero();
   }
 
   @Test

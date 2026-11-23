@@ -4,13 +4,16 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import java.time.Duration;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,8 +25,9 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Active when the service has a {@link DataSource}, a transaction manager and a {@link
  * KafkaTemplate} (i.e. it added JDBC and Kafka starters); switch off with {@code
- * platform.outbox.enabled=false}. Services must add {@code classpath:db/platform} to {@code
- * spring.flyway.locations} so the {@code outbox_event} table exists.
+ * platform.outbox.enabled=false}. When Flyway is present the {@code outbox_event} table is created
+ * automatically from {@code classpath:db/platform} with its own history table {@code
+ * platform_schema_history}, before the service's migrations.
  */
 @AutoConfiguration(
     afterName = {
@@ -77,5 +81,44 @@ public class OutboxAutoConfiguration {
   @ConditionalOnMissingBean
   OutboxRelayScheduler outboxRelayScheduler(OutboxRelay relay, OutboxProperties properties) {
     return new OutboxRelayScheduler(relay::poll, properties.pollInterval(), STOP_TIMEOUT);
+  }
+
+  /**
+   * Creates the {@code outbox_event} table through the starter's own Flyway history (see {@link
+   * PlatformFlywayMigrator}) when the service uses Flyway; services do not list {@code
+   * classpath:db/platform} themselves.
+   */
+  @Configuration(proxyBeanMethods = false)
+  @ConditionalOnClass(
+      name = {
+        "org.flywaydb.core.Flyway",
+        "org.springframework.boot.flyway.autoconfigure.FlywayMigrationInitializer"
+      })
+  @ConditionalOnBooleanProperty(name = "spring.flyway.enabled", matchIfMissing = true)
+  static class PlatformMigrationsConfiguration {
+
+    @Bean(PlatformFlywayMigrator.BEAN_NAME)
+    PlatformFlywayMigrator platformFlywayMigrator(DataSource dataSource) {
+      return new PlatformFlywayMigrator(dataSource);
+    }
+
+    @Bean
+    static BeanFactoryPostProcessor platformMigrationsBeforeServiceMigrations() {
+      return PlatformFlywayMigrator.runBeforeServiceMigrations();
+    }
+
+    /**
+     * Platform tables and {@code platform_schema_history} exist before the service's first
+     * migration, so its schema is no longer empty: baseline at version 0 so that every service
+     * migration (V1 onwards) still applies. Left alone if the service configured baselining itself.
+     */
+    @Bean
+    FlywayConfigurationCustomizer platformServiceFlywayBaseline() {
+      return configuration -> {
+        if (!configuration.isBaselineOnMigrate()) {
+          configuration.baselineOnMigrate(true).baselineVersion("0");
+        }
+      };
+    }
   }
 }

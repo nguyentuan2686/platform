@@ -7,7 +7,11 @@ import javax.sql.DataSource;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.flyway.autoconfigure.FlywayMigrationInitializer;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +30,51 @@ class OutboxAutoConfigurationTest {
           .withConfiguration(AutoConfigurations.of(OutboxAutoConfiguration.class))
           .withUserConfiguration(Infrastructure.class)
           // Keep the relay thread from touching the (unreachable) database during the test.
-          .withPropertyValues("platform.outbox.poll-interval=1h");
+          .withPropertyValues(
+              "platform.outbox.poll-interval=1h",
+              // The platform migrator would connect at startup; covered by the ITs instead.
+              "spring.flyway.enabled=false");
+
+  @Test
+  void platform_migrations_run_before_every_service_flyway_initializer() {
+    DefaultListableBeanFactory beanFactory = new DefaultListableBeanFactory();
+    beanFactory.registerBeanDefinition(
+        "flywayInitializer", new RootBeanDefinition(FlywayMigrationInitializer.class));
+    RootBeanDefinition other = new RootBeanDefinition(FlywayMigrationInitializer.class);
+    other.setDependsOn("somethingElse");
+    beanFactory.registerBeanDefinition("otherInitializer", other);
+    beanFactory.registerBeanDefinition("unrelated", new RootBeanDefinition(Object.class));
+
+    PlatformFlywayMigrator.runBeforeServiceMigrations().postProcessBeanFactory(beanFactory);
+    PlatformFlywayMigrator.runBeforeServiceMigrations().postProcessBeanFactory(beanFactory);
+
+    assertThat(beanFactory.getBeanDefinition("flywayInitializer").getDependsOn())
+        .containsExactly(PlatformFlywayMigrator.BEAN_NAME);
+    assertThat(beanFactory.getBeanDefinition("otherInitializer").getDependsOn())
+        .containsExactly("somethingElse", PlatformFlywayMigrator.BEAN_NAME);
+    assertThat(beanFactory.getBeanDefinition("unrelated").getDependsOn()).isNull();
+  }
+
+  @Test
+  void no_platform_migrations_when_flyway_is_disabled() {
+    runner.run(
+        context -> {
+          assertThat(context).hasNotFailed();
+          assertThat(context).doesNotHaveBean(PlatformFlywayMigrator.class);
+        });
+  }
+
+  @Test
+  void no_platform_migrations_without_flyway_on_the_classpath() {
+    runner
+        .withPropertyValues("spring.flyway.enabled=true")
+        .withClassLoader(new FilteredClassLoader("org.flywaydb"))
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context).doesNotHaveBean(PlatformFlywayMigrator.class);
+            });
+  }
 
   @Test
   void registers_writer_relay_and_own_scheduler_without_enabling_scheduled_annotations() {
