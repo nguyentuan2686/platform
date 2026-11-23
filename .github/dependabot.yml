@@ -22,8 +22,8 @@ updates:
     ignore:
       - dependency-name: eclipse-temurin
         update-types: [version-update:semver-major]
+      # build-stage image: its tag encodes the JDK in a suffix Dependabot cannot version-compare; bump manually
       - dependency-name: maven
-        versions: [">= 3.9-eclipse-temurin-22"]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
