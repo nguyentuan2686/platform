@@ -136,14 +136,19 @@ impl Env {
     }
 
     /// Fresh database with platform migrations applied and a `handled` table for the test handler.
-    async fn new_db(&self, opts: PgPoolOptions) -> anyhow::Result<PgPool> {
+    /// URL of a freshly created, empty database.
+    async fn empty_db_url(&self) -> anyhow::Result<String> {
         let name = format!("t_{}", Uuid::new_v4().simple());
         let admin = PgPool::connect(&format!("{}/postgres", self.pg_base)).await?;
         sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}")))
             .execute(&admin)
             .await?;
         admin.close().await;
-        let pool = opts.connect(&format!("{}/{name}", self.pg_base)).await?;
+        Ok(format!("{}/{name}", self.pg_base))
+    }
+
+    async fn new_db(&self, opts: PgPoolOptions) -> anyhow::Result<PgPool> {
+        let pool = opts.connect(&self.empty_db_url().await?).await?;
         migrate_platform(&pool).await?;
         // Applying twice must be a no-op (tracked in its own migrations table).
         migrate_platform(&pool).await?;
@@ -643,6 +648,87 @@ async fn db_down_retries_until_db_back(env: &Env) -> anyhow::Result<()> {
 
 // ---------------------------------------------------------------------------------------------
 
+/// Two replicas starting at once on a fresh DB: both `migrate_platform` calls must succeed.
+async fn concurrent_platform_migrations_on_fresh_db(env: &Env) -> anyhow::Result<()> {
+    let url = env.empty_db_url().await?;
+    let (a, b) = tokio::try_join!(PgPool::connect(&url), PgPool::connect(&url))?;
+    let (ra, rb) = tokio::join!(migrate_platform(&a), migrate_platform(&b));
+    ra.context("replica A migrate")?;
+    rb.context("replica B migrate")?;
+    let applied: i64 = sqlx::query_scalar("SELECT count(*) FROM platform._sqlx_migrations")
+        .fetch_one(&a)
+        .await?;
+    ensure!(applied == 1, "migration applied once, got {applied}");
+    sqlx::query("SELECT 1 FROM platform.processed_event LIMIT 1")
+        .execute(&b)
+        .await?;
+    Ok(())
+}
+
+/// Shutdown while an attempt hangs on a paused DB: `run_consumer` returns promptly, the in-flight
+/// transaction is dropped (rolled back) and the offset is not advanced past that message.
+async fn shutdown_during_inflight_attempt_is_prompt(env: &Env) -> anyhow::Result<()> {
+    // Default 30s acquire timeout: without per-attempt cancellation, shutdown would wait for it.
+    let pool = env.new_db(PgPoolOptions::new()).await?;
+    let topic = env.new_topic().await?;
+    let cfg = env.config(&topic, "it-shutdown");
+    let group = cfg.group_id.clone();
+    let Running { shutdown, task } = Running::start(cfg, pool.clone());
+
+    let first = Uuid::new_v4();
+    env.produce(
+        &topic,
+        &envelope(first, EVENT_TYPE, &serde_json::json!({})),
+        None,
+    )
+    .await?;
+    wait_for("offset 1 committed", || async {
+        Ok(env.committed(&group, &topic).await? == Some(1))
+    })
+    .await?;
+
+    env.pg.pause().await?;
+    let outcome = async {
+        env.produce(
+            &topic,
+            &envelope(Uuid::new_v4(), EVENT_TYPE, &serde_json::json!({})),
+            None,
+        )
+        .await?;
+        // Let the consumer receive it and block inside the attempt.
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        ensure!(!task.is_finished(), "consumer still running");
+        shutdown.cancel();
+        let started = Instant::now();
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .context("run_consumer did not return within 2s of cancellation")???;
+        eprintln!(
+            "  run_consumer returned {}ms after cancel",
+            started.elapsed().as_millis()
+        );
+        Ok(())
+    }
+    .await;
+    env.pg.unpause().await?;
+    outcome?;
+
+    ensure!(
+        env.committed(&group, &topic).await? == Some(1),
+        "offset not advanced past the in-flight message"
+    );
+    ensure!(
+        handled_ids(&pool).await? == vec![first],
+        "in-flight event not applied"
+    );
+    ensure!(
+        processed_count(&pool, "it-shutdown").await? == 1,
+        "in-flight idempotency marker rolled back"
+    );
+    pool.close().await;
+    Ok(())
+}
+
 macro_rules! scenario {
     ($env:expr, $failures:expr, $name:ident) => {{
         let t = Instant::now();
@@ -674,6 +760,7 @@ fn consumer_runner_integration() {
             started.elapsed().as_secs_f64()
         );
         let mut failures: Vec<String> = Vec::new();
+        scenario!(&env, failures, concurrent_platform_migrations_on_fresh_db);
         scenario!(&env, failures, handles_event_once_and_commits);
         scenario!(&env, failures, duplicate_event_id_processed_once);
         scenario!(
@@ -682,8 +769,9 @@ fn consumer_runner_integration() {
             malformed_messages_are_skipped_and_consumer_continues
         );
         scenario!(&env, failures, continues_trace_from_traceparent_header);
-        // Last: pauses the shared Postgres.
+        // Last: these pause the shared Postgres.
         scenario!(&env, failures, db_down_retries_until_db_back);
+        scenario!(&env, failures, shutdown_during_inflight_attempt_is_prompt);
         eprintln!("consumer IT total {:.1}s", started.elapsed().as_secs_f64());
         assert!(
             failures.is_empty(),

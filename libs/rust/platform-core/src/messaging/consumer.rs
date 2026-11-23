@@ -6,12 +6,22 @@
 //! backoff and the offset is not committed, so the message is never lost; the partition simply
 //! does not advance until it succeeds.
 //!
+//! Messages are processed one at a time, so a message stuck in retry blocks every partition this
+//! consumer owns (head-of-line blocking across partitions), not only its own.
+//!
 //! Commits use `CommitMode::Async`: the sync variant blocks the calling thread on a broker
 //! round-trip, which would stall a tokio worker. An async commit is enqueued in order by
 //! librdkafka; if it is lost (crash, rebalance) the message is redelivered and the idempotency
-//! marker in `platform.processed_event` turns the redelivery into a no-op.
+//! marker in `platform.processed_event` turns the redelivery into a no-op. On shutdown the offsets
+//! of all finished messages are committed once more with `CommitMode::Sync`, flushing pending
+//! async commits before the client is dropped.
+//!
+//! Shutdown is prompt: cancellation is observed while waiting for messages, during backoff and
+//! during a processing attempt. A cancelled attempt is dropped, which drops its transaction (rolled
+//! back, never committed) and leaves its offset uncommitted, so the message is redelivered.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Context as _;
@@ -65,8 +75,9 @@ impl ConsumerConfig {
 ///
 /// Returns `Ok(())` after cancellation; errors only if the Kafka client cannot be created or the
 /// subscription is rejected. Broker unavailability is logged and retried, never returned.
-/// Cancellation is observed while waiting for messages and during retry backoff; an in-flight
-/// database transaction is never interrupted (an unfinished message is redelivered after restart).
+/// Cancellation is observed while waiting for messages, during retry backoff and during a
+/// processing attempt (the attempt's transaction is dropped and rolled back; its message is
+/// redelivered after restart). Before returning, finished offsets are committed synchronously.
 pub async fn run_consumer(
     cfg: ConsumerConfig,
     pool: PgPool,
@@ -97,6 +108,7 @@ pub async fn run_consumer(
         pool: &pool,
         handler: handler.as_ref(),
         shutdown: &shutdown,
+        finished: Mutex::default(),
     };
     let mut recv_backoff = INITIAL_BACKOFF.min(cfg.max_backoff);
     loop {
@@ -130,6 +142,7 @@ pub async fn run_consumer(
             }
         }
     }
+    runner.flush_commits();
     info!(topic = %cfg.topic, consumer = cfg.consumer_name, "kafka consumer stopped");
     Ok(())
 }
@@ -146,6 +159,8 @@ struct Runner<'a> {
     pool: &'a PgPool,
     handler: &'a dyn EventHandler,
     shutdown: &'a CancellationToken,
+    /// Next offset to commit per (topic, partition), for finished messages only.
+    finished: Mutex<HashMap<(String, i32), i64>>,
 }
 
 impl Runner<'_> {
@@ -176,8 +191,21 @@ impl Runner<'_> {
 
         let mut backoff = INITIAL_BACKOFF.min(self.cfg.max_backoff);
         loop {
-            let result =
-                process_once(self.pool, self.cfg.consumer_name, self.handler, &envelope).await;
+            // Dropping the attempt on shutdown drops its Transaction (rollback); no offset commit.
+            let result = tokio::select! {
+                biased;
+                () = self.shutdown.cancelled() => {
+                    info!(
+                        topic = msg.topic(),
+                        partition = msg.partition(),
+                        offset = msg.offset(),
+                        event_id = %envelope.event_id,
+                        "shutdown during processing; attempt abandoned, offset not committed"
+                    );
+                    return Flow::Stop;
+                }
+                r = process_once(self.pool, self.cfg.consumer_name, self.handler, &envelope) => r,
+            };
             match result {
                 Ok(outcome) => {
                     let what = match outcome {
@@ -235,6 +263,9 @@ impl Runner<'_> {
     /// Commits `offset + 1` for the message's partition (same as `commit_message`, which needs a
     /// borrowed message). A failed commit only means possible redelivery, which is idempotent.
     fn commit(&self, msg: &OwnedMessage) {
+        if let Ok(mut finished) = self.finished.lock() {
+            finished.insert((msg.topic().to_owned(), msg.partition()), msg.offset() + 1);
+        }
         let mut tpl = TopicPartitionList::new();
         let result = tpl
             .add_partition_offset(
@@ -251,6 +282,35 @@ impl Runner<'_> {
                 partition = msg.partition(),
                 offset = msg.offset(),
                 "offset commit failed; message may be redelivered"
+            );
+        }
+    }
+
+    /// Synchronously commits the offsets of all finished messages (shutdown only). Blocks this
+    /// thread for one broker round-trip, acceptable once at shutdown. Deliberately not
+    /// `commit_consumer_state`: with the default `enable.auto.offset.store=true` that commits the
+    /// position after the last *received* message, i.e. past an abandoned in-flight message.
+    fn flush_commits(&self) {
+        let finished = match self.finished.lock() {
+            Ok(f) => f.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+        if finished.is_empty() {
+            return;
+        }
+        let mut tpl = TopicPartitionList::new();
+        let result = finished
+            .iter()
+            .try_for_each(|((topic, partition), next)| {
+                tpl.add_partition_offset(topic, *partition, Offset::Offset(*next))
+            })
+            .and_then(|()| self.consumer.commit(&tpl, CommitMode::Sync));
+        if let Err(e) = result {
+            warn!(
+                error = %e,
+                error_type = "KafkaCommitFailed",
+                topic = %self.cfg.topic,
+                "final offset commit on shutdown failed; finished messages may be redelivered"
             );
         }
     }
