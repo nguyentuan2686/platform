@@ -1,8 +1,6 @@
 package dev.platform.starter.web;
 
 import dev.platform.starter.error.NotFoundException;
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.ConstraintViolationException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,16 +43,6 @@ public class PlatformProblemHandler extends ResponseEntityExceptionHandler {
   ResponseEntity<Object> handleNotFound(NotFoundException ex) {
     log.debug("Not found: {}", ex.getMessage());
     return respond(problem(HttpStatus.NOT_FOUND, ex.getMessage()));
-  }
-
-  @ExceptionHandler(ConstraintViolationException.class)
-  ResponseEntity<Object> handleConstraintViolation(ConstraintViolationException ex) {
-    List<Map<String, String>> errors = new ArrayList<>();
-    for (ConstraintViolation<?> violation : ex.getConstraintViolations()) {
-      errors.add(error(violation.getPropertyPath().toString(), violation.getMessage()));
-    }
-    log.debug("Constraint violation: {} error(s)", errors.size());
-    return respond(validationProblem(errors));
   }
 
   @ExceptionHandler(Exception.class)
@@ -118,13 +106,13 @@ public class PlatformProblemHandler extends ResponseEntityExceptionHandler {
     return response;
   }
 
-  private static ResponseEntity<Object> respond(ProblemDetail detail) {
+  static ResponseEntity<Object> respond(ProblemDetail detail) {
     return ResponseEntity.status(detail.getStatus())
         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
         .body(detail);
   }
 
-  private static ProblemDetail validationProblem(List<Map<String, String>> errors) {
+  static ProblemDetail validationProblem(List<Map<String, String>> errors) {
     ProblemDetail detail = problem(HttpStatus.BAD_REQUEST, "Request validation failed");
     detail.setProperty(ERRORS, errors);
     return detail;
@@ -156,7 +144,7 @@ public class PlatformProblemHandler extends ResponseEntityExceptionHandler {
     };
   }
 
-  private static Map<String, String> error(String field, @Nullable String message) {
+  static Map<String, String> error(String field, @Nullable String message) {
     return Map.of("field", field, "message", message == null ? "" : message);
   }
 
