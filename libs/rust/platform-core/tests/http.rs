@@ -114,7 +114,7 @@ async fn not_found_is_problem_json() {
 #[tokio::test]
 async fn validation_has_errors_list() {
     let v = problem("/val", 400).await;
-    assert_eq!(v["type"], "urn:problem:validation");
+    assert_eq!(v["type"], "urn:problem:validation-error");
     assert_eq!(v["title"], "Bad Request");
     assert_eq!(v["errors"][0]["field"], "limit");
     assert_eq!(v["errors"][0]["message"], "must be positive");
@@ -123,7 +123,7 @@ async fn validation_has_errors_list() {
 #[tokio::test]
 async fn bad_request_problem() {
     let v = problem("/bad", 400).await;
-    assert_eq!(v["type"], "urn:problem:bad-request");
+    assert_eq!(v["type"], "urn:problem:validation-error");
     assert_eq!(v["detail"], "nope");
 }
 
@@ -149,7 +149,7 @@ async fn malformed_json_is_problem_400() {
     assert_eq!(s, StatusCode::BAD_REQUEST);
     assert_eq!(h[header::CONTENT_TYPE], "application/problem+json");
     let v: Value = serde_json::from_slice(&b).unwrap();
-    assert_eq!(v["type"], "urn:problem:bad-request");
+    assert_eq!(v["type"], "urn:problem:validation-error");
 }
 
 #[tokio::test]
@@ -166,7 +166,7 @@ async fn missing_json_field_is_problem_400() {
 #[tokio::test]
 async fn bad_query_is_problem_400_naming_the_field() {
     let v = problem("/q?limit=abc", 400).await;
-    assert_eq!(v["type"], "urn:problem:validation");
+    assert_eq!(v["type"], "urn:problem:validation-error");
     assert_eq!(v["errors"][0]["field"], "limit");
     let (s, ..) = call(app(), get_req("/q?limit=5")).await;
     assert_eq!(s, StatusCode::OK);
@@ -175,7 +175,7 @@ async fn bad_query_is_problem_400_naming_the_field() {
 #[tokio::test]
 async fn bad_path_is_problem_400() {
     let v = problem("/p/xyz", 400).await;
-    assert_eq!(v["type"], "urn:problem:bad-request");
+    assert_eq!(v["type"], "urn:problem:validation-error");
 }
 
 #[tokio::test]
@@ -236,4 +236,27 @@ async fn traceparent_header_sets_handler_trace_id_and_span_attrs() {
     assert_eq!(attr("http.request.method").as_deref(), Some("GET"));
     assert_eq!(attr("http.response.status_code").as_deref(), Some("200"));
     assert!(spans.iter().any(|s| s.name == "GET unmatched"));
+}
+
+struct Hang;
+
+#[async_trait::async_trait]
+impl ReadinessCheck for Hang {
+    async fn ready(&self) -> bool {
+        std::future::pending().await
+    }
+}
+
+#[tokio::test]
+async fn hanging_readiness_check_times_out_as_down() {
+    let app = platform_core::http::health_router_with_timeout(
+        Arc::new(Hang),
+        std::time::Duration::from_millis(50),
+    );
+    let (s, _, b) = call(app, get_req("/health/ready")).await;
+    assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&b).unwrap()["status"],
+        "DOWN"
+    );
 }

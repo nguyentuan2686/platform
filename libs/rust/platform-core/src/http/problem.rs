@@ -58,14 +58,14 @@ impl IntoResponse for ApiError {
             ),
             ApiError::Validation(errors) => (
                 StatusCode::BAD_REQUEST,
-                "validation",
+                "validation-error",
                 "Bad Request",
                 "Request validation failed".to_owned(),
                 Some(errors),
             ),
             ApiError::BadRequest(detail) => (
                 StatusCode::BAD_REQUEST,
-                "bad-request",
+                "validation-error",
                 "Bad Request",
                 detail,
                 None,
