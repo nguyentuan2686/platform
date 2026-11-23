@@ -18,6 +18,12 @@ updates:
     directory: /services/order-svc
     schedule:
       interval: weekly
+    # Java 21 LTS is a platform constraint: JDK/JRE major upgrades go through an ADR, not Dependabot.
+    ignore:
+      - dependency-name: eclipse-temurin
+        update-types: [version-update:semver-major]
+      - dependency-name: maven
+        versions: [">= 3.9-eclipse-temurin-22"]
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
