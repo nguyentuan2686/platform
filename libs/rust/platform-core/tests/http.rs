@@ -208,6 +208,9 @@ async fn traceparent_header_sets_handler_trace_id_and_span_attrs() {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
     let _guard = tracing::subscriber::set_default(subscriber);
+    // Callsite interest is cached process-wide; tests running in parallel without a subscriber can
+    // cache "never" for the spans below. Rebuild so this thread-local subscriber is consulted.
+    tracing::callsite::rebuild_interest_cache();
 
     let trace_id = "4bf92f3577b34da6a3ce929d0e0e4736";
     let req = Request::get("/trace")
