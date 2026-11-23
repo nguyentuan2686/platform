@@ -7,13 +7,13 @@ RUN --mount=type=cache,target=/root/.m2 \
  && cp services/order-svc/target/order-svc-*.jar /tmp/app.jar \
  && java -Djarmode=tools -jar /tmp/app.jar extract --layers --destination /tmp/extracted
 
-FROM eclipse-temurin:21-jre AS agent
+FROM eclipse-temurin:24-jre AS agent
 ARG OTEL_AGENT_VERSION=2.34.0
 ARG OTEL_AGENT_SHA256=da44154cea128257779c8a782b9651fd7c0c6aa177cd3810f9a867ac8509555d
 ADD --chmod=644 https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_AGENT_VERSION}/opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
 RUN echo "${OTEL_AGENT_SHA256}  /otel/opentelemetry-javaagent.jar" | sha256sum -c -
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:24-jre
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 WORKDIR /app
 COPY --from=agent /otel/opentelemetry-javaagent.jar /otel/opentelemetry-javaagent.jar
