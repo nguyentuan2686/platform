@@ -9,6 +9,15 @@ rust-version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
+async-trait.workspace = true
+http.workspace = true
+opentelemetry-http.workspace = true
+serde.workspace = true
+serde_urlencoded.workspace = true
+form_urlencoded.workspace = true
+serde_path_to_error.workspace = true
+tower-http.workspace = true
 time.workspace = true
 opentelemetry.workspace = true
 opentelemetry_sdk.workspace = true
@@ -22,6 +31,8 @@ tracing-subscriber.workspace = true
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 time = { workspace = true, features = ["parsing"] }
 tokio.workspace = true
+tower.workspace = true
+http-body-util.workspace = true
 
 [lints]
 workspace = true

@@ -18,6 +18,17 @@ opentelemetry_sdk = "0.33.1"
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }
+axum = { version = "0.8.4", default-features = false, features = ["http1", "json", "query", "tokio", "matched-path", "original-uri"] }
+tower = { version = "0.5.2", features = ["util"] }
+tower-http = { version = "0.6.6", default-features = false, features = ["trace"] }
+async-trait = "0.1.89"
+opentelemetry-http = "0.33.0"
+http = "1.3.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_urlencoded = "0.7.1"
+form_urlencoded = "1.2.1"
+serde_path_to_error = "0.1.17"
+http-body-util = "0.1.3"
 tracing = "0.1.44"
 tracing-opentelemetry = "0.34.0"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "registry"] }
