@@ -1,0 +1,29 @@
+package dev.platform.starter;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
+
+class PlatformDefaultsPostProcessorTest {
+
+  private static final String KEY = "logging.structured.format.console";
+
+  @Test
+  void registers_structured_log_format_default() {
+    MockEnvironment env = new MockEnvironment();
+
+    new PlatformDefaultsPostProcessor().postProcessEnvironment(env, null);
+
+    assertThat(env.getProperty(KEY)).isEqualTo("dev.platform.starter.logging.PlatformLogFormatter");
+  }
+
+  @Test
+  void service_configuration_overrides_defaults() {
+    MockEnvironment env = new MockEnvironment().withProperty(KEY, "logstash");
+
+    new PlatformDefaultsPostProcessor().postProcessEnvironment(env, null);
+
+    assertThat(env.getProperty(KEY)).isEqualTo("logstash");
+  }
+}
