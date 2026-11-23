@@ -27,3 +27,4 @@ Which check, test or habit would have caught it sooner.
 none | rule | check
 (rule = added to CLAUDE.md or a skill; check = lint/ArchUnit/CI/hook, with link)
 ```
+<!-- throwaway docs-only change to verify ci-gate; reverted next commit -->
