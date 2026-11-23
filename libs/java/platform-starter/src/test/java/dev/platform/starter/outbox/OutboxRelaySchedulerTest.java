@@ -40,6 +40,26 @@ class OutboxRelaySchedulerTest {
   }
 
   @Test
+  void a_throwing_cycle_does_not_cancel_the_schedule() throws Exception {
+    CountDownLatch threeRuns = new CountDownLatch(3);
+    var scheduler =
+        new OutboxRelayScheduler(
+            () -> {
+              threeRuns.countDown();
+              throw new StackOverflowError("simulated");
+            },
+            Duration.ofMillis(10),
+            Duration.ofSeconds(5));
+
+    scheduler.start();
+    try {
+      assertThat(threeRuns.await(5, TimeUnit.SECONDS)).isTrue();
+    } finally {
+      scheduler.stop();
+    }
+  }
+
+  @Test
   void stop_waits_for_in_flight_cycle() throws Exception {
     CountDownLatch started = new CountDownLatch(1);
     AtomicBoolean finished = new AtomicBoolean();

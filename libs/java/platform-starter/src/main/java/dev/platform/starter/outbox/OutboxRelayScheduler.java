@@ -26,7 +26,8 @@ public class OutboxRelayScheduler implements SmartLifecycle {
   private ScheduledExecutorService executor;
 
   /**
-   * @param cycle one relay cycle; must not throw (see {@link OutboxRelay#poll()})
+   * @param cycle one relay cycle; should not throw (see {@link OutboxRelay#poll()}), anything it
+   *     throws is logged and the schedule continues
    * @param interval delay between the end of one cycle and the start of the next (also the initial
    *     delay)
    * @param stopTimeout how long {@link #stop()} waits for an in-flight cycle
@@ -50,7 +51,16 @@ public class OutboxRelayScheduler implements SmartLifecycle {
               return thread;
             });
     long millis = interval.toMillis();
-    executor.scheduleWithFixedDelay(cycle, millis, millis, TimeUnit.MILLISECONDS);
+    executor.scheduleWithFixedDelay(this::runCycle, millis, millis, TimeUnit.MILLISECONDS);
+  }
+
+  /** A task that throws is never rescheduled, silently; so log and swallow everything here. */
+  private void runCycle() {
+    try {
+      cycle.run();
+    } catch (Throwable e) {
+      log.error("Outbox relay cycle threw; continuing with the next cycle", e);
+    }
   }
 
   @Override

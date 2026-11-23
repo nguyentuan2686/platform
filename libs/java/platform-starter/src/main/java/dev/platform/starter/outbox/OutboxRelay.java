@@ -1,6 +1,12 @@
 package dev.platform.starter.outbox;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.SpanId;
+import io.opentelemetry.api.trace.TraceFlags;
+import io.opentelemetry.api.trace.TraceId;
+import io.opentelemetry.api.trace.TraceState;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.TextMapGetter;
@@ -14,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.sql.DataSource;
@@ -45,6 +52,13 @@ import tools.jackson.databind.node.ObjectNode;
  * are {@code event_id}, {@code event_type} and, when the row has one, the W3C {@code traceparent}
  * captured at append time. The send runs with that trace context current, so an instrumented
  * producer (e.g. the OpenTelemetry agent) records the produce span in the original request trace.
+ *
+ * <p>Tracing: the relay thread has no request context, so the agent's JDBC instrumentation would
+ * make every poll query a new root trace (about two traces per second per idle replica). Each cycle
+ * therefore runs under a non-sampled parent ({@link #untracedCycle()}); only the per-row scope
+ * around the send switches to the row's restored {@code traceparent}, so the produce span still
+ * joins the request trace while the polling and bookkeeping SQL is not recorded. A row without a
+ * {@code traceparent} is sent from the root context and gets a trace of its own.
  */
 public class OutboxRelay implements AutoCloseable {
 
@@ -124,20 +138,43 @@ public class OutboxRelay implements AutoCloseable {
    *     first send failed
    */
   public int publishPending() {
-    Integer published = transaction.execute(status -> publishBatch());
-    return (published != null) ? published : 0;
+    try (Scope ignored = untracedCycle().makeCurrent()) {
+      Integer published = transaction.execute(status -> publishBatch());
+      return (published != null) ? published : 0;
+    }
   }
 
   /**
-   * Scheduled entry point: one batch per cycle (so shutdown waits for at most one batch); never
-   * lets an exception end the schedule.
+   * Scheduled entry point: one batch per cycle (so shutdown waits for at most one batch). Never
+   * lets anything escape, not even an {@link Error}: a throwing task silently cancels {@code
+   * scheduleWithFixedDelay} forever, which would stop all publishing.
    */
   void poll() {
     try {
       publishPending();
-    } catch (RuntimeException e) {
+    } catch (Throwable e) {
       log.error("Outbox relay cycle failed; rows stay pending and will be retried", e);
     }
+  }
+
+  /**
+   * A parent context for one relay cycle: a valid but <em>non-sampled</em> remote span with fresh
+   * random ids. Under the agent's default parent-based sampler every span started beneath it (the
+   * polling SELECT, the MARK_PUBLISHED / INCREMENT_ATTEMPTS updates, the transaction) is dropped;
+   * without it each idle poll would start a new sampled root trace. The relay's own log lines still
+   * carry this (unexported) trace id, distinct per cycle.
+   */
+  static Context untracedCycle() {
+    ThreadLocalRandom random = ThreadLocalRandom.current();
+    long low = random.nextLong();
+    long span = random.nextLong();
+    SpanContext parent =
+        SpanContext.createFromRemoteParent(
+            TraceId.fromLongs(random.nextLong(), low == 0 ? 1 : low),
+            SpanId.fromLong(span == 0 ? 1 : span),
+            TraceFlags.getDefault(),
+            TraceState.getDefault());
+    return Context.root().with(Span.wrap(parent));
   }
 
   private int publishBatch() {

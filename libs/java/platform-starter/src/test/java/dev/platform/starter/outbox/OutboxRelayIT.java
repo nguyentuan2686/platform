@@ -131,7 +131,18 @@ class OutboxRelayIT {
             event.eventId());
     assertThat(storedTraceparent).isEqualTo("00-" + TRACE_ID + "-" + SPAN_ID + "-01");
 
-    assertThat(relay.publishPending()).isEqualTo(1);
+    // Outside the send scope (here: between send and mark) the cycle's bookkeeping SQL runs under
+    // the relay's non-sampled parent, not the restored request trace.
+    SpanContext[] afterSend = new SpanContext[1];
+    relay.beforeMark = () -> afterSend[0] = Span.current().getSpanContext();
+    try {
+      assertThat(relay.publishPending()).isEqualTo(1);
+    } finally {
+      relay.beforeMark = () -> {};
+    }
+    assertThat(afterSend[0].isValid()).isTrue();
+    assertThat(afterSend[0].isSampled()).isFalse();
+    assertThat(afterSend[0].getTraceId()).isNotEqualTo(TRACE_ID);
 
     List<ConsumerRecord<String, String>> records = consume(topic, 1);
     assertThat(records).hasSize(1);
