@@ -3,6 +3,9 @@
 
 use platform_core::telemetry::init;
 
+// NOTE: `OTEL_EXPORTER_OTLP_ENDPOINT` is process-wide env and `init` installs the global
+// subscriber, so this file must keep exactly ONE test.
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn init_with_otlp_endpoint_inside_runtime_does_not_panic() {
     std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:1");

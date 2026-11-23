@@ -40,6 +40,7 @@ A test in `tests/architecture.rs` walks `src/domain/**/*.rs` and fails if any li
 
 ## Logging
 - JSON on stdout via `platform_core::telemetry`; mandatory fields `timestamp, level, service, trace_id, span_id, message`; extra fields under `ctx`; errors under `error`.
+- Error logs: `error!(error = %e, error_type = "DbUnavailable", "...")`; `error_type` becomes `error.type` (default `"error"`), never derived from Debug.
 - Log at boundaries (request result, event consumed/skipped, outbound failure), not inside domain logic.
 - Never log payloads or PII (names, emails, phones, addresses, tokens); ids only. No `println!`/`dbg!`.
 
