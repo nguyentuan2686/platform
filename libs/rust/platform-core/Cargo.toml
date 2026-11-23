@@ -21,6 +21,7 @@ tracing-subscriber.workspace = true
 [dev-dependencies]
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 time = { workspace = true, features = ["parsing"] }
+tokio.workspace = true
 
 [lints]
 workspace = true

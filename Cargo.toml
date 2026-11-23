@@ -17,6 +17,7 @@ opentelemetry = "0.33.1"
 opentelemetry_sdk = "0.33.1"
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1.44"
 tracing-opentelemetry = "0.34.0"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "registry"] }

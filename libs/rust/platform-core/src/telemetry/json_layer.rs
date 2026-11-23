@@ -60,10 +60,30 @@ fn ids_of(otel_ctx: &opentelemetry::Context) -> (String, String) {
     }
 }
 
+/// `error.type` used when the concrete error type is unknown (`%e` / `?e` fields).
+const DEFAULT_ERROR_TYPE: &str = "error";
+
+/// Best-effort concrete type name of a `dyn Error`. Rust cannot name the concrete type behind a
+/// trait object, so use the leading identifier of its derived `Debug` output (`MyErr { .. }`,
+/// `ParseIntError { .. }`); fall back to [`DEFAULT_ERROR_TYPE`].
+fn error_type_name(err: &(dyn std::error::Error + 'static)) -> String {
+    let debug = format!("{err:?}");
+    let ident: String = debug
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    if ident.starts_with(|c: char| c.is_ascii_uppercase()) {
+        ident
+    } else {
+        DEFAULT_ERROR_TYPE.to_owned()
+    }
+}
+
 #[derive(Default)]
 struct FieldVisitor {
     message: String,
-    error: Option<String>,
+    /// `(type, message)` of the `error` field.
+    error: Option<(String, String)>,
     ctx: Map<String, Value>,
 }
 
@@ -77,7 +97,7 @@ impl Visit for FieldVisitor {
     fn record_str(&mut self, field: &Field, value: &str) {
         match field.name() {
             "message" => value.clone_into(&mut self.message),
-            "error" => self.error = Some(value.to_owned()),
+            "error" => self.error = Some((DEFAULT_ERROR_TYPE.to_owned(), value.to_owned())),
             _ => self.put(field, Value::String(value.to_owned())),
         }
     }
@@ -99,14 +119,18 @@ impl Visit for FieldVisitor {
     }
 
     fn record_error(&mut self, field: &Field, value: &(dyn std::error::Error + 'static)) {
-        self.record_debug(field, &format_args!("{value}"));
+        if field.name() == "error" {
+            self.error = Some((error_type_name(value), value.to_string()));
+        } else {
+            self.put(field, Value::String(value.to_string()));
+        }
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
         let text = format!("{value:?}");
         match field.name() {
             "message" => self.message = text,
-            "error" => self.error = Some(text),
+            "error" => self.error = Some((DEFAULT_ERROR_TYPE.to_owned(), text)),
             _ => self.put(field, Value::String(text)),
         }
     }
@@ -143,8 +167,8 @@ where
         obj.insert("trace_id".into(), Value::String(trace_id));
         obj.insert("span_id".into(), Value::String(span_id));
         obj.insert("message".into(), Value::String(visitor.message));
-        if let Some(message) = visitor.error {
-            obj.insert("error".into(), json!({ "message": message }));
+        if let Some((kind, message)) = visitor.error {
+            obj.insert("error".into(), json!({ "type": kind, "message": message }));
         }
         if !visitor.ctx.is_empty() {
             obj.insert("ctx".into(), Value::Object(visitor.ctx));
@@ -266,7 +290,64 @@ mod tests {
         let e = std::io::Error::other("disk gone");
         let v = parse(&capture(|| tracing::error!(error = %e, "boom")));
         assert_eq!(v["error"]["message"], "disk gone");
+        assert_eq!(v["error"]["type"], "error");
         assert!(v.get("ctx").is_none());
+    }
+
+    #[derive(Debug)]
+    struct DiskGone;
+
+    impl fmt::Display for DiskGone {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("disk gone")
+        }
+    }
+
+    impl std::error::Error for DiskGone {}
+
+    #[test]
+    fn error_value_field_carries_type_name() {
+        let e = DiskGone;
+        let err: &(dyn std::error::Error + 'static) = &e;
+        let v = parse(&capture(|| tracing::error!(error = err, "boom")));
+        assert_eq!(v["error"]["type"], "DiskGone");
+        assert_eq!(v["error"]["message"], "disk gone");
+        assert!(v.get("ctx").is_none());
+    }
+
+    #[test]
+    fn nested_and_explicit_parent_spans_pick_right_ids() {
+        let provider = SdkTracerProvider::builder()
+            .with_simple_exporter(InMemorySpanExporter::default())
+            .build();
+        let buf = Buf::default();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")))
+            .with(JsonLayer::new("notify-svc", buf.clone()));
+        let (a_id, b_id) = tracing::subscriber::with_default(subscriber, || {
+            let a = tracing::info_span!("a");
+            let _ga = a.enter();
+            let b = tracing::info_span!("b");
+            let _gb = b.enter();
+            tracing::info!("in b");
+            tracing::info!(parent: &a, "explicit a");
+            let ids = |s: &tracing::Span| {
+                let cx = s.context();
+                let sc = cx.span().span_context().clone();
+                (sc.trace_id().to_string(), sc.span_id().to_string())
+            };
+            (ids(&a), ids(&b))
+        });
+        assert_eq!(a_id.0, b_id.0, "same trace");
+        assert_ne!(a_id.1, b_id.1);
+        let text = buf.text();
+        let lines: Vec<Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert_eq!(lines[0]["span_id"], b_id.1.as_str());
+        assert_eq!(lines[1]["span_id"], a_id.1.as_str());
+        assert_eq!(lines[1]["trace_id"], a_id.0.as_str());
     }
 
     #[test]
