@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -26,10 +25,11 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
- * Maps every failure to an RFC 9457 {@code application/problem+json} response carrying a {@code
- * trace_id} property (taken from the MDC, empty string if absent). Validation failures add an
- * {@code errors} list of {@code {field, message}}. Unexpected exceptions yield a generic 500 whose
- * details are logged server side only.
+ * Maps every failure to an RFC 9457 {@code application/problem+json} response with a {@code
+ * urn:problem:<slug>} type and a {@code trace_id} property (from the current OpenTelemetry span,
+ * else the MDC, else empty string; see {@link TraceIds}). Validation failures add an {@code errors}
+ * list of {@code {field, message}}. Unexpected exceptions yield a generic 500 whose details are
+ * logged server side only.
  */
 @RestControllerAdvice
 public class PlatformProblemHandler extends ResponseEntityExceptionHandler {
@@ -38,6 +38,7 @@ public class PlatformProblemHandler extends ResponseEntityExceptionHandler {
 
   static final String TRACE_ID = "trace_id";
   static final String ERRORS = "errors";
+  private static final URI ABOUT_BLANK = URI.create("about:blank");
 
   @ExceptionHandler(NotFoundException.class)
   ResponseEntity<Object> handleNotFound(NotFoundException ex) {
@@ -126,11 +127,12 @@ public class PlatformProblemHandler extends ResponseEntityExceptionHandler {
 
   private static void enrich(ProblemDetail detail) {
     String slug = slug(detail.getStatus());
-    if (slug != null && URI.create("about:blank").equals(detail.getType())) {
+    // Spring Framework 7 leaves the type null (rendered as absent) instead of about:blank.
+    URI type = detail.getType();
+    if (slug != null && (type == null || ABOUT_BLANK.equals(type))) {
       detail.setType(URI.create("urn:problem:" + slug));
     }
-    String traceId = MDC.get(TRACE_ID);
-    detail.setProperty(TRACE_ID, traceId == null ? "" : traceId);
+    detail.setProperty(TRACE_ID, TraceIds.current());
   }
 
   @Nullable

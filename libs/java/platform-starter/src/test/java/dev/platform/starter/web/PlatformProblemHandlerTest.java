@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import dev.platform.starter.testapp.TestApp;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -18,6 +19,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(classes = TestApp.class)
 @AutoConfigureMockMvc
 class PlatformProblemHandlerTest {
+
+  static final String TRACE = "0af7651916cd43dd8448eb211c80319c";
 
   @Autowired MockMvc mvc;
 
@@ -78,13 +81,40 @@ class PlatformProblemHandlerTest {
   }
 
   @Test
-  void trace_id_taken_from_mdc() throws Exception {
-    mvc.perform(get("/boom/not-found").header("X-Test-Trace", "abc"))
-        .andExpect(jsonPath("$.trace_id").value("abc"));
+  void trace_id_taken_from_current_span_not_mdc() throws Exception {
+    // The OTel agent makes the server span current but never calls MDC.put.
+    assertThat(MDC.get("trace_id")).isNull();
+    mvc.perform(get("/boom/not-found").header("X-Test-Trace", TRACE))
+        .andExpect(jsonPath("$.trace_id").value(TRACE));
   }
 
   @Test
-  void trace_id_is_empty_string_without_mdc() throws Exception {
+  void trace_id_taken_from_current_span_for_framework_handled_errors() throws Exception {
+    mvc.perform(
+            post("/boom/validate")
+                .header("X-Test-Trace", TRACE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{"))
+        .andExpect(jsonPath("$.trace_id").value(TRACE));
+  }
+
+  @Test
+  void problem_type_is_urn_slug() throws Exception {
+    mvc.perform(get("/boom/not-found"))
+        .andExpect(jsonPath("$.type").value("urn:problem:not-found"));
+    mvc.perform(post("/boom/validate").contentType(MediaType.APPLICATION_JSON).content("{"))
+        .andExpect(jsonPath("$.type").value("urn:problem:validation-error"));
+    mvc.perform(
+            post("/boom/validate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"\"}"))
+        .andExpect(jsonPath("$.type").value("urn:problem:validation-error"));
+    mvc.perform(get("/boom/unexpected"))
+        .andExpect(jsonPath("$.type").value("urn:problem:internal-error"));
+  }
+
+  @Test
+  void trace_id_is_empty_string_without_span() throws Exception {
     mvc.perform(get("/boom/not-found")).andExpect(jsonPath("$.trace_id").value(""));
   }
 }
