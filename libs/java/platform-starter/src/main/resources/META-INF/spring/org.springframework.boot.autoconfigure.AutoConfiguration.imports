@@ -1,1 +1,2 @@
 dev.platform.starter.web.PlatformWebAutoConfiguration
+dev.platform.starter.outbox.OutboxAutoConfiguration

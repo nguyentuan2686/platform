@@ -13,7 +13,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.core.env.Environment;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(classes = TestApp.class)
+@SpringBootTest(classes = TestApp.class, properties = TestApp.NO_DATABASE_READY_GROUP)
 @AutoConfigureMockMvc
 class HealthProbesTest {
 

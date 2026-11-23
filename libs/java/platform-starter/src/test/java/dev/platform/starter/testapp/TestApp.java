@@ -19,9 +19,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Tiny application used by the starter's web tests. */
-@SpringBootApplication
+/**
+ * Tiny application used by the starter's web tests. The outbox ITs put JDBC on the test classpath;
+ * these tests have no database, so DataSource auto-configuration is excluded here.
+ */
+@SpringBootApplication(
+    excludeName = "org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration")
 public class TestApp {
+
+  /**
+   * JDBC health support is on the test classpath (outbox ITs), so the platform defaults add 'db' to
+   * the ready group; this app has no DataSource, so tests booting it use the plain ready group.
+   */
+  public static final String NO_DATABASE_READY_GROUP =
+      "management.endpoint.health.group.ready.include=readinessState";
 
   public record Item(@Min(1) int quantity) {}
 
