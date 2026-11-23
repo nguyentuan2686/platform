@@ -1406,6 +1406,16 @@ dependencies = [
 [[package]]
 name = "notify-svc"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "sqlx",
+ "thiserror",
+ "time",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "nu-ansi-term"
