@@ -16,4 +16,3 @@ Thumbs.db
 *.key
 # Scratch (never commit)
 .superpowers/
-target/

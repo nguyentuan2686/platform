@@ -22,11 +22,15 @@ class PlatformLogFormatterTest {
           new MockEnvironment().withProperty("spring.application.name", "order-svc"));
 
   private static LoggingEvent event(Map<String, String> mdc, Throwable error) {
+    return event("hello", mdc, error);
+  }
+
+  private static LoggingEvent event(String message, Map<String, String> mdc, Throwable error) {
     LoggingEvent event = new LoggingEvent();
     event.setLoggerContext(new LoggerContext());
     event.setLoggerName("test");
     event.setLevel(Level.INFO);
-    event.setMessage("hello");
+    event.setMessage(message);
     event.setInstant(Instant.parse("2026-01-02T03:04:05.123Z"));
     event.setMDCPropertyMap(mdc);
     if (error != null) {
@@ -84,6 +88,16 @@ class PlatformLogFormatterTest {
     assertThat(JsonPath.<Map<String, Object>>read(json, "$.ctx"))
         .doesNotContainKey("trace_id")
         .doesNotContainKey("span_id");
+  }
+
+  @Test
+  void special_characters_stay_on_one_line_and_round_trip() {
+    String message = "a\"b\\c\nd";
+
+    String out = formatter.format(event(message, Map.of(), null));
+
+    assertThat(out.substring(0, out.length() - 1)).doesNotContain("\n");
+    assertThat(parse(out)).containsEntry("message", message);
   }
 
   @Test
