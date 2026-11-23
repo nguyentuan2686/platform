@@ -36,6 +36,15 @@ class ArchitectureTest {
           .resideInAPackage("..adapter..");
 
   @ArchTest
+  static final ArchRule inboundAdaptersDoNotUseOutboundAdapters =
+      noClasses()
+          .that()
+          .resideInAPackage("..adapter.in..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("..adapter.out..");
+
+  @ArchTest
   static final ArchRule noFieldInjection =
       noClasses()
           .should()
