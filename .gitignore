@@ -1,0 +1,18 @@
+# Build output
+target/
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.DS_Store
+Thumbs.db
+# Secrets
+.env*
+!.env.example
+*.pem
+*.key
+# Scratch (never commit)
+.superpowers/
