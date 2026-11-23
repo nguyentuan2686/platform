@@ -25,21 +25,24 @@ case "$file" in
     fi
     ;;
   *.rs)
+    # Edition from the workspace Cargo.toml (standalone rustfmt defaults to 2015).
+    root="$(cd "$(dirname "$0")/../.." && pwd)"
+    ed="$(sed -nE 's/^edition *= *"([0-9]+)".*/\1/p' "$root/Cargo.toml" 2>/dev/null | head -n1)"
+    ed="${ed:-2021}"
     if command -v rustfmt >/dev/null 2>&1; then
-      rustfmt "$file" >/dev/null 2>&1
+      rustfmt --edition "$ed" "$file" >/dev/null 2>&1
     else
       # No native Rust: format just this file via the Docker toolchain. Synchronous (no read-modify-write race),
       # bounded to 15s, skipped if Docker is down or the image is missing (never builds). Always exit 0.
-      root="$(cd "$(dirname "$0")/../.." && pwd)"
       tc="$(sed -nE 's/^channel *= *"([^"]+)".*/\1/p' "$root/rust-toolchain.toml" 2>/dev/null | head -n1)"
       case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) work="$(cd "$root" && pwd -W)"; export MSYS_NO_PATHCONV=1 ;; *) work="$root" ;; esac
       rel="${file#"$work"/}"
-      ed="$(sed -nE 's/^edition *= *"([0-9]+)".*/\1/p' "$root/Cargo.toml" 2>/dev/null | head -n1)"
-      ed="${ed:-2021}"
       if [ -n "$tc" ] && [ "$rel" != "$file" ] && command -v docker >/dev/null 2>&1 \
          && timeout 2 docker image inspect "platform-rust-dev:$tc" >/dev/null 2>&1; then
-        timeout 15 docker run --rm -v "$work:/work" -w /work "platform-rust-dev:$tc" \
-          rustfmt --edition "$ed" "$rel" >/dev/null 2>&1
+        cname="platform-rustfmt-$$"
+        timeout 15 docker run --rm --name "$cname" -v "$work:/work" -w /work "platform-rust-dev:$tc" \
+          rustfmt --edition "$ed" "$rel" >/dev/null 2>&1 \
+          || docker rm -f "$cname" >/dev/null 2>&1
       fi
     fi
     ;;
