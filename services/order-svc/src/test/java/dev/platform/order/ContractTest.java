@@ -128,6 +128,28 @@ class ContractTest {
   }
 
   @Test
+  void event_schema_v1_tolerates_additive_data_fields_but_keeps_required_ones() {
+    String data =
+        "\"order_id\":\"6f9619ff-8b86-d011-b42d-00c04fc964ff\",\"customer_id\":\"c-1\","
+            + "\"total\":\"25.50\",\"item_count\":3";
+    String envelope =
+        "{\"event_id\":\"6f9619ff-8b86-d011-b42d-00c04fc964fe\",\"event_type\":\"OrderPlaced\","
+            + "\"occurred_at\":\"2026-11-23T10:00:00Z\",\"data\":{%s}%s}";
+
+    JsonNode additive =
+        JsonMapper.shared().readTree(envelope.formatted(data + ",\"currency\":\"EUR\"", ""));
+    assertThat(ContractSupport.eventSchema().validate(additive)).isEmpty();
+
+    JsonNode missing =
+        JsonMapper.shared().readTree(envelope.formatted(data.replace(",\"item_count\":3", ""), ""));
+    assertThat(ContractSupport.eventSchema().validate(missing)).isNotEmpty();
+
+    JsonNode extraEnvelopeField =
+        JsonMapper.shared().readTree(envelope.formatted(data, ",\"extra\":1"));
+    assertThat(ContractSupport.eventSchema().validate(extraEnvelopeField)).isNotEmpty();
+  }
+
+  @Test
   void problem_schema_check_is_not_vacuous() {
     JsonNode noType = JsonMapper.shared().readTree("{\"title\":\"x\",\"status\":404}");
     assertThat(ContractSupport.componentSchema("Problem").validate(noType)).isNotEmpty();

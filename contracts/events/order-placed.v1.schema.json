@@ -18,7 +18,8 @@
         "total": { "type": "string", "pattern": "^[0-9]+\\.[0-9]{2}$" },
         "item_count": { "type": "integer", "minimum": 1 }
       },
-      "additionalProperties": false
+      "additionalProperties": true,
+      "$comment": "Open for additive v1 changes: consumers must ignore unknown data fields. Breaking changes go to a new topic orders.order-placed.v2."
     }
   },
   "additionalProperties": false

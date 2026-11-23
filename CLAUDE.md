@@ -38,6 +38,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - HTTP errors: `application/problem+json` with extra property `trace_id`.
 - Config via env vars (12-factor); no plaintext secrets in Git.
 - Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`.
+- Event evolution rule: additive changes (new optional `data` fields) stay in v1, so event schemas leave `data` open and consumers ignore unknown fields; breaking changes (remove/rename/retype a field, change meaning) go to a new topic `<name>.v2` with its own schema, published alongside v1 until consumers migrate.
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
 - Dev machine is weak (2 cores / 12GB): local stack <= ~3GB; heavy verification runs in CI.
 

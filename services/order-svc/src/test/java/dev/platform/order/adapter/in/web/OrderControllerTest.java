@@ -89,6 +89,24 @@ class OrderControllerTest {
   }
 
   @Test
+  void quantity_above_10000_is_400() throws Exception {
+    String item = "{\"sku\":\"s\",\"quantity\":10001,\"unitPrice\":1}";
+    mvc.perform(
+            post("/orders").contentType(MediaType.APPLICATION_JSON).content(request("c-1", item)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field").value("items[0].quantity"));
+  }
+
+  @Test
+  void quantity_of_10000_is_accepted() throws Exception {
+    when(placeOrder.place(any(PlaceOrderCommand.class))).thenReturn(sample());
+    String item = "{\"sku\":\"s\",\"quantity\":10000,\"unitPrice\":1}";
+    mvc.perform(
+            post("/orders").contentType(MediaType.APPLICATION_JSON).content(request("c-1", item)))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
   void negative_unit_price_is_400() throws Exception {
     String item = "{\"sku\":\"s\",\"quantity\":1,\"unitPrice\":-1}";
     mvc.perform(
