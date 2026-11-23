@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      order: ${{ steps.filter.outputs.order }}
+      root: ${{ steps.filter.outputs.root }}
+      starter: ${{ steps.filter.outputs.starter }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            starter:
+              - 'libs/java/**'
+            order:
+              - 'services/order-svc/**'
+              - 'contracts/**'
+              - 'libs/java/**'
+            root:
+              - 'pom.xml'
+              - '.github/**'
+
+  order-svc:
+    needs: changes
+    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true'
+    # packages: write is only exercised when publish is true (push to main)
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_java-service.yml
+    with:
+      module: services/order-svc
+      image: order-svc
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  # Single required status check. New services only need to be added to `needs`.
+  ci-gate:
+    if: always()
+    needs: [changes, order-svc]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "needs results: $RESULTS"
+          case " $RESULTS " in
+            *" failure "*|*" cancelled "*) echo "ci-gate: FAILED"; exit 1 ;;
+          esac
+          echo "ci-gate: ok"
