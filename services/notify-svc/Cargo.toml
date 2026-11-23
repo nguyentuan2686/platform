@@ -1,0 +1,13 @@
+[package]
+name = "notify-svc"
+description = "Notification service: consumes OrderPlaced events and serves GET /notifications"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

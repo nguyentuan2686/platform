@@ -27,6 +27,14 @@ case "$file" in
   *.rs)
     if command -v rustfmt >/dev/null 2>&1; then
       rustfmt "$file" >/dev/null 2>&1
+    else
+      # No native Rust: format the workspace via the Docker toolchain, only if Docker is up and the image exists.
+      root="$(cd "$(dirname "$0")/../.." && pwd)"
+      tc="$(sed -nE 's/^channel *= *"([^"]+)".*/\1/p' "$root/rust-toolchain.toml" 2>/dev/null | head -n1)"
+      if [ -n "$tc" ] && command -v docker >/dev/null 2>&1 \
+         && timeout 5 docker image inspect "platform-rust-dev:$tc" >/dev/null 2>&1; then
+        timeout 60 "$root/scripts/cargo.sh" fmt --all >/dev/null 2>&1
+      fi
     fi
     ;;
 esac

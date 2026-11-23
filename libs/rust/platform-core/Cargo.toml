@@ -1,0 +1,13 @@
+[package]
+name = "platform-core"
+description = "Shared platform building blocks: telemetry, HTTP problem details/health, Kafka consumer runner"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
