@@ -1,4 +1,4 @@
-# Local dev stack. Infra only by default; add `--profile app` to also run order-svc.
+# Local dev stack. Infra only by default; add `--profile app` to also run order-svc and notify-svc.
 name: platform-local
 services:
   postgres:
@@ -73,6 +73,31 @@ services:
     ports:
       - "127.0.0.1:${ORDER_SVC_PORT:-8080}:8080"
     mem_limit: 768m
+
+  notify-svc:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/notify-svc/Dockerfile
+    image: notify-svc:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      lgtm:
+        condition: service_started
+    environment:
+      PORT: "8081"
+      DB_URL: postgres://${NOTIFY_DB_USER:-notify}:${NOTIFY_DB_PASSWORD:-notify}@postgres:5432/notify
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      KAFKA_GROUP_ID: notify-svc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_SERVICE_NAME: notify-svc
+      RUST_LOG: ${NOTIFY_RUST_LOG:-info}
+    ports:
+      - "127.0.0.1:${NOTIFY_SVC_PORT:-8081}:8081"
+    mem_limit: 128m
 
 volumes:
   pgdata:
