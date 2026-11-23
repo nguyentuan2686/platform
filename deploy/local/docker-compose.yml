@@ -1,0 +1,78 @@
+# Local dev stack. Infra only by default; add `--profile app` to also run order-svc.
+name: platform-local
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=orders psql -h 127.0.0.1 -U orders -d orders -c 'select 1'"]
+      start_period: 15s
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.1
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "127.0.0.1:19092:19092"
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  lgtm:
+    image: grafana/otel-lgtm:0.41.1
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    mem_limit: 1024m
+
+  order-svc:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/order-svc/Dockerfile
+    image: order-svc:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      lgtm:
+        condition: service_started
+    environment:
+      PORT: "8080"
+      DB_URL: jdbc:postgresql://postgres:5432/orders
+      DB_USER: ${DB_USER:-orders}
+      DB_PASSWORD: ${DB_PASSWORD:-orders}
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=60"
+    ports:
+      - "127.0.0.1:${ORDER_SVC_PORT:-8080}:8080"
+    mem_limit: 768m
+
+volumes:
+  pgdata:
