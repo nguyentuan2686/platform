@@ -128,13 +128,13 @@ public class OutboxRelay implements AutoCloseable {
     return (published != null) ? published : 0;
   }
 
-  /** Scheduled entry point: drains full batches; never lets an exception end the schedule. */
+  /**
+   * Scheduled entry point: one batch per cycle (so shutdown waits for at most one batch); never
+   * lets an exception end the schedule.
+   */
   void poll() {
     try {
-      int published;
-      do {
-        published = publishPending();
-      } while (published == properties.batchSize());
+      publishPending();
     } catch (RuntimeException e) {
       log.error("Outbox relay cycle failed; rows stay pending and will be retried", e);
     }

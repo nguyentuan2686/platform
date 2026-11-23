@@ -1,6 +1,7 @@
 package dev.platform.starter.outbox;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import java.time.Duration;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -10,13 +11,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.SchedulingConfigurer;
-import org.springframework.scheduling.config.FixedDelayTask;
-import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.transaction.PlatformTransactionManager;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -48,6 +44,9 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableConfigurationProperties(OutboxProperties.class)
 public class OutboxAutoConfiguration {
 
+  /** Upper bound for waiting on an in-flight relay cycle at shutdown. */
+  static final Duration STOP_TIMEOUT = Duration.ofSeconds(30);
+
   @Bean
   @ConditionalOnMissingBean(OutboxWriter.class)
   JdbcOutboxWriter outboxWriter(DataSource dataSource, ObjectProvider<JsonMapper> jsonMapper) {
@@ -70,23 +69,13 @@ public class OutboxAutoConfiguration {
         properties);
   }
 
-  /** Scheduling is enabled only together with the relay. */
-  @Configuration(proxyBeanMethods = false)
-  @EnableScheduling
-  static class OutboxRelaySchedulingConfiguration implements SchedulingConfigurer {
-
-    private final OutboxRelay relay;
-    private final OutboxProperties properties;
-
-    OutboxRelaySchedulingConfiguration(OutboxRelay relay, OutboxProperties properties) {
-      this.relay = relay;
-      this.properties = properties;
-    }
-
-    @Override
-    public void configureTasks(ScheduledTaskRegistrar registrar) {
-      registrar.addFixedDelayTask(
-          new FixedDelayTask(relay::poll, properties.pollInterval(), properties.pollInterval()));
-    }
+  /**
+   * Runs the relay on its own single thread (no application-wide {@code @EnableScheduling}). Stops
+   * before the relay is closed: lifecycle beans stop before singletons are destroyed.
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  OutboxRelayScheduler outboxRelayScheduler(OutboxRelay relay, OutboxProperties properties) {
+    return new OutboxRelayScheduler(relay::poll, properties.pollInterval(), STOP_TIMEOUT);
   }
 }
