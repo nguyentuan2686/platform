@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: notify-svc
+  version: 1.0.0
+  description: >-
+    Notification service REST API. Notifications are created by consuming OrderPlaced events
+    (topic orders.order-placed.v1); this API only reads them.
+paths:
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: List the most recent notifications, newest first
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of notifications to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Notifications, newest first (by createdAt)
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items:
+                  $ref: '#/components/schemas/Notification'
+        '400':
+          description: Invalid limit (errors[0].field is "limit")
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Unexpected error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    Notification:
+      type: object
+      required: [id, orderId, customerId, channel, message, createdAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          minLength: 1
+        channel:
+          type: string
+          enum: [log]
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Problem:
+      type: object
+      description: RFC 9457 problem details with platform extensions.
+      required: [type, title, status, trace_id]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string

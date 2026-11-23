@@ -17,6 +17,23 @@ impl Channel {
     }
 }
 
+/// A stored channel name this version does not know.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("unknown notification channel {0:?}")]
+pub struct UnknownChannel(pub String);
+
+impl std::str::FromStr for Channel {
+    type Err = UnknownChannel;
+
+    /// Inverse of [`Channel::as_str`].
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "log" => Ok(Channel::Log),
+            other => Err(UnknownChannel(other.to_owned())),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DomainError {
     #[error("customer id must not be blank")]
@@ -89,7 +106,7 @@ impl Notification {
 
     /// Rehydrate from storage without re-validating.
     #[must_use]
-    pub fn restore(
+    pub(crate) fn restore(
         id: Uuid,
         order_id: Uuid,
         customer_id: String,
@@ -216,5 +233,31 @@ mod tests {
         assert_eq!(Channel::Log.as_str(), "log");
         let d = serde::de::value::StrDeserializer::<serde::de::value::Error>::new("log");
         assert_eq!(Channel::deserialize(d).unwrap(), Channel::Log);
+    }
+
+    #[test]
+    fn channel_parses_from_its_name() {
+        assert_eq!("log".parse::<Channel>(), Ok(Channel::Log));
+        assert_eq!(
+            "sms".parse::<Channel>(),
+            Err(UnknownChannel("sms".to_owned()))
+        );
+    }
+
+    #[test]
+    fn restore_keeps_fields() {
+        let n = Notification::restore(
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            "c".into(),
+            Channel::Log,
+            "m".into(),
+            OffsetDateTime::UNIX_EPOCH,
+        );
+        assert_eq!(
+            (n.id(), n.order_id()),
+            (Uuid::from_u128(1), Uuid::from_u128(2))
+        );
+        assert_eq!((n.customer_id(), n.message()), ("c", "m"));
     }
 }

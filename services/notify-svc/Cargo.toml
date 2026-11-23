@@ -8,16 +8,29 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+platform-core = { path = "../../libs/rust/platform-core" }
 anyhow.workspace = true
 async-trait.workspace = true
+axum.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+serde_path_to_error.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-time.workspace = true
+time = { workspace = true, features = ["serde"] }
+tokio = { workspace = true, features = ["net", "signal"] }
+tokio-util.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+http-body-util.workspace = true
+jsonschema.workspace = true
+rdkafka.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
+tower.workspace = true
+yaml_serde.workspace = true
 
 [lints]
 workspace = true
