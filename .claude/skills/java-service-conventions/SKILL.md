@@ -9,15 +9,15 @@ Java 21, groupId/base package `dev.platform`. Full rules also in `CLAUDE.md`.
 
 ## Package layout (hexagonal)
 ```
-dev.platform.<svc>.domain        # entities, value objects (records), domain services, ports' types. NO Spring/JPA/Jackson imports
+dev.platform.<svc>.domain        # entities, value objects (records), domain services, ports' types. NO Spring/Jakarta/Jackson imports
 dev.platform.<svc>.application   # use cases (*UseCase), port interfaces (*Port); orchestrates domain
 dev.platform.<svc>.adapter.in    # REST controllers, Kafka consumers
-dev.platform.<svc>.adapter.out   # JPA repositories, Kafka producers, HTTP clients (*Adapter)
+dev.platform.<svc>.adapter.out   # JdbcClient repositories, outbox event adapters, HTTP clients (*Adapter)
 ```
 Dependencies point inward only: adapter -> application -> domain.
 
 ## ArchUnit rules (one test class per service, must exist)
-- `domain..` must not depend on `org.springframework..`, `jakarta..`, `com.fasterxml..`
+- `domain..` must not depend on `org.springframework..`, `jakarta..`, `tools.jackson..` (Jackson 3), `com.fasterxml..` (Jackson 2 / annotations)
 - `domain..` and `application..` must not depend on `adapter..`
 - No field injection: no `@Autowired` on fields; constructor injection only
 - Classes in `adapter.in` must not access `adapter.out` directly (go via application)
@@ -29,9 +29,21 @@ Dependencies point inward only: adapter -> application -> domain.
 ## Test pyramid (write test first, red -> green -> refactor)
 1. Domain unit tests: plain JUnit, no Spring
 2. Application tests: use cases with in-memory fakes of ports (no mocks of own code where a fake is simple)
-3. Adapter slice tests: `@WebMvcTest`, `@DataJpaTest`, etc.
+3. Adapter slice tests: `@WebMvcTest` for controllers (import `PlatformWebAutoConfiguration` to get the Problem Details handler); persistence adapters against real Postgres (Testcontainers), never H2
 4. Integration: `@SpringBootTest` + Testcontainers (Postgres, Kafka/Redpanda); few, happy-path plus key failures
 - Gate: >= 80% line coverage on `domain` and `application` (JaCoCo, enforced by `mvn -q verify`)
+
+## Persistence (JDBC, no JPA)
+- `spring-boot-starter-jdbc` + Flyway + Postgres driver; repositories in `adapter.out.persistence` use `JdbcClient` with plain SQL and map rows to domain types by hand (e.g. `Order.restore(...)`); no JPA/Hibernate, no entity annotations anywhere.
+- Writes run inside the use case's `@Transactional` boundary (the adapter just joins it), so the outbox row commits atomically with the aggregate.
+- Test persistence against real Postgres via Testcontainers with the real Flyway migrations: the service `*IT` (`@SpringBootTest`) or a JDBC slice with `@AutoConfigureTestDatabase(replace = NONE)`; never H2.
+
+## Outbox opt-in (`dev.platform.starter.outbox`)
+- The starter declares these as optional; a service opts in by adding all of them itself: `spring-boot-starter-jdbc`, `spring-boot-starter-flyway` (+ `flyway-database-postgresql`), `spring-boot-starter-kafka`, `spring-boot-starter-jackson`, `io.opentelemetry:opentelemetry-api`.
+- `OutboxAutoConfiguration` silently backs off if any of them is missing (or there is no `DataSource`/transaction manager/`KafkaTemplate`, or `platform.outbox.enabled=false`): no writer, no relay, no error. If `OutboxWriter` cannot be injected, check those dependencies first.
+- Platform migrations run automatically: the starter applies `classpath:db/platform` (the `outbox_event` table) with its own Flyway history table `platform_schema_history`, before the service's Flyway. Do NOT add `classpath:db/platform` to `spring.flyway.locations`; service migrations stay in `db/migration` with their own `flyway_schema_history`.
+- Write with `OutboxWriter.append(...)` inside the business transaction (it fails outside one); the relay publishes asynchronously, at-least-once, with the request's `traceparent`.
+- Settings: `platform.outbox.{poll-interval, batch-size, send-timeout}`.
 
 ## Error mapping (RFC 9457 `application/problem+json`, always with `trace_id`)
 | Cause | Status | type slug |

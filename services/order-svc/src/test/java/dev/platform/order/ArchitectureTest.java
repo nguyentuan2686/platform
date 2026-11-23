@@ -22,6 +22,7 @@ class ArchitectureTest {
           .resideInAnyPackage(
               "org.springframework..",
               "jakarta..",
+              "tools.jackson..",
               "com.fasterxml..",
               "..adapter..",
               "..application..");
