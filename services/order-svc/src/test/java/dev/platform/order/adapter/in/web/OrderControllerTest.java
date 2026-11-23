@@ -98,6 +98,24 @@ class OrderControllerTest {
   }
 
   @Test
+  void unit_price_with_three_decimals_is_400() throws Exception {
+    String item = "{\"sku\":\"s\",\"quantity\":1,\"unitPrice\":10.505}";
+    mvc.perform(
+            post("/orders").contentType(MediaType.APPLICATION_JSON).content(request("c-1", item)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field").value("items[0].unitPrice"));
+  }
+
+  @Test
+  void unit_price_with_18_integer_digits_is_400() throws Exception {
+    String item = "{\"sku\":\"s\",\"quantity\":1,\"unitPrice\":123456789012345678}";
+    mvc.perform(
+            post("/orders").contentType(MediaType.APPLICATION_JSON).content(request("c-1", item)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field").value("items[0].unitPrice"));
+  }
+
+  @Test
   void blank_customer_is_400() throws Exception {
     String item = "{\"sku\":\"s\",\"quantity\":1,\"unitPrice\":1}";
     mvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(request(" ", item)))

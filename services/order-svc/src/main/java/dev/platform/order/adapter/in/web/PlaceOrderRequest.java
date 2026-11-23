@@ -4,6 +4,7 @@ import dev.platform.order.application.PlaceOrderCommand;
 import dev.platform.order.domain.OrderLine;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -17,7 +18,7 @@ public record PlaceOrderRequest(
   public record Item(
       @NotBlank String sku,
       @NotNull @Min(1) Integer quantity,
-      @NotNull @DecimalMin("0") BigDecimal unitPrice) {}
+      @NotNull @DecimalMin("0") @Digits(integer = 17, fraction = 2) BigDecimal unitPrice) {}
 
   PlaceOrderCommand toCommand() {
     List<OrderLine> lines =

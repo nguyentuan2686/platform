@@ -89,6 +89,8 @@ components:
         unitPrice:
           type: number
           minimum: 0
+          maximum: 99999999999999999.99
+          multipleOf: 0.01
     OrderResponse:
       type: object
       required: [id, customerId, items, total, status, createdAt]
