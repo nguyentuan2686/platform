@@ -19,6 +19,7 @@
 
   <modules>
     <module>libs/java/platform-starter</module>
+    <module>services/order-svc</module>
   </modules>
 
   <properties>
