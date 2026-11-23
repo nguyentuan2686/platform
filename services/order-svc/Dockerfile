@@ -1,5 +1,5 @@
 # Build context: repo root.  docker build -f services/order-svc/Dockerfile -t order-svc:local .
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-26 AS build
 WORKDIR /src
 COPY . .
 RUN --mount=type=cache,target=/root/.m2 \
