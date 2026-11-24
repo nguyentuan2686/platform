@@ -103,8 +103,8 @@ identity-svc        chart-svc (Rust)     reading-tuvi / reading-astro   payment-
 
 **Pipeline dựng kho (offline, batch, chạy dần theo quota free)**
 1. Thu thập văn bản **phạm vi công cộng**: tử vi — kinh điển chữ Hán (Tử Vi Đẩu Số Toàn Thư, …) từ Wikisource (維基文庫); chiêm tinh — sách tiếng Anh cổ (Project Gutenberg, …). Ghi nguồn + giấy phép từng tài liệu.
-2. Tách đoạn → LLM trích xuất thành bản ghi có `key` + `topic` (một trường phái mỗi kho).
-3. Dịch/biên soạn sang 3 ngôn ngữ bằng LLM, văn phong hiện đại tự nhiên.
+2. Tách đoạn → **Claude soạn lúc build** (quyết định §12.4): đọc nguồn công cộng đã thu thập, biên soạn thành bản ghi có `key` + `topic` (một trường phái mỗi kho), lưu thành tệp JSONL trong Git.
+3. Biên soạn theo từng ngôn ngữ {vi, en, zh-Hant} bằng Claude lúc build (không dịch từng câu), văn phong hiện đại tự nhiên. Lúc chạy, reading-svc **không bao giờ gọi Claude**; LLM gateway miễn phí chỉ phục vụ Q&A (F1.4).
 4. Kiểm tra tự động (khóa hợp lệ, không trùng, độ dài, ngôn ngữ đúng) → `approved`. Có trang admin tối giản để xem/sửa/ẩn bản ghi. *(không có người duyệt chuyên môn — quyết định 6)*
 
 **Luận giải cơ bản (miễn phí, không LLM)**: từ lá số sinh danh sách `key` → lấy bản ghi approved → ghép theo khung trình bày cố định theo ngôn ngữ. Chi phí 0, cache theo `chart_hash`.
@@ -166,6 +166,7 @@ identity-svc        chart-svc (Rust)     reading-tuvi / reading-astro   payment-
 1. **Lịch/trường phái**: tự động theo IP, nhưng **giao diện tiếng Việt → mặc định lịch Việt** (kể cả IP nước ngoài); có nút "đổi lịch" trong trang hồ sơ lá số (không hiện ở form chính). Trường `calendar` của hồ sơ sửa được.
 2. **Thanh toán & hoàn tiền**: SePay gắn tài khoản ngân hàng cá nhân của Tuấn; Tuấn tự đăng ký SePay + PayPal. Báo cáo lỗi sau khi trả tiền → tự retry trong 24h → vẫn lỗi thì **hoàn 100%** (VietQR: tạo yêu cầu hoàn tiền cho Tuấn chuyển tay + thông báo người dùng; PayPal: refund qua API).
 3. **Ngân sách AI**: chấp nhận **trả phí nhỏ** khi free tier không đủ hoặc điều khoản free không cho thương mại. LLM gateway: provider free trước, provider trả phí (Groq paid / Gemini paid, cùng API) làm tầng dự phòng; ngưỡng chi tiêu tháng cấu hình được, alert Telegram khi chạm 80%.
+4. **Nguồn soạn kho luận giải (2026-11-24)**: Tuấn chọn "Claude soạn". Kho tử vi được Claude biên soạn lúc build từ nguồn công cộng (紫微斗數全書 trên Wikisource), commit thành JSONL trong Git; lúc chạy reading-svc vẫn không gọi Claude. LLM gateway miễn phí (§6.4) chỉ còn dùng cho Q&A ở F1.4.
 
 ## 13. Quyết định của Tuấn sau xem prototype v1 (2026-11-24)
 

@@ -8,6 +8,7 @@ import dev.platform.reading.tuvi.domain.KnowledgeKey;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -64,14 +65,27 @@ class JsonlKnowledgeImporterIT {
     return Files.writeString(tmp.resolve(name), String.join("\n", lines) + "\n");
   }
 
+  /** Records in the real knowledge tree (frames, daily, doctrine); grows as the corpus grows. */
+  private static int seedRecords() throws IOException {
+    int n = 0;
+    try (Stream<Path> s = Files.walk(SEED)) {
+      for (Path f : s.filter(p -> p.getFileName().toString().endsWith(".jsonl")).toList()) {
+        n += (int) Files.readAllLines(f).stream().filter(l -> !l.isBlank()).count();
+      }
+    }
+    return n;
+  }
+
   @Test
-  void first_import_inserts_seed_and_second_is_a_noop() {
+  void first_import_inserts_seed_and_second_is_a_noop() throws IOException {
+    int seed = seedRecords();
+    assertThat(seed).isGreaterThanOrEqualTo(24);
     ImportResult first = importer.importDir(SEED);
-    assertThat(first).isEqualTo(new ImportResult(24, 0, 0));
+    assertThat(first).isEqualTo(new ImportResult(seed, 0, 0));
     assertThat(port.version()).isEqualTo(1);
 
     ImportResult second = importer.importDir(SEED);
-    assertThat(second).isEqualTo(new ImportResult(0, 0, 24));
+    assertThat(second).isEqualTo(new ImportResult(0, 0, seed));
     assertThat(port.version()).isEqualTo(1);
   }
 
@@ -142,6 +156,22 @@ class JsonlKnowledgeImporterIT {
     assertRejected(ok, "{not json", "bad.jsonl:2");
     assertRejected(ok, line("tuvi:frame=closing", "x").replace("approved", "bogus"), "bad.jsonl:2");
     assertThat(count()).isZero();
+  }
+
+  @Test
+  void nested_directories_are_imported_and_errors_carry_the_relative_path() throws IOException {
+    Files.createDirectories(tmp.resolve("doctrine"));
+    write("doctrine/x.vi.jsonl", line("tuvi:frame=missing", "chưa có"));
+    write("a.jsonl", line("tuvi:frame=closing", "hẹn gặp"));
+    importer.importDir(tmp);
+    assertThat(count()).isEqualTo(2);
+    assertThat(port.find(KnowledgeKey.frame("missing"), "vi")).contains("chưa có");
+
+    write("doctrine/x.vi.jsonl", line("tuvi:frame=missing", ""));
+    assertThatThrownBy(() -> importer.importDir(tmp))
+        .isInstanceOf(KnowledgeImportException.class)
+        .hasMessageContaining("doctrine")
+        .hasMessageContaining("x.vi.jsonl:1");
   }
 
   private void assertRejected(String first, String second, String where) throws IOException {
