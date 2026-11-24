@@ -3,6 +3,7 @@ package dev.platform.reading.tuvi.domain;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Builds the ordered, doctrine-free skeleton of a basic reading. Each {@link Line} lists knowledge
@@ -28,31 +29,39 @@ public final class ReadingPlan {
 
   private ReadingPlan() {}
 
-  public record Section(String id, String titleFrame, List<Line> lines) {}
+  /**
+   * {@code titleFrame} is empty for sections without a title; {@code vars} fill its placeholders.
+   */
+  public record Section(
+      String id, Optional<String> titleFrame, Map<String, String> vars, List<Line> lines) {}
 
   public record Line(List<KnowledgeKey> lookupOrder, Map<String, String> vars) {}
 
   public static List<Section> basic(Chart chart) {
     List<Section> out = new ArrayList<>();
-    out.add(frameSection("greeting", "greeting", Map.of()));
-    out.add(palaceSection("menh", chart, chart.palace("Menh")));
+    out.add(frameSection("greeting", null, "greeting", Map.of()));
+    out.add(palaceSection("menh", "menh_title", chart, chart.palace("Menh")));
     Palace than = chart.palace(chart.thanPalace());
-    out.add(frameSection("than", "than_intro", Map.of("palace", than.nameVi())));
-    out.add(frameSection("cuc", "cuc_intro", Map.of("cuc", chart.cucNameVi())));
+    out.add(frameSection("than", "than_title", "than_intro", Map.of("palace", than.nameVi())));
+    out.add(frameSection("cuc", "cuc_title", "cuc_intro", Map.of("cuc", chart.cucNameVi())));
     for (String key : AFTER_MENH) {
-      out.add(palaceSection(key, chart, chart.palace(key)));
+      out.add(palaceSection(key, "palace_title", chart, chart.palace(key)));
     }
-    out.add(frameSection("closing", "closing", Map.of()));
-    out.add(frameSection("disclaimer", "disclaimer", Map.of()));
+    out.add(frameSection("closing", null, "closing", Map.of()));
+    out.add(frameSection("disclaimer", null, "disclaimer", Map.of()));
     return out;
   }
 
-  private static Section frameSection(String id, String frame, Map<String, String> vars) {
+  private static Section frameSection(
+      String id, String title, String frame, Map<String, String> vars) {
     return new Section(
-        id, "title_" + id, List.of(new Line(List.of(KnowledgeKey.frame(frame)), vars)));
+        id,
+        Optional.ofNullable(title),
+        vars,
+        List.of(new Line(List.of(KnowledgeKey.frame(frame)), vars)));
   }
 
-  private static Section palaceSection(String id, Chart chart, Palace p) {
+  private static Section palaceSection(String id, String title, Chart chart, Palace p) {
     String key = p.key();
     Map<String, String> palaceVar = Map.of("palace", p.nameVi());
     List<Line> lines = new ArrayList<>();
@@ -94,10 +103,6 @@ public final class ReadingPlan {
     if (chart.inTriet(p)) {
       lines.add(new Line(List.of(KnowledgeKey.palaceMark(key, "Triet")), palaceVar));
     }
-    return new Section(id, "title_" + snake(id), lines);
-  }
-
-  private static String snake(String camel) {
-    return camel.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
+    return new Section(id, Optional.of(title), palaceVar, lines);
   }
 }

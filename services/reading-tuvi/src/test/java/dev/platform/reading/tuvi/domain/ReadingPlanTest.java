@@ -99,6 +99,20 @@ class ReadingPlanTest {
     assertThat(section("cuc").lines().get(0).vars()).containsEntry("cuc", "Kim tứ cục");
     assertThat(keys(section("greeting").lines().get(0))).containsExactly("tuvi:frame=greeting");
     assertThat(keys(section("disclaimer").lines().get(0))).containsExactly("tuvi:frame=disclaimer");
-    assertThat(section("PhuMau").titleFrame()).isEqualTo("title_phu_mau");
+  }
+
+  @Test
+  void section_titles_use_seeded_frames_and_vars() {
+    assertThat(section("menh").titleFrame()).contains("menh_title");
+    assertThat(section("menh").vars()).containsEntry("palace", "Mệnh");
+    assertThat(section("than").titleFrame()).contains("than_title");
+    assertThat(section("than").vars()).containsEntry("palace", "Quan Lộc");
+    assertThat(section("cuc").titleFrame()).contains("cuc_title");
+    assertThat(section("cuc").vars()).containsEntry("cuc", "Kim tứ cục");
+    assertThat(section("PhuMau").titleFrame()).contains("palace_title");
+    assertThat(section("PhuMau").vars()).containsEntry("palace", "Phụ Mẫu");
+    assertThat(section("greeting").titleFrame()).isEmpty();
+    assertThat(section("closing").titleFrame()).isEmpty();
+    assertThat(section("disclaimer").titleFrame()).isEmpty();
   }
 }
