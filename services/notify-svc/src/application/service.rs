@@ -14,7 +14,7 @@ pub enum AppError {
     Domain(#[from] DomainError),
     #[error("limit must be at least 1")]
     InvalidLimit,
-    #[error("repository failure: {0}")]
+    #[error("repository failure")]
     Repository(#[source] anyhow::Error),
 }
 

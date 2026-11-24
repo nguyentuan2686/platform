@@ -25,7 +25,8 @@ src/application     # use cases, *Port traits (owned here), orchestration
 src/adapters/http        # axum handlers, request/response DTOs
 src/adapters/db          # sqlx repositories (*Adapter implementing *Port)
 src/adapters/messaging   # rdkafka consumers/producers
-src/main.rs         # wiring only: config, adapters, server start
+src/app.rs          # wiring: pool -> migrations -> bind HTTP + spawn consumer, supervision, shutdown
+src/main.rs         # telemetry init, config, signal handling, then `app::run` only
 ```
 Dependencies point inward only: adapters -> application -> domain. Services are `lib` (all logic) + thin `bin`.
 
@@ -33,8 +34,9 @@ Dependencies point inward only: adapters -> application -> domain. Services are 
 A test in `tests/architecture.rs` walks `src/domain/**/*.rs` and fails if any line has `use` of a forbidden path: `tokio`, `axum`, `sqlx`, `rdkafka`, `tower`, `hyper`, `reqwest`, `opentelemetry`, `crate::adapters`. Also: `src/application/**` must not `use crate::adapters`.
 
 ## Errors
-- `thiserror` enums in `domain` and `application` (typed, matchable); no `anyhow` there.
-- `anyhow` only in `main.rs` and adapter wiring/startup code.
+- `thiserror` enums in `domain` and `application` (typed, matchable). `domain` never uses `anyhow`.
+- Application `*Port` traits return `anyhow::Result`: adapter failures are opaque to the use case. The use case wraps them in a typed variant (`AppError::Repository(#[source] anyhow::Error)`, display text without `{0}` so the cause is not printed twice); adapters that must classify a cause (e.g. SQLSTATE) downcast through `chain()`.
+- Otherwise `anyhow` only in `main.rs`, `app.rs` and adapter code.
 - No `unwrap()`/`expect()` in non-test code except provably infallible, with a comment. Map errors to HTTP at the adapter edge.
 - HTTP errors: RFC 9457 `application/problem+json`, `type = "urn:problem:<slug>"`, always `trace_id`; 500 detail exactly `"Unexpected error"`; never leak internals (same slugs as the Java table).
 
@@ -43,6 +45,7 @@ A test in `tests/architecture.rs` walks `src/domain/**/*.rs` and fails if any li
 - Error logs: `error!(error = %e, error_type = "DbUnavailable", "...")`; `error_type` becomes `error.type` (default `"error"`), never derived from Debug.
 - Log at boundaries (request result, event consumed/skipped, outbound failure), not inside domain logic.
 - Never log payloads or PII (names, emails, phones, addresses, tokens); ids only. No `println!`/`dbg!`.
+- Keep `RUST_LOG` at `info` or more verbose for platform crates: the request (`http.request`) and consumer (`kafka.process`) spans are INFO spans, so a filter below `info` (e.g. `warn`) disables them, `set_parent` becomes a no-op and logs lose the inbound `trace_id` (trace continuation breaks).
 
 ## Naming
 - `*Port` traits (application-owned), `*Adapter` structs (adapters), `*UseCase`/service structs in application.
@@ -53,7 +56,7 @@ A test in `tests/architecture.rs` walks `src/domain/**/*.rs` and fails if any li
 2. Application tests with in-memory fakes of ports (hand-written fakes over mock frameworks).
 3. Adapter tests: HTTP via `tower::ServiceExt::oneshot`; db/messaging against real Postgres/Kafka (testcontainers), never SQLite/mocks.
 4. Integration tests in `tests/` with testcontainers (Postgres + Redpanda): few, happy path plus key failures.
-- Gate: >= 80% line coverage (`llvm-cov`) excluding `main.rs` and test fixtures.
+- Gate: >= 80% line coverage (`llvm-cov`) excluding `main.rs` and files under `tests/`. Inline `#[cfg(test)]` modules live in `src/` and therefore count toward the measured lines.
 
 ## Lints / quality
 - `[workspace.lints]` in root `Cargo.toml` (clippy pedantic as warn, `unsafe_code = forbid`); members set `[lints] workspace = true`.

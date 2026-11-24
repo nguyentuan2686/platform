@@ -658,7 +658,12 @@ async fn concurrent_platform_migrations_on_fresh_db(env: &Env) -> anyhow::Result
     let applied: i64 = sqlx::query_scalar("SELECT count(*) FROM platform._sqlx_migrations")
         .fetch_one(&a)
         .await?;
-    ensure!(applied == 1, "migration applied once, got {applied}");
+    // Same embedded set `migrate_platform` uses; each must be recorded exactly once.
+    let embedded = i64::try_from(sqlx::migrate!("./migrations").iter().count())?;
+    ensure!(
+        applied == embedded,
+        "each platform migration applied once: expected {embedded}, got {applied}"
+    );
     sqlx::query("SELECT 1 FROM platform.processed_event LIMIT 1")
         .execute(&b)
         .await?;

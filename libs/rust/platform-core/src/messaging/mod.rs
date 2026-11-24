@@ -25,6 +25,13 @@ pub trait EventHandler: Send + Sync {
     /// marker). Return [`MalformedEvent`] (possibly wrapped in context) for an event that can never
     /// succeed, e.g. `data` missing a required field: the runner logs it at WARN and skips it.
     /// Any other error is treated as transient and retried with backoff.
+    ///
+    /// Write only through `tx`: the runner inserts the idempotency marker in the same transaction
+    /// and commits marker and handler writes together, so an event's effects are applied exactly
+    /// once or not at all. Implementations must be cancel-safe: on shutdown an attempt can be
+    /// dropped at any await point, which rolls `tx` back and leaves the message to be redelivered,
+    /// so a handler must not have side effects outside `tx` that a dropped attempt would leave
+    /// half-done.
     async fn handle(
         &self,
         tx: &mut Transaction<'_, Postgres>,

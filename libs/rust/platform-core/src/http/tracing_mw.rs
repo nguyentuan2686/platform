@@ -7,7 +7,7 @@ use axum::extract::MatchedPath;
 use http::{Request, Response};
 use opentelemetry_http::HeaderExtractor;
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
-use tower_http::trace::{MakeSpan, OnResponse, TraceLayer};
+use tower_http::trace::{DefaultOnBodyChunk, DefaultOnEos, MakeSpan, OnResponse, TraceLayer};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -51,13 +51,24 @@ impl<B> OnResponse<B> for PlatformOnResponse {
     }
 }
 
-pub type PlatformTraceLayer =
-    TraceLayer<SharedClassifier<ServerErrorsAsFailures>, PlatformMakeSpan, (), PlatformOnResponse>;
+pub type PlatformTraceLayer = TraceLayer<
+    SharedClassifier<ServerErrorsAsFailures>,
+    PlatformMakeSpan,
+    (),
+    PlatformOnResponse,
+    DefaultOnBodyChunk,
+    DefaultOnEos,
+    (),
+>;
 
 /// Tower layer creating one span per request; see the module docs.
+///
+/// `on_failure` is disabled: 500s are already logged where they are mapped to Problem Details,
+/// and readiness 503s are expected, so the default ERROR log would only add noise.
 pub fn trace_layer() -> PlatformTraceLayer {
     TraceLayer::new_for_http()
         .make_span_with(PlatformMakeSpan)
         .on_request(())
         .on_response(PlatformOnResponse)
+        .on_failure(())
 }

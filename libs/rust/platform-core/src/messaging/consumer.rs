@@ -341,10 +341,12 @@ fn consumer_span(msg: &OwnedMessage) -> Span {
 struct KafkaHeaderExtractor<'a>(Option<&'a OwnedHeaders>);
 
 impl Extractor for KafkaHeaderExtractor<'_> {
+    /// Last matching header wins, like Kafka's Java `Headers.lastHeader`.
     fn get(&self, key: &str) -> Option<&str> {
         self.0?
             .iter()
-            .find(|h| h.key.eq_ignore_ascii_case(key))
+            .filter(|h| h.key.eq_ignore_ascii_case(key))
+            .last()
             .and_then(|h| h.value)
             .and_then(|v| std::str::from_utf8(v).ok())
     }
@@ -388,6 +390,24 @@ mod tests {
         assert_eq!(ex.get("missing"), None);
         assert_eq!(ex.keys(), vec!["event_id", "Traceparent"]);
         assert_eq!(KafkaHeaderExtractor(None).get("traceparent"), None);
+    }
+
+    #[test]
+    fn extractor_uses_last_header_when_repeated() {
+        // Kafka/Java (`Headers.lastHeader`) take the last value of a repeated header.
+        let headers = OwnedHeaders::new()
+            .insert(Header {
+                key: "traceparent",
+                value: Some("00-first-01"),
+            })
+            .insert(Header {
+                key: "traceparent",
+                value: Some("00-last-01"),
+            });
+        assert_eq!(
+            KafkaHeaderExtractor(Some(&headers)).get("traceparent"),
+            Some("00-last-01")
+        );
     }
 
     #[test]
