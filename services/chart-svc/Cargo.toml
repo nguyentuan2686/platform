@@ -12,7 +12,9 @@ platform-core = { path = "../../libs/rust/platform-core" }
 anyhow.workspace = true
 async-trait.workspace = true
 axum.workspace = true
+jiff.workspace = true
 tokio = { workspace = true, features = ["net", "signal"] }
+thiserror.workspace = true
 time.workspace = true
 tracing.workspace = true
 
