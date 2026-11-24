@@ -49,6 +49,10 @@
         {
           "key": "LongTri",
           "nameVi": "Long Trì"
+        },
+        {
+          "key": "ThienY",
+          "nameVi": "Thiên Y"
         }
       ],
       "rings": {
@@ -111,8 +115,8 @@
       ],
       "adjective": [
         {
-          "key": "HamTri",
-          "nameVi": "Hàm Trì"
+          "key": "DaoHoa",
+          "nameVi": "Đào Hoa"
         },
         {
           "key": "NguyetDuc",
@@ -179,6 +183,10 @@
         {
           "key": "ThienThuong",
           "nameVi": "Thiên Thương"
+        },
+        {
+          "key": "ThienLa",
+          "nameVi": "Thiên La"
         }
       ],
       "rings": {
@@ -276,6 +284,10 @@
         {
           "key": "ThienNguyet",
           "nameVi": "Thiên Nguyệt"
+        },
+        {
+          "key": "VanTinh",
+          "nameVi": "Văn Tinh"
         }
       ],
       "rings": {
@@ -428,6 +440,10 @@
         {
           "key": "QuaTu",
           "nameVi": "Quả Tú"
+        },
+        {
+          "key": "DuongPhu",
+          "nameVi": "Đường Phù"
         }
       ],
       "rings": {
@@ -509,6 +525,10 @@
         {
           "key": "ThienKhoc",
           "nameVi": "Thiên Khốc"
+        },
+        {
+          "key": "DiaGiai",
+          "nameVi": "Địa Giải"
         }
       ],
       "rings": {
@@ -588,6 +608,10 @@
         {
           "key": "ThienPhuc",
           "nameVi": "Thiên Phúc"
+        },
+        {
+          "key": "LuuHa",
+          "nameVi": "Lưu Hà"
         }
       ],
       "rings": {
@@ -654,6 +678,18 @@
         {
           "key": "ThienHinh",
           "nameVi": "Thiên Hình"
+        },
+        {
+          "key": "ThienGiai",
+          "nameVi": "Thiên Giải"
+        },
+        {
+          "key": "QuocAn",
+          "nameVi": "Quốc Ấn"
+        },
+        {
+          "key": "DiaVong",
+          "nameVi": "Địa Võng"
         }
       ],
       "rings": {
@@ -878,6 +914,10 @@
         {
           "key": "PhaToai",
           "nameVi": "Phá Toái"
+        },
+        {
+          "key": "DauQuan",
+          "nameVi": "Đẩu Quân"
         }
       ],
       "rings": {

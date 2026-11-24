@@ -230,6 +230,108 @@ fn move_adjective(chart: &mut Chart, star: AdjStarKey, branch: Branch) {
     }
 }
 
+/// Lưu Hà by year stem (Giáp to Quý) as lasotuvi's palace numbers (`maTranLuuHa`, Tý = 1).
+const LUU_HA: [i32; 10] = [10, 11, 8, 5, 6, 7, 9, 4, 12, 3];
+
+/// Lưu Hà by year stem (`timLuuTru`; lasotuvi marks this table as unverified).
+pub fn vn_luu_ha(stem: Stem) -> Branch {
+    at(LUU_HA[stem as usize])
+}
+
+/// Thiên Giải: Thân is month 1 and the count skips a palace per month (`2 * month - 2`).
+pub fn vn_thien_giai(month: u8) -> Branch {
+    at(9 + 2 * i32::from(month) - 2)
+}
+
+/// Đẩu Quân: from the year branch, back by the lunar month and forward by the hour.
+pub fn vn_dau_quan(year_branch: Branch, month: u8, hour: Branch) -> Branch {
+    at(year_branch as i32 + 1 - i32::from(month) + hour as i32 + 1)
+}
+
+/// The palace `n` steps after `branch` (negative steps go back).
+fn after(branch: Branch, n: i32) -> Branch {
+    at(branch as i32 + 1 + n)
+}
+
+/// The lunar month a chart is cast on: a leap month counts as the next month from day 16
+/// (the engine's `fixLeap`), as for Mệnh.
+fn chart_month(chart: &Chart) -> u8 {
+    let l = chart.lunar;
+    if l.leap && l.day > 15 {
+        l.month % 12 + 1
+    } else {
+        l.month
+    }
+}
+
+/// The palace branch holding a minor star of the chart.
+fn minor_branch(chart: &Chart, star: StarKey) -> Option<Branch> {
+    chart
+        .palaces
+        .iter()
+        .find(|p| p.minor.iter().any(|s| s.key == star))
+        .map(|p| p.branch)
+}
+
+/// The palace branch holding an adjective star of the chart.
+fn adjective_branch(chart: &Chart, star: AdjStarKey) -> Option<Branch> {
+    chart
+        .palaces
+        .iter()
+        .find(|p| p.adjective.contains(&star))
+        .map(|p| p.branch)
+}
+
+/// Adds an adjective star to the palace at `branch`, after the stars already there.
+fn add_adjective(chart: &mut Chart, star: AdjStarKey, branch: Branch) {
+    if let Some(p) = chart.palaces.iter_mut().find(|p| p.branch == branch) {
+        p.adjective.push(star);
+    }
+}
+
+/// Replaces an adjective star by another in the same palace and position.
+fn relabel_adjective(chart: &mut Chart, from: AdjStarKey, to: AdjStarKey) {
+    for palace in &mut chart.palaces {
+        for star in &mut palace.adjective {
+            if *star == from {
+                *star = to;
+            }
+        }
+    }
+}
+
+/// Adds the stars only the Vietnamese school places. Their anchors (Kình Dương, Tả Phụ,
+/// Thiên Riêu) agree between the schools, so they are read from the chart.
+fn add_vn_only_stars(chart: &mut Chart) {
+    let year = chart.year;
+    let month = chart_month(chart);
+    let kinh = minor_branch(chart, StarKey::KinhDuong);
+    let ta_phu = minor_branch(chart, StarKey::TaPhu);
+    let rieu = adjective_branch(chart, AdjStarKey::ThienRieu);
+    let van_tinh = kinh.map(|k| after(k, 2));
+    let duong_phu = van_tinh.map(|v| after(v, 2));
+    let stars = [
+        (AdjStarKey::ThienGiai, Some(vn_thien_giai(month))),
+        (AdjStarKey::DiaGiai, ta_phu.map(|t| after(t, 3))),
+        (AdjStarKey::ThienY, rieu),
+        (AdjStarKey::QuocAn, duong_phu.map(|d| after(d, 3))),
+        (AdjStarKey::DuongPhu, duong_phu),
+        (AdjStarKey::VanTinh, van_tinh),
+        (AdjStarKey::LuuHa, Some(vn_luu_ha(year.stem))),
+        (
+            AdjStarKey::DauQuan,
+            Some(vn_dau_quan(year.branch, month, chart.hour_branch)),
+        ),
+        (AdjStarKey::ThienLa, Some(Branch::Chen)),
+        (AdjStarKey::DiaVong, Some(Branch::Xu)),
+    ];
+    for (star, branch) in stars {
+        if let Some(branch) = branch {
+            add_adjective(chart, star, branch);
+        }
+    }
+}
+
 /// Applies the Vietnamese school to a chart cast by the engine: the Vietnamese placement of
 /// Khôi/Việt, Hỏa/Linh, Giải Thần and Phá Toái, brightness from [`vn_brightness`] and the
 /// natal Tứ Hóa of the year stem. Flows are handled by [`apply_vn_flow`].
@@ -242,6 +344,10 @@ pub fn apply_vn_school(chart: &mut Chart) {
     move_minor(chart, StarKey::LinhTinh, linh);
     move_adjective(chart, AdjStarKey::GiaiThan, vn_giai_than(chart.year.branch));
     move_adjective(chart, AdjStarKey::PhaToai, vn_pha_toai(chart.year.branch));
+    // lasotuvi's Đào Hoa is iztro's Hàm Trì (same palace in all 50 cross-check charts; see
+    // docs/tuvi/vn-school-diff.md), so the star is relabelled, not added.
+    relabel_adjective(chart, AdjStarKey::HamTri, AdjStarKey::DaoHoa);
+    add_vn_only_stars(chart);
     let tu_hoa = vn_tu_hoa(chart.year.stem);
     for palace in &mut chart.palaces {
         let branch = palace.branch;
@@ -442,5 +548,19 @@ mod tests {
         assert_eq!(vn_pha_toai(Zi), You);
         assert_eq!(vn_pha_toai(Chou), Chou);
         assert_eq!(vn_pha_toai(Yin), Si);
+    }
+
+    #[test]
+    fn luu_ha_thien_giai_and_dau_quan_follow_lasotuvi() {
+        use Branch::{Chen, Hai, Mao, Shen, Si, Wei, Wu, Xu, Yin, You, Zi};
+        let luu_ha = [You, Xu, Wei, Chen, Si, Wu, Shen, Mao, Hai, Yin];
+        for (stem, want) in Stem::ALL.iter().zip(luu_ha) {
+            assert_eq!(vn_luu_ha(*stem), want, "{stem:?}");
+        }
+        assert_eq!(vn_thien_giai(1), Shen);
+        assert_eq!(vn_thien_giai(2), Xu);
+        assert_eq!(vn_thien_giai(7), super::at(9 + 12), "month 7 wraps");
+        assert_eq!(vn_dau_quan(Zi, 1, Zi), Zi);
+        assert_eq!(vn_dau_quan(Wu, 3, Mao), super::at(7 - 3 + 4));
     }
 }

@@ -285,10 +285,22 @@ fn star_cell(key: &str, brightness: &str, mutagen: &str, mask: Option<VnMask>) -
     format!("{key}/{brightness}/{mutagen}")
 }
 
-/// Stars the Vietnamese school places elsewhere than iztro (Khôi, Việt, Hỏa, Linh, Giải
+/// Stars the Vietnamese school places elsewhere than iztro or adds (Khôi, Việt, Hỏa, Linh, Giải
 /// Thần, Phá Toái): left out of both sides' lists for VN charts (their placement is asserted
 /// against lasotuvi in `vn_crosscheck.rs`).
-const VN_MOVED: [&str; 6] = [
+const VN_MOVED: [&str; 18] = [
+    "HamTri",
+    "DaoHoa",
+    "ThienGiai",
+    "DiaGiai",
+    "ThienY",
+    "QuocAn",
+    "DuongPhu",
+    "VanTinh",
+    "LuuHa",
+    "DauQuan",
+    "ThienLa",
+    "DiaVong",
     "ThienKhoi",
     "ThienViet",
     "HoaTinh",
@@ -985,10 +997,11 @@ fn every_fixture_adjective_and_ring_star_has_a_key_and_label() {
         let star = RingStarKey::ALL.iter().find(|k| k.key() == *key).unwrap();
         assert_ne!(star.name_vi(), "");
     }
-    // The fixture exercises every star the domain knows, and nothing else.
+    // The iztro fixture exercises every adjective star the domain knows except the
+    // Vietnamese-only ones, and nothing else.
     assert_eq!(
         adjective.len(),
-        AdjStarKey::ALL.len(),
+        AdjStarKey::ALL.iter().filter(|k| !k.is_vn_only()).count(),
         "adjective stars seen"
     );
     assert_eq!(rings.len(), RingStarKey::ALL.len(), "ring stars seen");
@@ -1001,6 +1014,19 @@ fn every_star_appears_exactly_once_in_vn_and_cn_golden_charts() {
         for c in cases(kind) {
             let chart = svc.chart(&request(c, cal)).unwrap();
             assert_each_star_once(s(&c["id"]), &chart);
+        }
+    }
+}
+
+#[test]
+fn cn_charts_have_none_of_the_vietnamese_only_stars() {
+    let svc = service();
+    for c in cases("cn") {
+        let chart = svc.chart(&request(c, CalendarKind::Cn)).unwrap();
+        for p in &chart.palaces {
+            for a in &p.adjective {
+                assert!(!a.is_vn_only(), "{}: {a:?}", s(&c["id"]));
+            }
         }
     }
 }

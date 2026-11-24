@@ -248,6 +248,17 @@ components:
         - ThienSu
         - ThienThuong
         - NienGiai
+        - DaoHoa
+        - ThienGiai
+        - DiaGiai
+        - ThienY
+        - QuocAn
+        - DuongPhu
+        - VanTinh
+        - LuuHa
+        - DauQuan
+        - ThienLa
+        - DiaVong
     RingStarKey:
       type: string
       description: Member of one of the four rings of twelve gods (Trang Sinh, Bac Si, Thai Tue, Tuong Tien).

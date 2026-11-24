@@ -61,5 +61,5 @@ leap month (1979-08-05, 2009-07-14, 2023-04-01, 1985-04-05, 1987-08-25).
 Lunar date, year can chi, cục, Mệnh and Thân branch, the branch of each of the 14 major
 stars (must-match facts), the Tuần and Triệt pairs (lasotuvi marks two palaces for each),
 and, where a lasotuvi star maps to a chart-svc key (mapping by lasotuvi `saoID` in
-`generate.py`): the 14 minor stars, 29 adjective stars, the Tràng sinh, Bác sỹ and Thái tuế
+`generate.py`): the 14 minor stars, 40 adjective stars (29 shared and the 11 Vietnamese-only ones), the Tràng sinh, Bác sỹ and Thái tuế
 rings, the four Tứ Hóa stars and the brightness of major and minor stars.

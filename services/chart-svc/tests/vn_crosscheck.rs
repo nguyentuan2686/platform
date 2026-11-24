@@ -13,7 +13,7 @@ use chart_svc::adapters::engine::IztroAdapter;
 use chart_svc::application::birth::NormalizedBirth;
 use chart_svc::application::service::{ChartRequest, ChartService};
 use chart_svc::domain::calendar::{Branch, CalendarKind};
-use chart_svc::domain::chart::{Brightness, Chart, Gender, Palace, PalaceKey, StarKey};
+use chart_svc::domain::chart::{AdjStarKey, Brightness, Chart, Gender, Palace, PalaceKey, StarKey};
 use chart_svc::domain::vn_school::vn_brightness;
 use common::assert_each_star_once;
 use serde_json::Value;
@@ -384,5 +384,67 @@ fn report_school_differences() {
                 d.cases, d.by_stem, d.by_polarity, d.example
             );
         }
+    }
+}
+
+/// The stars only the Vietnamese school places sit where lasotuvi puts them, in all 50
+/// charts; Thiên La is always at Thìn and Địa Võng at Tuất.
+#[test]
+fn vn_only_stars_equal_lasotuvi() {
+    const STARS: [&str; 11] = [
+        "DaoHoa",
+        "ThienGiai",
+        "DiaGiai",
+        "ThienY",
+        "QuocAn",
+        "DuongPhu",
+        "VanTinh",
+        "LuuHa",
+        "DauQuan",
+        "ThienLa",
+        "DiaVong",
+    ];
+    let mut out = Vec::new();
+    for case in fixture() {
+        let id = s(&case["id"]);
+        let ours = ours_by_group(&chart_of(&case));
+        let theirs = theirs_by_group(&case);
+        for star in STARS {
+            let o = ours["adjective"].get(star).cloned().unwrap_or_default();
+            let t = theirs["adjective"].get(star).cloned().unwrap_or_default();
+            if o != t || o.len() != 1 {
+                out.push(format!("{id}: {star}: {o:?} != {t:?}"));
+            }
+        }
+        for (star, branch) in [("ThienLa", "Chen"), ("DiaVong", "Xu")] {
+            let o = ours["adjective"].get(star).cloned().unwrap_or_default();
+            if o != BTreeSet::from([branch.to_string()]) {
+                out.push(format!("{id}: {star} at {o:?}, want {branch}"));
+            }
+        }
+    }
+    assert!(
+        out.is_empty(),
+        "{} differences:\n{}",
+        out.len(),
+        out.join("\n")
+    );
+}
+
+/// Hàm Trì (iztro) and Đào Hoa (lasotuvi) sit on the same palace in all 50 charts, so a VN
+/// chart relabels the star instead of carrying both: no `HamTri` adjective, `DaoHoa` in its
+/// place. (The Hàm Trì of the Tướng Tiền ring is a different thing and stays.)
+#[test]
+fn vn_charts_relabel_ham_tri_as_dao_hoa() {
+    for case in fixture() {
+        let chart = chart_of(&case);
+        assert!(
+            chart
+                .palaces
+                .iter()
+                .all(|p| !p.adjective.contains(&AdjStarKey::HamTri)),
+            "{}",
+            s(&case["id"])
+        );
     }
 }

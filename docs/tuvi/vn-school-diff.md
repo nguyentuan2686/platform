@@ -3,7 +3,35 @@
 Source: `services/chart-svc/tests/vn_crosscheck.rs` (the `--ignored` report test) over the 50
 charts of `tools/fixtures/lasotuvi/` (lasotuvi commit `ace8379`, MIT; see its README). chart-svc
 follows iztro 2.6.3 defaults. This is the F1.x backlog of Vietnamese-school differences
-(spec section 11). **No engine change in this plan.**
+(spec section 11). This table is the state before F1.1b; see "Status after F1.1b" for what is now adopted.
+
+## Status after F1.1b (`calendar=VN` charts)
+
+The plan F1.1b adopts the rules below for VN charts only (CN charts stay byte-identical to
+iztro). School string: `vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15`.
+Every adopted row is a must-match over the 50 charts in `vn_crosscheck.rs`.
+
+| Difference | Decision |
+|---|---|
+| Hỏa Tinh, Linh Tinh direction | **Adopted** (`vn_hoa_linh`) |
+| Thiên Khôi, Thiên Việt table | **Adopted** (`vn_khoi_viet`) |
+| Giải Thần (with Phượng Các) | **Adopted** (`vn_giai_than`) |
+| Phá Toái (Tỵ, Dậu, Sửu cycle) | **Adopted** (`vn_pha_toai`) |
+| Hóa Khoa / Hóa Kỵ of Canh and Nhâm, natal and flow layers | **Adopted** (`vn_tu_hoa`) |
+| Brightness table (`dacTinhSao`) incl. Địa Không, Địa Kiếp, Thiên Mã | **Adopted** (`vn_brightness`); Thiên Phủ and the other unrated stars keep the iztro-derived level |
+| Stars on one side only (lasotuvi has, chart-svc had no key): Đào Hoa, Thiên Giải, Địa Giải, Thiên Y, Quốc Ấn, Đường Phù, Văn Tinh, Lưu Hà, Đẩu Quân, Thiên La, Địa Võng | **Adopted** for VN charts (new adjective keys; CN charts have none) |
+| Thiên Quý | **Kept as iztro** (lasotuvi marks its own rule uncertain) |
+| Thiên Trù | **Kept as iztro** (lasotuvi marks its table unverified) |
+| Thai / Dưỡng order of the Tràng Sinh ring | **Kept as iztro** (lasotuvi defect) |
+| Leap-month rule | **Kept as iztro** (split at day 15, common Vietnamese practice) |
+| Hàm Trì, Thiên Vu, Thiên Nguyệt, Âm Sát, Niên Giải (chart-svc only) | Unchanged, except Hàm Trì (below) |
+
+**Hàm Trì versus Đào Hoa.** iztro's Hàm Trì and lasotuvi's Đào Hoa (`Kiếp Sát + 4`, i.e.
+Thiên Mã + 7) sit on the same palace in all 50 of 50 charts (both follow the year-branch
+group Dần-Ngọ-Tuất to Mão, Thân-Tý-Thìn to Dậu, Tỵ-Dậu-Sửu to Ngọ, Hợi-Mão-Mùi to Tý). They
+are therefore one star under two names: a VN chart relabels the adjective star as `DaoHoa`
+and carries no second star and no `HamTri` adjective. CN charts keep `HamTri`. The Hàm Trì of
+the Tướng Tiền ring is a different thing and is unchanged.
 
 ## Agreement (asserted, 50 of 50 charts)
 
