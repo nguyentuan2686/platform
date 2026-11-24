@@ -16,3 +16,7 @@ chart-svc:
   url: ${CHART_SVC_URL:http://localhost:8082}
 
 # OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
+
+# Directory of knowledge *.jsonl files, imported at startup (before readiness); unset = no import.
+knowledge:
+  dir: ${KNOWLEDGE_DIR:}

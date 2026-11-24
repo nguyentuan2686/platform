@@ -7,7 +7,6 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-// allowEmptyShould remains on rules whose packages (application, adapter) are still empty.
 @AnalyzeClasses(
     packages = "dev.platform.reading.tuvi",
     importOptions = ImportOption.DoNotIncludeTests.class)
@@ -37,8 +36,7 @@ class ArchitectureTest {
           .resideInAPackage("..application..")
           .should()
           .dependOnClassesThat()
-          .resideInAPackage("..adapter..")
-          .allowEmptyShould(true);
+          .resideInAPackage("..adapter..");
 
   @ArchTest
   static final ArchRule inboundAdaptersDoNotUseOutboundAdapters =
@@ -48,7 +46,7 @@ class ArchitectureTest {
           .should()
           .dependOnClassesThat()
           .resideInAPackage("..adapter.out..")
-          .allowEmptyShould(true);
+          .allowEmptyShould(true); // adapter.in is still empty (first inbound adapter: later task)
 
   @ArchTest
   static final ArchRule outboundAdaptersDoNotUseInboundAdapters =
@@ -57,14 +55,12 @@ class ArchitectureTest {
           .resideInAPackage("..adapter.out..")
           .should()
           .dependOnClassesThat()
-          .resideInAPackage("..adapter.in..")
-          .allowEmptyShould(true);
+          .resideInAPackage("..adapter.in..");
 
   @ArchTest
   static final ArchRule noFieldInjection =
       noClasses()
           .should()
           .dependOnClassesThat()
-          .haveFullyQualifiedName("org.springframework.beans.factory.annotation.Autowired")
-          .allowEmptyShould(true);
+          .haveFullyQualifiedName("org.springframework.beans.factory.annotation.Autowired");
 }

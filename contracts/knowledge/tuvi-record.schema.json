@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.dev/contracts/knowledge/tuvi-record.schema.json",
+  "title": "Tu Vi knowledge record",
+  "description": "One JSON object per line of knowledge/tuvi/*.jsonl, imported into reading-tuvi.knowledge keyed by (key, school, lang).",
+  "type": "object",
+  "required": ["key", "school", "lang", "content", "source_ref", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "key": {
+      "type": "string",
+      "pattern": "^tuvi:(frame=[a-z_]+|daily:area=(CongViec|DiLai|TienBac|SucKhoe):level=(Thuan|Binh|LuuY)|[a-z]+=[A-Za-z]+(:[a-z]+=[A-Za-z]+)*)$"
+    },
+    "school": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Engine school family without calendar suffix, e.g. iztro-default." },
+    "lang": { "const": "vi" },
+    "topic": { "enum": ["tinh-cach", "tinh-duyen", "su-nghiep", "tai-loc", "suc-khoe", "van-han"] },
+    "content": { "type": "string", "pattern": "\\S" },
+    "source_ref": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "approved", "hidden"] }
+  }
+}
