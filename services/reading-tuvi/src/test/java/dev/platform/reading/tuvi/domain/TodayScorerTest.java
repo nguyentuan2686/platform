@@ -25,15 +25,15 @@ class TodayScorerTest {
   }
 
   @Test
-  void daily_ky_in_quan_loc_is_luu_y() {
+  void daily_ky_in_tat_ach_is_luu_y() {
     var day =
-        new DailyFacts(layer("Menh"), layer("Menh"), layer("Menh", new Mutagen("ThamLang", "Ky")));
+        new DailyFacts(layer("Menh"), layer("Menh"), layer("Menh", new Mutagen("ThaiDuong", "Ky")));
 
-    assertThat(TodayScorer.score(chart, day)).containsEntry(Area.CongViec, Level.LuuY);
+    assertThat(TodayScorer.score(chart, day)).containsEntry(Area.SucKhoe, Level.LuuY);
   }
 
   @Test
-  void daily_khoa_in_thien_di_with_tuan_balances_to_binh() {
+  void daily_khoa_in_thien_di_is_binh() {
     var day =
         new DailyFacts(layer("Menh"), layer("Menh"), layer("Menh", new Mutagen("VuKhuc", "Khoa")));
 
@@ -68,22 +68,22 @@ class TodayScorerTest {
 
   @Test
   void triet_and_ky_both_subtract() {
-    // QuanLoc: daily Ky (-2) in a Triet branch (-1) stays LuuY; monthly Quyen and unknown add
-    // nothing.
+    // TatAch (Wu): daily Ky (-2) in a Triet branch (-1) stays LuuY; monthly Quyen and unknown
+    // add nothing.
     Chart triet =
         new Chart(
             chart.cucNameVi(),
             chart.thanPalace(),
             chart.tuan(),
-            List.of("Xu", "Hai"),
+            List.of("Wu", "Hai"),
             chart.palaces());
     var day =
         new DailyFacts(
             layer("Menh"),
-            layer("Menh", new Mutagen("ThamLang", "Quyen"), new Mutagen("ThamLang", "Weird")),
-            layer("Menh", new Mutagen("ThamLang", "Ky")));
+            layer("Menh", new Mutagen("ThaiDuong", "Quyen"), new Mutagen("ThaiDuong", "Weird")),
+            layer("Menh", new Mutagen("ThaiDuong", "Ky")));
 
-    assertThat(TodayScorer.score(triet, day)).containsEntry(Area.CongViec, Level.LuuY);
+    assertThat(TodayScorer.score(triet, day)).containsEntry(Area.SucKhoe, Level.LuuY);
   }
 
   /** Same chart, but TaiBach holds the minor star ThaiAm so that mutagens can land there. */

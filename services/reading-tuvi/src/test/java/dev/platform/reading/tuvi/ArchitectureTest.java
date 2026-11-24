@@ -45,8 +45,7 @@ class ArchitectureTest {
           .resideInAPackage("..adapter.in..")
           .should()
           .dependOnClassesThat()
-          .resideInAPackage("..adapter.out..")
-          .allowEmptyShould(true); // adapter.in is still empty (first inbound adapter: later task)
+          .resideInAPackage("..adapter.out..");
 
   @ArchTest
   static final ArchRule outboundAdaptersDoNotUseInboundAdapters =

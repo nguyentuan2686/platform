@@ -1,0 +1,230 @@
+openapi: 3.1.0
+info:
+  title: reading-tuvi
+  version: 1.0.0
+  description: >-
+    Tu Vi reading service. Turns chart-svc facts into Vietnamese text spoken by the character
+    Lão Thiên Cơ (he says "ta", calls the reader "con"). Text comes only from the knowledge
+    base (voice frames, daily lines, doctrine); where no record exists the `missing` frame is
+    used. No LLM is involved. Birth data is never logged and never stored; a basic reading is
+    cached by a hash of the chart, not of the birth.
+paths:
+  /tuvi/readings/basic:
+    post:
+      operationId: basicReading
+      summary: Basic natal reading
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BirthRequest'
+      responses:
+        '200':
+          description: >-
+            The reading. `sections` has 17 entries in a fixed order (greeting, menh, than, cuc,
+            the eleven other palaces, closing, disclaimer); `disclaimer` is always last.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BasicReading'
+        '400':
+          description: >-
+            Malformed JSON (field `body`) or birth data rejected by chart-svc (its `errors`
+            are copied).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: chart-svc failed, was unreachable or took longer than 3 seconds.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tuvi/readings/today:
+    post:
+      operationId: todayReading
+      summary: Hôm nay (today) reading
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodayRequest'
+      responses:
+        '200':
+          description: The four areas of the day, in the order of `Area`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TodayReading'
+        '400':
+          description: >-
+            Malformed JSON or an unparseable `date` (field `body`), a missing `date` (field
+            `date`), or birth data rejected by chart-svc (its `errors` are copied).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: chart-svc failed, was unreachable or took longer than 3 seconds.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    BirthRequest:
+      type: object
+      required: [birth, gender]
+      description: >-
+        The chart-svc ChartRequest fields; they are forwarded and validated there.
+      properties:
+        birth:
+          type: string
+          examples: ['1994-03-12T08:30']
+          description: Local civil time, YYYY-MM-DDTHH:MM (optional :SS), no offset.
+        zone:
+          type: string
+          default: Asia/Ho_Chi_Minh
+        gender:
+          type: string
+          enum: [male, female]
+        calendar:
+          type: string
+          enum: [VN, CN]
+          default: VN
+    TodayRequest:
+      description: The birth fields plus the solar day to read.
+      allOf:
+        - $ref: '#/components/schemas/BirthRequest'
+        - type: object
+          required: [date]
+          properties:
+            date:
+              type: string
+              format: date
+              examples: ['2026-11-24']
+    Section:
+      type: object
+      required: [id, lines]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: >-
+            greeting, menh, than, cuc, PhuMau, PhucDuc, DienTrach, QuanLoc, NoBoc, ThienDi,
+            TatAch, TaiBach, TuTuc, PhuThe, HuynhDe, closing or disclaimer.
+        title:
+          type: string
+          description: >-
+            Section heading. Omitted (never null) for sections without one (greeting, closing,
+            disclaimer) and when the title frame is absent from the knowledge base.
+        lines:
+          type: array
+          items:
+            type: string
+          description: Paragraphs. Never contains a raw `{` or `}`.
+    BasicReading:
+      type: object
+      required: [character, school, chartHash, knowledgeVersion, sections]
+      additionalProperties: false
+      properties:
+        character:
+          type: string
+          enum: [LaoThienCo]
+        school:
+          type: string
+          description: The chart-svc `school` string the chart was cast with.
+        chartHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: SHA-256 of the chart-svc response; identifies the chart, not the birth.
+        knowledgeVersion:
+          type: integer
+          minimum: 0
+          description: Version of the knowledge base the text was rendered from.
+        sections:
+          type: array
+          minItems: 17
+          maxItems: 17
+          items:
+            $ref: '#/components/schemas/Section'
+    Area:
+      type: string
+      enum: [CongViec, DiLai, TienBac, SucKhoe]
+    TodayArea:
+      type: object
+      required: [area, label, level, line]
+      additionalProperties: false
+      properties:
+        area:
+          $ref: '#/components/schemas/Area'
+        label:
+          type: string
+          enum: [Công việc, Đi lại, Tiền bạc, Sức khỏe]
+        level:
+          type: string
+          enum: [Thuan, Binh, LuuY]
+        line:
+          type: string
+    TodayReading:
+      type: object
+      required: [date, lunar, dayCanChi, character, opening, areas, closing]
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+          format: date
+        lunar:
+          type: string
+          description: Lunar day/month as `d/m`, with ` nhuận` appended in a leap month.
+          examples: ['15/10']
+        dayCanChi:
+          type: string
+          examples: ['Giáp Tý']
+        character:
+          type: string
+          enum: [LaoThienCo]
+        opening:
+          type: string
+        areas:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/TodayArea'
+        closing:
+          type: string
+    Problem:
+      type: object
+      description: >-
+        RFC 9457 problem details with platform extensions. Types used here:
+        urn:problem:validation-error (400), urn:problem:upstream-unavailable (503, detail
+        "Chart service unavailable"), urn:problem:internal-error (500, detail "Unexpected
+        error").
+      required: [type, title, status, trace_id]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
