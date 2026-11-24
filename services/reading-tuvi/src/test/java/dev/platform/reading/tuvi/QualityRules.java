@@ -50,8 +50,8 @@ final class QualityRules {
           Pattern.CASE_INSENSITIVE);
   private static final Pattern VOICE =
       Pattern.compile("(?<!\\p{L})con(?!\\p{L})", Pattern.CASE_INSENSITIVE);
-  private static final Pattern SOURCE_REF =
-      Pattern.compile("^(derived:)?ziwei-quanshu:juan[123]:.+");
+  private static final Pattern REF = Pattern.compile("^juan([123]):(.+)$");
+  private static final Pattern HEADING = Pattern.compile("^=+([^=]+)=+$");
   private static final Pattern P2_KEY =
       Pattern.compile("^tuvi:star=([A-Za-z]+):palace=([A-Za-z]+):brightness=[A-Za-z]+$");
 
@@ -124,7 +124,7 @@ final class QualityRules {
     if (!VOICE.matcher(content).find()) {
       out.add(v("voice", key));
     }
-    if (!SOURCE_REF.matcher(str(r, "source_ref")).matches()) {
+    if (refs(str(r, "source_ref")) == null) {
       out.add(v("source_ref", key));
     }
     String expected = expectedTopic(key);
@@ -164,8 +164,80 @@ final class QualityRules {
     return key.matches("^tuvi:star=[A-Za-z]+$") ? "tinh-cach" : null;
   }
 
+  /** Cited source headings that do not appear as a heading line in the source text. */
+  static List<String> missingHeadings(List<JsonNode> records, Path sourcesDir) {
+    Map<String, Set<String>> headings = new HashMap<>();
+    List<String> out = new ArrayList<>();
+    for (JsonNode r : records) {
+      List<String> refs = refs(str(r, "source_ref"));
+      if (refs == null) {
+        continue; // reported by the source_ref rule
+      }
+      for (String ref : refs) {
+        var m = REF.matcher(ref);
+        if (m.matches()
+            && !headings
+                .computeIfAbsent(m.group(1), j -> headingsOf(sourcesDir, j))
+                .contains(m.group(2))) {
+          out.add(v("source_heading", str(r, "key")));
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The {@code juan<N>:<heading>} parts of a source ref, or null when it is malformed. Accepted:
+   * {@code ziwei-quanshu:juan<N>:<heading>}, or {@code derived:ziwei-quanshu:juan<N>:<heading>}
+   * followed by any number of {@code ,juan<N>:<heading>} (every part is checked).
+   */
+  static List<String> refs(String sourceRef) {
+    boolean derived = sourceRef.startsWith("derived:");
+    String rest = derived ? sourceRef.substring("derived:".length()) : sourceRef;
+    if (!rest.startsWith("ziwei-quanshu:")) {
+      return null;
+    }
+    rest = rest.substring("ziwei-quanshu:".length());
+    List<String> parts = derived ? List.of(rest.split(",", -1)) : List.of(rest);
+    for (String p : parts) {
+      if (!REF.matcher(p).matches()) {
+        return null;
+      }
+    }
+    return parts;
+  }
+
+  /** Heading texts of one juan: lines framed by {@code =} signs, e.g. {@code ===五财帛===}. */
+  private static Set<String> headingsOf(Path sourcesDir, String juan) {
+    try {
+      Set<String> out = new HashSet<>();
+      for (String line : Files.readAllLines(sourcesDir.resolve("juan" + juan + ".txt"))) {
+        var m = HEADING.matcher(line.strip());
+        if (m.matches()) {
+          out.add(m.group(1).strip());
+        }
+      }
+      return out;
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  /** Number of records whose content starts with {@code prefix} (NFC). */
+  static long countOpening(List<JsonNode> records, String prefix) {
+    return records.stream()
+        .filter(
+            r -> Normalizer.normalize(str(r, "content"), Normalizer.Form.NFC).startsWith(prefix))
+        .count();
+  }
+
   private static boolean isCjk(int cp) {
-    return (cp >= 0x3400 && cp <= 0x9FFF) || (cp >= 0xF900 && cp <= 0xFAFF);
+    return (cp >= 0x3000 && cp <= 0x303F) // CJK symbols and punctuation
+        || (cp >= 0x3400 && cp <= 0x9FFF) // CJK ideographs (ext. A and unified)
+        || (cp >= 0xF900 && cp <= 0xFAFF) // compatibility ideographs
+        || (cp >= 0xFF00 && cp <= 0xFFEF) // halfwidth and fullwidth forms
+        || (cp >= 0x20000 && cp <= 0x2FA1F); // supplementary ideographs
   }
 
   private static String str(JsonNode r, String field) {
