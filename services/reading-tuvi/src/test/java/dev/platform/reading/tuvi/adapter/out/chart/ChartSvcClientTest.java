@@ -84,7 +84,8 @@ class ChartSvcClientTest {
     assertThat(r.chartHash())
         .isEqualTo(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body)))
         .matches("[0-9a-f]{64}");
-    assertThat(r.school()).startsWith("iztro-default");
+    assertThat(r.school())
+        .isEqualTo("vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15");
     assertThat(lastRequest.get()).contains("\"birth\":\"1994-03-12T08:30\"", "\"gender\":\"male\"");
     assertThat(lastRequest.get()).doesNotContain("zone", "calendar", "date");
   }
