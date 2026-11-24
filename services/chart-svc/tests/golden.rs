@@ -8,6 +8,7 @@ use chart_svc::domain::calendar::{
     day_can_chi, solar_to_lunar, Branch, CalendarKind, LunarDate, Stem,
 };
 use chart_svc::domain::chart::{Brightness, Chart, Flow, FlowLayer, Gender, Mutagen, StarKey};
+use chart_svc::domain::vn_school::vn_rated;
 use serde_json::Value;
 use std::sync::OnceLock;
 use time::macros::format_description;
@@ -248,10 +249,43 @@ fn opt_key<T>(v: Option<T>, key: fn(T) -> &'static str) -> &'static str {
     v.map_or("-", key)
 }
 
-/// The fields compared for a chart: cục, mệnh chủ, thân chủ, thân palace, year can chi,
+/// What a `calendar=VN` chart overrides on top of iztro (the Vietnamese school tables):
+/// the brightness of the stars lasotuvi rates, and the natal Tứ Hóa of Canh and Nhâm years.
+/// Those cells are masked on both sides; everything else stays compared. CN charts are
+/// compared in full (`None`).
+#[derive(Clone, Copy)]
+struct VnMask {
+    mutagen: bool,
+}
+
+impl VnMask {
+    fn of(chart: &Chart) -> Option<VnMask> {
+        chart.school.starts_with("vn").then_some(VnMask {
+            mutagen: matches!(chart.year.stem, Stem::Geng | Stem::Ren),
+        })
+    }
+}
+
+/// One star as `key/brightness/mutagen`, with the VN-overridden parts masked.
+fn star_cell(key: &str, brightness: &str, mutagen: &str, mask: Option<VnMask>) -> String {
+    let rated = StarKey::ALL.iter().any(|k| k.key() == key && vn_rated(*k));
+    let brightness = if mask.is_some() && rated {
+        "*"
+    } else {
+        brightness
+    };
+    let mutagen = if mask.is_some_and(|m| m.mutagen) {
+        "*"
+    } else {
+        mutagen
+    };
+    format!("{key}/{brightness}/{mutagen}")
+}
+
+/// The fields compared for a chart: cục,mệnh chủ, thân chủ, thân palace, year can chi,
 /// then per palace (from Dần) its key, branch, stem, decade, major and minor stars with
 /// brightness and mutagen.
-fn chart_lines(c: &Chart) -> Vec<String> {
+fn chart_lines(c: &Chart, mask: Option<VnMask>) -> Vec<String> {
     let mut out = vec![
         format!("cuc {} {}", c.cuc.name_vi(), c.cuc.number),
         format!("menhChu {}", c.menh_chu.key()),
@@ -263,11 +297,11 @@ fn chart_lines(c: &Chart) -> Vec<String> {
         let stars = |list: &[chart_svc::domain::chart::StarInPalace]| {
             list.iter()
                 .map(|st| {
-                    format!(
-                        "{}/{}/{}",
+                    star_cell(
                         st.key.key(),
                         opt_key(st.brightness, Brightness::key),
-                        opt_key(st.mutagen, Mutagen::key)
+                        opt_key(st.mutagen, Mutagen::key),
+                        mask,
                     )
                 })
                 .collect::<Vec<_>>()
@@ -297,7 +331,7 @@ fn chart_lines(c: &Chart) -> Vec<String> {
     out
 }
 
-fn expected_chart_lines(e: &Value) -> Vec<String> {
+fn expected_chart_lines(e: &Value, mask: Option<VnMask>) -> Vec<String> {
     let number = match s(&e["five"]).chars().next() {
         Some('水') => 2,
         Some('木') => 3,
@@ -328,11 +362,11 @@ fn expected_chart_lines(e: &Value) -> Vec<String> {
                 .unwrap()
                 .iter()
                 .map(|st| {
-                    format!(
-                        "{}/{}/{}",
+                    star_cell(
                         star_key(s(&st[0])),
                         brightness_key(s(&st[1])),
-                        mutagen_key(s(&st[2]))
+                        mutagen_key(s(&st[2])),
+                        mask,
                     )
                 })
                 .collect::<Vec<_>>()
@@ -485,7 +519,13 @@ fn branch_of_star(e: &Value, zh: &str) -> &'static str {
 /// Chart equality plus the Tuần/Triệt check: iztro places 旬空 on one palace of Tuần and
 /// 截路 on one palace of Triệt, so each must lie inside chart-svc's pair.
 fn check_chart(id: &str, chart: &Chart, e: &Value, out: &mut Vec<String>) {
-    diff(id, &chart_lines(chart), &expected_chart_lines(e), out);
+    let mask = VnMask::of(chart);
+    diff(
+        id,
+        &chart_lines(chart, mask),
+        &expected_chart_lines(e, mask),
+        out,
+    );
     for (zh, name, pair) in [("旬空", "tuan", chart.tuan), ("截路", "triet", chart.triet)] {
         let at = branch_of_star(e, zh);
         if !pair.iter().any(|b| b.key() == at) {
@@ -643,7 +683,7 @@ fn vn_charts_equal_iztro_by_lunar_input() {
             Ok(chart) => {
                 assert_eq!(
                     chart.school,
-                    "iztro-default+vn-calendar;hour=local-standard;ty23=next-day"
+                    "vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15"
                 );
                 assert_eq!(chart.lunar, lunar(&c["lunar"]));
                 check_chart(id, &chart, e, &mut mismatches);

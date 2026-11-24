@@ -1,5 +1,5 @@
 {
-  "school": "iztro-default+vn-calendar;hour=local-standard;ty23=next-day",
+  "school": "vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15",
   "calendar": "VN",
   "lunar": {
     "year": 1994,
@@ -99,7 +99,7 @@
         {
           "key": "DiaKiep",
           "nameVi": "Địa Kiếp",
-          "brightness": null,
+          "brightness": "Ham",
           "mutagen": null
         },
         {
@@ -166,7 +166,7 @@
         {
           "key": "ThienDong",
           "nameVi": "Thiên Đồng",
-          "brightness": "Binh",
+          "brightness": "Ham",
           "mutagen": null
         }
       ],
@@ -228,13 +228,13 @@
         {
           "key": "VuKhuc",
           "nameVi": "Vũ Khúc",
-          "brightness": "Binh",
+          "brightness": "Ham",
           "mutagen": "Khoa"
         },
         {
           "key": "PhaQuan",
           "nameVi": "Phá Quân",
-          "brightness": "Binh",
+          "brightness": "Ham",
           "mutagen": "Quyen"
         }
       ],
@@ -325,7 +325,7 @@
         {
           "key": "ThaiDuong",
           "nameVi": "Thái Dương",
-          "brightness": "Vuong",
+          "brightness": "Mieu",
           "mutagen": "Ky"
         }
       ],
@@ -408,13 +408,13 @@
         {
           "key": "DiaKhong",
           "nameVi": "Địa Không",
-          "brightness": null,
+          "brightness": "Ham",
           "mutagen": null
         },
         {
           "key": "LinhTinh",
           "nameVi": "Linh Tinh",
-          "brightness": "Dac",
+          "brightness": "Ham",
           "mutagen": null
         }
       ],
@@ -483,13 +483,13 @@
         {
           "key": "ThienCo",
           "nameVi": "Thiên Cơ",
-          "brightness": "Dac",
+          "brightness": "Vuong",
           "mutagen": null
         },
         {
           "key": "ThaiAm",
           "nameVi": "Thái Âm",
-          "brightness": "Dac",
+          "brightness": "Vuong",
           "mutagen": null
         }
       ],
@@ -497,7 +497,7 @@
         {
           "key": "VanKhuc",
           "nameVi": "Văn Khúc",
-          "brightness": "Dac",
+          "brightness": "Ham",
           "mutagen": null
         },
         {
@@ -568,13 +568,13 @@
         {
           "key": "TuVi",
           "nameVi": "Tử Vi",
-          "brightness": "Vuong",
+          "brightness": "Binh",
           "mutagen": null
         },
         {
           "key": "ThamLang",
           "nameVi": "Tham Lang",
-          "brightness": "Dac",
+          "brightness": "Ham",
           "mutagen": null
         }
       ],
@@ -779,7 +779,7 @@
         {
           "key": "ThienLuong",
           "nameVi": "Thiên Lương",
-          "brightness": "Mieu",
+          "brightness": "Vuong",
           "mutagen": null
         }
       ],
@@ -855,7 +855,7 @@
         {
           "key": "ThatSat",
           "nameVi": "Thất Sát",
-          "brightness": "Mieu",
+          "brightness": "Dac",
           "mutagen": null
         }
       ],
@@ -869,7 +869,7 @@
         {
           "key": "DaLa",
           "nameVi": "Đà La",
-          "brightness": "Mieu",
+          "brightness": "Dac",
           "mutagen": null
         }
       ],

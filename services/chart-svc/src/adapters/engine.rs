@@ -43,13 +43,15 @@ use crate::domain::chart::{
     AdjStarKey, Brightness, Chart, Cuc, Element, Flow, FlowLayer, Gender, Mutagen, Palace,
     PalaceKey, RingStarKey, StarInPalace, StarKey,
 };
+use crate::domain::vn_school::apply_vn_school;
 use crate::domain::void;
 use anyhow::{anyhow, Context};
 use time::Date;
 use x_iztro as iz;
 
-/// `school` of a chart cast on the Vietnamese calendar.
-pub const SCHOOL_VN: &str = "iztro-default+vn-calendar;hour=local-standard;ty23=next-day";
+/// `school` of a chart cast on the Vietnamese calendar: the Vietnamese school tables
+/// ([`apply_vn_school`]) over the engine casting.
+pub const SCHOOL_VN: &str = "vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15";
 /// `school` of a chart cast on the Chinese calendar.
 pub const SCHOOL_CN: &str = "iztro-default;hour=local-standard;ty23=next-day";
 
@@ -222,7 +224,7 @@ fn map_chart(b: &NormalizedBirth, g: Gender, a: &iz::Astrolabe) -> anyhow::Resul
         .iter()
         .find(|p| p.is_body_palace)
         .ok_or_else(|| anyhow!("engine chart has no body palace"))?;
-    Ok(Chart {
+    let mut chart = Chart {
         lunar: b.lunar,
         year: year_can_chi(b.lunar.year),
         hour_branch: b.hour_branch,
@@ -238,7 +240,11 @@ fn map_chart(b: &NormalizedBirth, g: Gender, a: &iz::Astrolabe) -> anyhow::Resul
             CalendarKind::Vn => SCHOOL_VN,
             CalendarKind::Cn => SCHOOL_CN,
         },
-    })
+    };
+    if b.calendar == CalendarKind::Vn {
+        apply_vn_school(&mut chart, None);
+    }
+    Ok(chart)
 }
 
 fn map_palace(p: &iz::PalaceData) -> anyhow::Result<Palace> {
@@ -589,6 +595,15 @@ mod tests {
     #[test]
     fn an_adjective_star_is_an_error_not_a_panic() {
         assert!(star(iz::StarKey::Tianxi).is_err());
+    }
+
+    #[test]
+    fn vn_tu_hoa_differs_from_iztro_only_for_geng_and_ren() {
+        use crate::domain::vn_school::vn_tu_hoa;
+        for s in Stem::ALL {
+            let same = vn_tu_hoa(s) == mutagens_of(s).unwrap();
+            assert_eq!(same, !matches!(s, Stem::Geng | Stem::Ren), "{s:?}");
+        }
     }
 
     #[test]

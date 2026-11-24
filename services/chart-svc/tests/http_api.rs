@@ -163,7 +163,7 @@ async fn chart_has_the_contract_shape() {
     let c = chart_of(&base()).await;
     assert_eq!(
         c["school"],
-        "iztro-default+vn-calendar;hour=local-standard;ty23=next-day"
+        "vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15"
     );
     assert_eq!(c["calendar"], "VN");
     assert_eq!(c["hourBranch"], "Chen");
