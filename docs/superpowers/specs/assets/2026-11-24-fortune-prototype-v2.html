@@ -1,0 +1,794 @@
+﻿<!doctype html>
+<html lang="vi" data-site="tuvi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype v2 — Tử vi &amp; Chiêm tinh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,600;1,400&family=Noto+Serif+Display:wght@500;700&family=Ma+Shan+Zheng&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Be+Vietnam+Pro:wght@300;400;500&family=Spectral:ital,wght@0,300;0,400;0,500;1,400&family=Charm:wght@400;700&family=Great+Vibes&display=swap" rel="stylesheet">
+<style>
+/* ---------- theme tokens ---------- */
+:root[data-site="tuvi"]{
+  --bg:#1A0A08; --bg2:#2B110D; --panel:#24100C;
+  --accent:#A8231B;   /* son */
+  --metal:#C8A04A;    /* vàng lá */
+  --metal-soft:#E9D49A;
+  --paper:#F1E6CC; --ink:#2B1E16; --ink-soft:#6B5640;
+  --good:#4E7A64; --text:#F1E6CC; --muted:#B69C76;
+  --display:"Charm", "Noto Serif", serif; --plain:"Noto Serif Display", "Noto Serif", serif; --title-weight:700;
+  --body:"Noto Serif", serif;
+  --glyph:"Ma Shan Zheng", serif;
+  --radius-lg:6px; --radius-sm:3px;
+}
+:root[data-site="astro"]{
+  --bg:#0B1026; --bg2:#141B3D; --panel:#111735;
+  --accent:#D79AA6;   /* hồng tinh vân */
+  --metal:#D2AE63;    /* đồng thau */
+  --metal-soft:#EAD7A4;
+  --paper:#ECE6D6; --ink:#1B1F3A; --ink-soft:#56597A;
+  --good:#9FB7E8; --text:#ECE6D6; --muted:#9A9CC0;
+  --display:"Great Vibes", "Cormorant Garamond", serif; --plain:"Cormorant Garamond", serif; --title-weight:400;
+  --body:"Spectral", serif;
+  --glyph:"Cormorant Garamond", serif;
+  --radius-lg:22px; --radius-sm:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#141414;color:#e8e2d4;font-family:"Be Vietnam Pro",sans-serif;font-size:14px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--metal);outline-offset:2px}
+
+/* ---------- workbench (outside the phone) ---------- */
+.bench{display:grid;grid-template-columns:220px 1fr 300px;gap:28px;min-height:100%;padding:28px;max-width:1240px;margin:0 auto}
+.rail h1{font-family:"Noto Serif Display",serif;font-size:20px;font-weight:500;color:#f3ead6;margin-bottom:4px}
+.rail p{color:#9c9686;font-size:12.5px;line-height:1.5;margin-bottom:18px}
+.switch{display:flex;border:1px solid #3a3a3a;border-radius:8px;overflow:hidden;margin-bottom:22px}
+.switch button{flex:1;padding:9px 0;font-size:13px;color:#aaa}
+.switch button[aria-pressed="true"]{background:#f1e6cc;color:#1a0a08;font-weight:500}
+.screens{list-style:none;display:flex;flex-direction:column;gap:2px}
+.screens button{width:100%;text-align:left;padding:8px 10px;border-radius:6px;color:#bdb7a8;font-size:13.5px}
+.screens button[aria-current="true"]{background:#262626;color:#fff}
+.stage{display:flex;justify-content:center;align-items:flex-start}
+.notes{font-size:13px;line-height:1.6;color:#c9c3b3}
+.notes h2{font-family:"Noto Serif Display",serif;font-size:16px;font-weight:500;color:#f3ead6;margin-bottom:10px}
+.notes h3{font-size:13px;font-weight:500;color:#f3ead6;margin:16px 0 6px}
+.notes ul{padding-left:18px}
+.notes li{margin-bottom:6px}
+.notes .q{background:#202020;border-left:3px solid #c8a04a;padding:10px 12px;border-radius:4px;margin-top:6px}
+@media (max-width:1000px){
+  .bench{grid-template-columns:1fr;padding:16px;gap:18px}
+  .notes{order:3}
+}
+
+/* ---------- phone ---------- */
+.phone{width:390px;max-width:100%;height:812px;border-radius:46px;padding:10px;background:#050505;box-shadow:0 0 0 1px #2c2c2c,0 30px 80px rgba(0,0,0,.55)}
+.screen{position:relative;height:100%;border-radius:38px;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--body);display:flex;flex-direction:column}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.status{height:40px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 26px;font-size:12px;font-family:"Be Vietnam Pro",sans-serif;color:var(--muted)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 10px}
+.brand{font-family:var(--display);font-size:19px;color:var(--metal-soft);letter-spacing:.01em}
+.credits{font-size:12.5px;color:var(--metal-soft);border:1px solid color-mix(in srgb,var(--metal) 45%,transparent);border-radius:999px;padding:4px 10px}
+.tabbar{flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid color-mix(in srgb,var(--metal) 22%,transparent);background:var(--bg);padding:8px 6px 20px}
+.tabbar button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);padding:4px 0}
+.tabbar button[aria-current="true"]{color:var(--metal-soft)}
+.tabbar svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.4}
+
+/* shared pieces */
+.pad{padding:0 20px 28px}
+.h-display{font-family:var(--display);font-weight:500;line-height:1.15;color:var(--paper)}
+.lead{color:var(--muted);line-height:1.65;font-size:14.5px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 18px;border-radius:var(--radius-sm);font-size:15px;font-weight:500;background:var(--accent);color:#fff8ec}
+:root[data-site="astro"] .btn{background:var(--metal);color:#14183a}
+.btn.ghost, :root[data-site] .btn.ghost{background:transparent;border:1px solid color-mix(in srgb,var(--metal) 55%,transparent);color:var(--metal-soft)}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.field label{font-size:12.5px;color:var(--muted)}
+.field .in{border:1px solid color-mix(in srgb,var(--metal) 35%,transparent);background:color-mix(in srgb,var(--bg2) 80%,transparent);border-radius:var(--radius-sm);padding:12px 13px;font-size:15px;color:var(--paper)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seg{display:flex;gap:8px}
+.seg span{flex:1;text-align:center;padding:11px 0;border-radius:var(--radius-sm);border:1px solid color-mix(in srgb,var(--metal) 35%,transparent);color:var(--muted);font-size:14px}
+.seg span.on{border-color:var(--metal);color:var(--metal-soft);background:color-mix(in srgb,var(--metal) 12%,transparent)}
+.fine{font-size:12px;color:var(--muted);line-height:1.55}
+.sheet{background:var(--paper);color:var(--ink);border-radius:var(--radius-lg)}
+.section-gap{height:22px}
+
+/* ---------- tử vi: lacquer board ---------- */
+.board{position:relative;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);aspect-ratio:1/1.12;
+  background:linear-gradient(160deg,#3A140F,#220B08 60%,#2E100C);border:2px solid var(--metal);padding:3px;gap:2px;
+  box-shadow:inset 0 0 0 1px #5e3a1c,0 18px 40px rgba(0,0,0,.45)}
+.cell{position:relative;background:linear-gradient(180deg,rgba(255,240,210,.04),rgba(0,0,0,.12));border:1px solid rgba(200,160,74,.38);padding:5px 5px 4px;display:flex;flex-direction:column;min-width:0}
+.cell .pn{font-size:10.5px;color:var(--metal);font-weight:600;letter-spacing:.02em}
+.cell .chi{position:absolute;right:4px;bottom:3px;font-size:9px;color:#9a7f5b}
+.cell .stars{margin-top:3px;display:flex;flex-direction:column;gap:1px}
+.cell .st{font-size:10.5px;color:var(--paper);line-height:1.25;white-space:nowrap}
+.cell .st b{font-weight:400;color:#c9a96a;font-size:8.5px;margin-left:2px}
+.cell .minor{font-size:9px;color:#a58d6c;line-height:1.3;margin-top:2px}
+.cell .hoa{display:inline-block;font-size:8.5px;background:var(--accent);color:#fff2dc;padding:0 3px;border-radius:2px;margin-left:3px;vertical-align:1px}
+.cell.menh{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.cell.menh .pn{color:#f0c27a}
+.cell.pick{outline:2px solid var(--metal-soft);outline-offset:-2px}
+.center{grid-column:2/4;grid-row:2/4;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  border:1px solid rgba(200,160,74,.5);background:radial-gradient(circle at 50% 45%,#3d1610,#1d0907 75%);overflow:hidden;padding:8px}
+.center .seal{position:absolute;font-family:var(--glyph);font-size:150px;line-height:1;color:rgba(168,35,27,.28);top:50%;left:50%;transform:translate(-50%,-52%)}
+.center .nm{position:relative;font-family:var(--display);font-size:16px;color:var(--paper)}
+.center .meta{position:relative;font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:4px}
+.center .cuc{position:relative;margin-top:6px;font-size:10.5px;color:var(--metal-soft)}
+
+/* home hero (tử vi) */
+.tv-hero{position:relative;padding:8px 20px 0;min-height:250px}
+.tv-hero .vert{position:absolute;right:14px;top:0;writing-mode:vertical-rl;font-family:var(--glyph);font-size:64px;line-height:1;color:rgba(200,160,74,.22);letter-spacing:.06em}
+.tv-hero h2{font-size:34px;max-width:270px;margin-top:22px}
+.tv-hero .lead{max-width:270px;margin-top:12px}
+.stamp{display:inline-grid;place-items:center;width:30px;height:30px;background:var(--accent);color:#ffe9c8;font-family:var(--glyph);font-size:20px;border-radius:3px;transform:rotate(-4deg)}
+.slip{margin:22px 20px 0;padding:18px 16px 16px;background:linear-gradient(180deg,#2A110D,#200C09);border:1px solid rgba(200,160,74,.45);border-radius:var(--radius-lg);position:relative}
+.slip::before{content:"";position:absolute;inset:4px;border:1px solid rgba(200,160,74,.18);pointer-events:none;border-radius:4px}
+
+/* ---------- chiêm tinh: sky ---------- */
+.sky{position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(1px 1px at 12% 18%,#fff8,transparent),radial-gradient(1px 1px at 78% 9%,#fff9,transparent),
+  radial-gradient(1.5px 1.5px at 64% 32%,#fffb,transparent),radial-gradient(1px 1px at 30% 44%,#fff6,transparent),
+  radial-gradient(1px 1px at 88% 52%,#fff7,transparent),radial-gradient(1.5px 1.5px at 20% 70%,#fff9,transparent),
+  radial-gradient(1px 1px at 52% 84%,#fff6,transparent),radial-gradient(1px 1px at 92% 88%,#fff8,transparent),
+  radial-gradient(120% 60% at 80% 0%,rgba(123,107,196,.28),transparent 60%),
+  radial-gradient(90% 50% at 0% 100%,rgba(215,154,166,.14),transparent 60%)}
+.as-hero{position:relative;padding:4px 20px 0;min-height:330px;overflow:hidden}
+.as-hero svg.arc{position:absolute;right:-215px;top:-150px;width:400px;height:400px;opacity:.7}
+.as-hero h2{position:relative;font-size:40px;font-style:italic;max-width:250px;margin-top:150px;font-weight:500}
+.as-hero .lead{position:relative;max-width:240px;margin-top:12px}
+:root[data-site="astro"] .slip{background:rgba(20,27,61,.72);backdrop-filter:blur(6px);border-color:rgba(210,174,99,.35)}
+:root[data-site="astro"] .slip::before{display:none}
+.wheel-wrap{position:relative;display:flex;justify-content:center;padding:6px 0 4px}
+.wheel-wrap svg{width:100%;max-width:350px;height:auto}
+
+/* ---------- reading / lists ---------- */
+.paper{background:var(--paper);color:var(--ink);border-radius:var(--radius-lg);padding:20px 18px;line-height:1.75;font-size:15px;position:relative}
+:root[data-site="tuvi"] .paper{background:linear-gradient(180deg,#F3E8CF,#EADBB8);border-radius:4px}
+.paper h3{font-family:var(--display);font-size:20px;font-weight:500;line-height:1.3;margin-bottom:10px}
+.paper p+p{margin-top:12px}
+.paper .ask{font-style:italic;color:var(--ink-soft);border-left:3px solid var(--accent);padding-left:10px;margin-bottom:14px;font-size:14px}
+.topic-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.topic{border:1px solid color-mix(in srgb,var(--metal) 35%,transparent);border-radius:var(--radius-sm);padding:12px;min-height:92px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;background:color-mix(in srgb,var(--bg2) 70%,transparent)}
+.topic .tn{font-family:var(--display);font-size:17px;color:var(--paper)}
+.topic .tx{font-size:11.5px;color:var(--muted);line-height:1.4}
+.topic .gl{font-family:var(--glyph);font-size:22px;color:var(--metal);line-height:1}
+.topic.on{border-color:var(--metal);background:color-mix(in srgb,var(--metal) 14%,var(--bg2))}
+.textarea{min-height:88px;line-height:1.5}
+.pack{display:flex;align-items:center;justify-content:space-between;border:1px solid color-mix(in srgb,var(--metal) 35%,transparent);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px}
+.pack .pl{font-family:var(--display);font-size:20px;color:var(--paper)}
+.pack .ps{font-size:12px;color:var(--muted)}
+.pack .pp{font-size:16px;color:var(--metal-soft);text-align:right}
+.pack .pp small{display:block;font-size:11px;color:var(--muted)}
+.pack.on{border-color:var(--metal);background:color-mix(in srgb,var(--metal) 12%,transparent)}
+.qr{width:180px;height:180px;margin:0 auto;background:#fff;padding:10px;border-radius:8px}
+.list-item{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid color-mix(in srgb,var(--metal) 18%,transparent)}
+.list-item .t{color:var(--paper);font-size:14.5px}
+.list-item .s{color:var(--muted);font-size:12px;margin-top:2px}
+.list-item .r{color:var(--metal-soft);font-size:12.5px;white-space:nowrap}
+.profile{border:1px solid color-mix(in srgb,var(--metal) 40%,transparent);border-radius:var(--radius-lg);padding:16px;position:relative}
+.profile .nm{font-family:var(--display);font-size:22px;color:var(--paper)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin-top:12px;font-size:13.5px}
+.kv dt{color:var(--muted)}
+.kv dd{color:var(--paper)}
+.lock{margin-top:12px;font-size:12px;color:var(--metal-soft);display:flex;gap:6px;align-items:flex-start;line-height:1.45}
+.share-card{width:210px;margin:0 auto;aspect-ratio:9/16;border-radius:14px;overflow:hidden;position:relative;background:var(--bg2);border:1px solid var(--metal);display:flex;flex-direction:column;padding:14px 12px}
+.share-card .sc-t{font-family:var(--display);color:var(--paper);font-size:15px;line-height:1.3;margin-top:auto}
+.share-card .sc-b{font-size:10px;color:var(--muted);margin-top:8px}
+.channels{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:20px}
+.channels button{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.channels i{display:grid;place-items:center;width:46px;height:46px;border-radius:50%;border:1px solid color-mix(in srgb,var(--metal) 45%,transparent);font-style:normal;color:var(--metal-soft);font-size:13px}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid color-mix(in srgb,var(--metal) 18%,transparent)}
+.toggle .sw{flex:none;width:42px;height:24px;border-radius:12px;background:#4a4a4a;position:relative}
+.toggle .sw::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#ddd;top:3px;left:3px}
+.toggle .sw.on{background:var(--metal)}
+.toggle .sw.on::after{left:21px}
+.tag{display:inline-block;font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid color-mix(in srgb,var(--metal) 45%,transparent);color:var(--metal-soft)}
+.follow{margin-top:16px;border:1px dashed color-mix(in srgb,var(--metal) 50%,transparent);border-radius:var(--radius-sm);padding:12px 13px;color:var(--muted);font-size:13.5px}
+
+/* the one orchestrated moment: chart reveal */
+@media (prefers-reduced-motion:no-preference){
+  .reveal .cell{animation:rise .5s both}
+  .reveal .center{animation:glow 1.1s .2s both}
+  .reveal .planet{animation:drop .7s both}
+  .reveal .aspect{animation:draw 1.2s 1s both}
+}
+/* ---------- character + dialogue ---------- */
+.char-hero{display:flex;align-items:flex-end;gap:12px;margin-bottom:14px}
+.char-hero svg{flex:none;width:112px;height:130px}
+.char-hero .who{padding-bottom:10px}
+.char-hero .who b{display:block;font-family:var(--display);font-weight:500;font-size:20px;color:var(--paper)}
+.char-hero .who span{font-size:12px;color:var(--muted)}
+.say{display:flex;gap:9px;align-items:flex-start;margin-bottom:10px}
+.say .av{flex:none;width:36px;height:36px;border-radius:50%;overflow:hidden;border:1px solid var(--metal);background:var(--bg2)}
+.say .av svg{width:56px;height:65px;margin:-6px 0 0 -10px}
+.bubble{background:var(--paper);color:var(--ink);padding:11px 13px;border-radius:4px 14px 14px 14px;line-height:1.65;font-size:14.5px;max-width:86%}
+:root[data-site="tuvi"] .bubble{background:linear-gradient(180deg,#F3E8CF,#EADBB8);border-radius:2px 10px 10px 10px}
+/* chiêm tinh: lời nói là tấm kính đêm viền đồng, chữ có chân sáng như ánh sao */
+:root[data-site="astro"] .say .bubble{background:linear-gradient(160deg,rgba(43,53,119,.78),rgba(17,23,53,.92));color:#F1EBDD;
+  border:1px solid rgba(210,174,99,.55);border-radius:2px 18px 18px 18px;box-shadow:0 0 0 3px rgba(210,174,99,.06),0 8px 24px rgba(5,8,25,.5);
+  font-family:"Cormorant Garamond",serif;font-weight:500;font-size:18.5px;line-height:1.5;padding:12px 15px 13px}
+:root[data-site="astro"] .say .bubble::before{content:"✦";position:absolute;left:-1px;top:-11px;font-size:11px;color:#D2AE63}
+:root[data-site="astro"] .say .bubble.typing{padding:12px 14px}
+:root[data-site="astro"] .typing i{background:#D2AE63}
+:root[data-site="astro"] .me .bubble{font-family:"Spectral",serif;font-size:15px;background:rgba(210,174,99,.16);border:1px solid rgba(210,174,99,.35)}
+:root[data-site="astro"] .field .in{background:transparent;border:0;border-bottom:1px solid rgba(210,174,99,.6);border-radius:0;padding:10px 2px;font-family:"Cormorant Garamond",serif;font-size:20px;font-weight:500}
+:root[data-site="astro"] .follow{border-style:solid;border-color:rgba(210,174,99,.3);border-radius:999px;font-style:italic}
+:root[data-site="astro"] .lead{font-size:15.5px;font-weight:300;color:#B9BBDD}
+.me{display:flex;justify-content:flex-end;margin:4px 0 12px}
+.me .bubble, :root[data-site] .me .bubble{background:color-mix(in srgb,var(--metal) 22%,var(--bg2));color:var(--paper);border-radius:14px 4px 14px 14px}
+.typing{display:inline-flex;gap:4px;padding:12px 14px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--ink-soft);opacity:.6}
+.aspect-row{display:grid;grid-template-columns:78px 52px 1fr;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid color-mix(in srgb,var(--metal) 18%,transparent)}
+.aspect-row .an{color:var(--paper);font-size:14px}
+.aspect-row .lv{display:flex;gap:3px}
+.aspect-row .lv i{width:8px;height:8px;border-radius:50%;border:1px solid var(--metal)}
+.aspect-row .lv i.f{background:var(--metal)}
+.aspect-row .ad{font-size:12.5px;color:var(--muted);line-height:1.4}
+.aspect-row .ad b{display:block;font-weight:500;color:var(--metal-soft);font-size:12px}
+.locked{position:relative;margin-top:16px;border:1px solid color-mix(in srgb,var(--metal) 40%,transparent);border-radius:var(--radius-sm);padding:14px;overflow:hidden}
+.locked .blur{filter:blur(4px);opacity:.55;pointer-events:none;font-size:13px;line-height:1.7}
+.locked .over{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;text-align:center;padding:12px;background:color-mix(in srgb,var(--bg) 55%,transparent)}
+.plan-card{border:1px solid color-mix(in srgb,var(--metal) 40%,transparent);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px}
+.plan-card.best{border-color:var(--metal);background:color-mix(in srgb,var(--metal) 10%,transparent)}
+.plan-card .ph{display:flex;justify-content:space-between;align-items:baseline}
+.plan-card .pn{font-family:var(--display);font-size:21px;color:var(--paper)}
+.plan-card .pr{color:var(--metal-soft);font-size:17px}
+.plan-card ul{list-style:none;margin-top:8px;font-size:13px;color:var(--muted);line-height:1.7}
+.plan-card li::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--metal);margin:0 8px 2px 0}
+.bubble{position:relative}
+.w{display:inline-block}
+:root[data-site="tuvi"] .w{animation:ink .8s both}
+:root[data-site="astro"] .w{animation:stardust .9s both}
+@keyframes ink{0%{opacity:0;filter:blur(3px);color:#A8231B;transform:scale(1.08)}55%{opacity:1;filter:blur(.6px)}100%{opacity:1;filter:none;transform:none}}
+@keyframes stardust{0%{opacity:0;color:#B9A8F0;text-shadow:0 0 12px #EAD7A4,0 0 3px #fff}60%{opacity:1}100%{opacity:1;text-shadow:0 0 0 transparent}}
+@keyframes bubbleIn{from{opacity:0;transform:translateY(8px)}}
+.seal-stamp{position:absolute;right:-8px;bottom:-10px;display:grid;place-items:center;width:30px;height:30px;background:#A8231B;color:#FFE9C8;font-family:var(--glyph);font-size:19px;border-radius:3px;box-shadow:0 2px 6px rgba(0,0,0,.35);animation:stamp .4s both}
+@keyframes stamp{0%{opacity:0;transform:scale(2.3) rotate(-14deg)}75%{opacity:1;transform:scale(.9) rotate(-5deg)}100%{opacity:1;transform:scale(1) rotate(-6deg)}}
+.spark{position:absolute;width:7px;height:7px;pointer-events:none;opacity:0;animation:twinkle 1.4s both;
+  background:radial-gradient(circle,#FFF6DA 0 1.2px,transparent 1.6px),linear-gradient(#EAD7A4,#EAD7A4) center/1px 100% no-repeat,linear-gradient(90deg,#EAD7A4,#EAD7A4) center/100% 1px no-repeat}
+@keyframes twinkle{0%{opacity:0;transform:scale(.3)}40%{opacity:1;transform:scale(1.2) rotate(45deg)}100%{opacity:0;transform:scale(.5) rotate(90deg)}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+@keyframes glow{from{opacity:0;filter:blur(4px)}}
+@keyframes drop{from{opacity:0;transform:scale(.4)}}
+@keyframes draw{from{stroke-dashoffset:400}to{stroke-dashoffset:0}}
+/* kiểu chữ tiêu đề: tử vi Charm (nét bút lông), chiêm tinh Great Vibes (bay bổng); nhãn nhỏ dùng chữ có chân thường */
+.h-display,.brand,.char-hero .who b,.share-card .sc-t{font-weight:var(--title-weight)}
+.topic .tn,.pack .pl,.plan-card .pn,.paper h3,.center .nm,.profile .nm,.cell .pn{font-family:var(--plain)}
+:root[data-site="astro"] .h-display,:root[data-site="astro"] .brand,:root[data-site="astro"] .char-hero .who b,:root[data-site="astro"] .share-card .sc-t{font-style:normal;font-size-adjust:ex-height .5;letter-spacing:.005em}
+:root[data-site="astro"] .as-hero h2{font-size:36px;line-height:1.1;margin-top:120px}
+:root[data-site="astro"] .brand{font-size:22px}
+:root[data-site="astro"] .char-hero .who b{font-size:24px}
+:root[data-site="tuvi"] .char-hero .who b{font-size:23px}
+</style>
+</head>
+<body>
+<div class="bench">
+  <nav class="rail" aria-label="Điều hướng prototype">
+    <h1>Prototype v2</h1>
+    <p>Bấm vào màn hình hoặc danh sách bên dưới. Dữ liệu lá số chỉ để minh họa.</p>
+    <div class="switch" role="group" aria-label="Chọn trang">
+      <button data-site="tuvi" aria-pressed="true">Tử vi</button>
+      <button data-site="astro" aria-pressed="false">Chiêm tinh</button>
+    </div>
+    <ul class="screens" id="screenList"></ul>
+  </nav>
+  <main class="stage">
+    <div class="phone"><div class="screen" id="screen"></div></div>
+  </main>
+  <aside class="notes" id="notes" aria-live="polite"></aside>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let site = "tuvi", current = "home";
+
+/* ---------- content per site ---------- */
+const S = {
+  tuvi:{
+    brand:"Tử Vi Đẩu Số",
+    heroTitle:"Lá số của bạn, đọc theo sách xưa",
+    heroLead:"Nhập ngày giờ sinh. Bàn 12 cung được an sao theo âm lịch Việt, luận giải dựa trên kinh sách cổ.",
+    cta:"Lập lá số",
+    chartTitle:"Bàn lá số",
+    topics:[
+      ["Tình duyên","Cung Phu Thê, đào hoa, thời điểm gặp gỡ","緣"],
+      ["Sự nghiệp","Cung Quan Lộc, hướng đi hợp mệnh","業"],
+      ["Tài lộc","Cung Tài Bạch, cách giữ và sinh tiền","財"],
+      ["Sức khỏe","Cung Tật Ách, điều cần lưu ý","康"],
+      ["Gia đạo","Cung Điền Trạch, cha mẹ, con cái","家"],
+      ["Vận năm 2027","Lưu niên Đinh Mùi, tháng tốt xấu","運"]],
+    basicTitle:"Mệnh Tử Phủ đồng cung tại Dần",
+    basic:[
+      "Mệnh có Tử Vi và Thiên Phủ cùng đóng ở cung Dần, hai sao đều ở thế miếu. Đây là cách người có tầm nhìn, thích tự mình định liệu, ít khi chịu đứng sau người khác lâu.",
+      "Thân cư Quan Lộc nên càng về sau càng đặt nặng công danh. Hóa Lộc ở cung Tài Bạch cho thấy tiền bạc đến từ chính nghề mình theo đuổi hơn là từ may rủi."],
+    question:"Năm nay tôi có nên chuyển việc không?",
+    readingTitle:"Sự nghiệp trong năm Đinh Mùi",
+    reading:[
+      "Cung Quan Lộc của bạn có Liêm Trinh và Thiên Tướng ở Ngọ. Năm Đinh Mùi, lưu niên đi qua cung này kèm Hóa Quyền, nên đây là năm trách nhiệm tăng lên rõ rệt, dù bạn ở lại hay đi.",
+      "Nửa đầu năm Thất Sát chiếu từ Thân mang tính thay đổi mạnh. Nếu đã có lời mời cụ thể, các tháng 4 đến 6 âm lịch là lúc nên quyết. Nếu chỉ chán việc mà chưa có nơi đến, sách khuyên giữ chỗ cũ qua tháng 8 rồi hãy tính.",
+      "Điểm cần tránh là cung Nô Bộc có Thiên Lương gặp Hóa Kỵ: dễ vướng chuyện với cấp dưới hoặc đồng nghiệp cũ khi rời đi. Bàn giao rõ ràng sẽ đỡ phiền về sau."],
+    shareLine:"Tử Phủ đồng cung: người tự định đường đi, càng về sau càng vững.",
+    profileMeta:[["Giới tính","Nam"],["Ngày sinh","12/03/1994, 08:30"],["Âm lịch","Giờ Thìn, 1/2 năm Giáp Tuất"],["Lịch","Âm lịch Việt (UTC+7)"]],
+    glyphTopic:"問"
+  },
+  astro:{
+    brand:"Thiên Cầu",
+    heroTitle:"Bầu trời lúc bạn chào đời",
+    heroLead:"Ngày, giờ và nơi sinh cho biết vị trí từng hành tinh. Bản đồ sao của bạn được vẽ từ đó, luận giải dựa trên sách chiêm tinh cổ điển.",
+    cta:"Vẽ bản đồ sao",
+    chartTitle:"Bản đồ sao",
+    topics:[
+      ["Tình yêu","Kim tinh, nhà 7, kiểu người hợp với bạn","♀"],
+      ["Sự nghiệp","Thiên đỉnh MC, nhà 10","♄"],
+      ["Tiền bạc","Nhà 2, Mộc tinh","♃"],
+      ["Sức khỏe","Nhà 6, nhịp sinh hoạt","☿"],
+      ["Gia đình","Nhà 4, Mặt Trăng","☽"],
+      ["Năm 2027","Các hành tinh đi qua bản đồ của bạn","☉"]],
+    basicTitle:"Mặt Trời Song Ngư, Mặt Trăng Bọ Cạp, mọc Sư Tử",
+    basic:[
+      "Mặt Trời ở Song Ngư cho bạn trực giác nhạy và lòng trắc ẩn lớn. Mặt Trăng Bọ Cạp khiến cảm xúc sâu, giữ kín, khó tha thứ khi bị phản bội.",
+      "Cung mọc Sư Tử là lớp vỏ người khác nhìn thấy trước: ấm áp, có phần nổi bật, đôi khi bị hiểu lầm là tự tin hơn thực tế."],
+    question:"Khi nào tôi dễ gặp được người phù hợp?",
+    readingTitle:"Tình yêu và nhà thứ bảy",
+    reading:[
+      "Nhà 7 của bạn bắt đầu ở Bảo Bình, chủ quản là Thổ tinh đang ở nhà 9. Người hợp với bạn thường đến từ môi trường học tập, du lịch hoặc khác văn hóa, và thường lớn tuổi hoặc chín chắn hơn.",
+      "Kim tinh ở Bạch Dương nhà 9 tạo góc tam hợp với Hỏa tinh: bạn bị thu hút nhanh và chủ động. Điểm yếu là dễ mất hứng khi mọi thứ thành quen.",
+      "Trong năm 2027, Mộc tinh đi qua nhà 7 từ khoảng tháng 6. Đây là giai đoạn cởi mở nhất cho các mối quan hệ mới hoặc cam kết lâu dài."],
+    shareLine:"Song Ngư mọc Sư Tử: ấm áp bên ngoài, sâu lắng bên trong.",
+    profileMeta:[["Ngày sinh","12/03/1994, 08:30"],["Nơi sinh","Hà Nội, Việt Nam"],["Hệ nhà","Placidus"],["Múi giờ","UTC+7"]],
+    glyphTopic:"✶"
+  }
+};
+
+const SCREENS = [
+  ["home","Trang chủ"],["chart","Lá số / bản đồ sao"],["basic","Luận giải miễn phí"],
+  ["ask","Hỏi theo chủ đề"],["topup","Nạp lượt"],["pay","Thanh toán VietQR"],
+  ["reading","Bài luận"],["share","Chia sẻ"],["account","Tài khoản"],["login","Đăng nhập"]];
+
+const NOTES = {
+  home:{t:"Trang chủ",b:["Mở đầu bằng thứ đặc trưng nhất của từng môn: chữ thư pháp 紫微斗數 cho tử vi, vòng hoàng đạo cho chiêm tinh.","Form nhập giữ ngắn: tử vi cần giới tính, chiêm tinh cần nơi sinh."],q:"Có muốn thêm ô \"Tên gọi\" để hiện trên lá số và thẻ chia sẻ không?"},
+  chart:{t:"Lá số",b:["Tử vi: bàn 12 cung như bảng sơn mài khảm vàng, cung Mệnh viền son, Tứ Hóa là dấu triện nhỏ.","Chiêm tinh: vòng tròn 12 cung hoàng đạo, hành tinh và các góc chiếu (vàng là thuận, hồng là căng).","Chạm một cung để xem luận giải miễn phí của cung đó."],q:"Lá số khách xem được không cần đăng nhập (giữ như cũ)."},
+  basic:{t:"Luận giải miễn phí",b:["Ghép sẵn từ kho, không gọi AI, nên miễn phí và không giới hạn.","Cuối trang mời hỏi sâu theo chủ đề bằng lượt."],q:null},
+  ask:{t:"Hỏi theo chủ đề",b:["Quyết định A: 1 lượt = 1 câu hỏi về 1 chủ đề.","Chọn chủ đề trước, rồi viết câu hỏi. Nút ghi rõ sẽ dùng 1 lượt."],q:"Đề xuất: mỗi lượt kèm 2 câu hỏi nối tiếp trong cùng chủ đề, để người dùng hỏi lại cho rõ mà không mất thêm lượt. Đồng ý không?"},
+  topup:{t:"Nạp lượt",b:["Ba gói, gói lớn rẻ hơn mỗi lượt. Giá trên màn hình chỉ minh họa.","Lượt không hết hạn."],q:"Bạn muốn giá mỗi gói bao nhiêu? Và có tặng 1 lượt khi tạo tài khoản không?"},
+  pay:{t:"Thanh toán VietQR",b:["Nội dung chuyển khoản chứa mã đơn; SePay báo về là lượt cộng ngay.","Người dùng nước ngoài thấy PayPal ở bước này."],q:null},
+  reading:{t:"Bài luận",b:["Nền giấy, chữ có chân, đọc như một trang sách.","Bài lưu trong lịch sử, xem lại không tốn lượt.","Nếu AI lỗi quá 24h, lượt được hoàn tự động."],q:"Đề xuất hoàn lượt thay vì hoàn tiền khi luận giải lỗi (lượt chưa dùng vẫn hoàn tiền được). Ổn không?"},
+  share:{t:"Chia sẻ",b:["Quyết định C: có chia sẻ.","Thẻ ảnh dọc hợp với story Facebook/Zalo; link công khai mở ra lá số và luận cơ bản.","Ngày dương lịch đầy đủ bị ẩn trên link công khai."],q:"Bài luận trả phí chỉ được chia sẻ khi người dùng bật riêng cho từng bài. Đồng ý không?"},
+  account:{t:"Tài khoản",b:["Quyết định B: 1 tài khoản = 1 người, chỉ một hồ sơ.","Đổi lịch (Việt / Trung Hoa) nằm ở đây, không ở form chính."],q:"Đề xuất khóa ngày giờ sinh sau lượt hỏi đầu tiên, để một tài khoản không xem hộ nhiều người. Bạn thấy sao?"},
+  login:{t:"Đăng nhập",b:["Email nhận link hoặc Google, không mật khẩu.","Chỉ cần khi nạp lượt; xem lá số không cần."],q:null}
+};
+
+/* ---------- tử vi board ---------- */
+const PALACES = [ // [palace, chi, stars[[name,brightness]], minor, hoa]
+  ["Điền Trạch","Kỷ Tỵ",[["Cự Môn","V"]],"Thiên Hình",null],
+  ["Quan Lộc","Canh Ngọ",[["Liêm Trinh","Đ"],["Thiên Tướng","M"]],"Văn Xương","Quyền"],
+  ["Nô Bộc","Tân Mùi",[["Thiên Lương","V"]],"Đà La","Kỵ"],
+  ["Thiên Di","Nhâm Thân",[["Thất Sát","M"]],"Thiên Mã",null],
+  ["Phúc Đức","Mậu Thìn",[["Tham Lang","M"]],"Hóa Cái",null],
+  ["Tật Ách","Quý Dậu",[["Thiên Đồng","H"]],"Kình Dương",null],
+  ["Phụ Mẫu","Đinh Mão",[["Thái Âm","H"]],"Thiên Khôi",null],
+  ["Tài Bạch","Giáp Tuất",[["Vũ Khúc","M"]],"Lộc Tồn","Lộc"],
+  ["Mệnh","Bính Dần",[["Tử Vi","M"],["Thiên Phủ","M"]],"Tả Phù, Hữu Bật",null],
+  ["Huynh Đệ","Đinh Sửu",[["Thiên Cơ","Đ"]],"Thiên Việt","Khoa"],
+  ["Phu Thê","Bính Tý",[["Phá Quân","M"]],"Đào Hoa",null],
+  ["Tử Tức","Ất Hợi",[["Thái Dương","H"]],"Hồng Loan",null]];
+const POS = [[1,1],[1,2],[1,3],[1,4],[2,1],[2,4],[3,1],[3,4],[4,1],[4,2],[4,3],[4,4]];
+const ORDER = [8,6,4,0,1,2,3,5,7,11,10,9]; // reveal order around the ring, starting at Mệnh
+
+function board(pick){
+  let h = `<div class="board reveal" role="img" aria-label="Bàn lá số 12 cung, cung Mệnh ở Dần">`;
+  PALACES.forEach((p,i)=>{
+    const [r,c]=POS[i]; const delay = ORDER.indexOf(i)*60;
+    h += `<div class="cell ${p[0]==="Mệnh"?"menh":""} ${pick===p[0]?"pick":""}" style="grid-row:${r};grid-column:${c};animation-delay:${delay}ms">
+      <span class="pn">${p[0]}</span>
+      <div class="stars">${p[2].map(s=>`<span class="st">${s[0]}<b>${s[1]}</b></span>`).join("")}</div>
+      <span class="minor">${p[3]}${p[4]?`<span class="hoa">${p[4]}</span>`:""}</span>
+      <span class="chi">${p[1]}</span></div>`;
+  });
+  h += `<div class="center"><span class="seal" aria-hidden="true">命</span>
+    <span class="nm">Nguyễn Minh An</span>
+    <span class="meta">Dương nam, tuổi Giáp Tuất<br>Giờ Thìn, ngày 1 tháng 2</span>
+    <span class="cuc">Mộc tam cục<br>Mệnh Sơn Đầu Hỏa</span></div></div>`;
+  return h;
+}
+
+/* ---------- chiêm tinh wheel ---------- */
+const SIGNS = ["♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓"];
+const PLANETS = [["☉",351],["☽",224],["☿",330],["♀",8],["♂",312],["♃",222],["♄",345],["♅",293],["♆",292],["♇",237]];
+const ASPECTS = [[0,1,"tri"],[3,4,"sq"],[1,5,"con"],[0,6,"con"],[2,7,"sx"],[5,9,"con"],[3,1,"sq"]];
+function wheel(small){
+  const R=170, cx=175, cy=175, asc=130; // asc longitude sets rotation
+  const ang = lon => (180 - (lon - asc)) * Math.PI/180;
+  const pt = (lon,r)=>[cx + r*Math.cos(ang(lon)), cy - r*Math.sin(ang(lon))];
+  let g = `<svg viewBox="0 0 350 350" role="img" aria-label="Bản đồ sao: vòng 12 cung hoàng đạo và vị trí hành tinh" class="${small?"":"reveal"}">
+  <defs><radialGradient id="wg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#1b2352"/><stop offset="1" stop-color="#0d1230"/></radialGradient></defs>
+  <circle cx="${cx}" cy="${cy}" r="${R}" fill="url(#wg)" stroke="#D2AE63" stroke-width="1.2"/>
+  <circle cx="${cx}" cy="${cy}" r="${R-30}" fill="none" stroke="#D2AE63" stroke-opacity=".7"/>
+  <circle cx="${cx}" cy="${cy}" r="${R-92}" fill="none" stroke="#D2AE63" stroke-opacity=".35"/>`;
+  for(let i=0;i<12;i++){
+    const a=i*30; const [x1,y1]=pt(a,R); const [x2,y2]=pt(a,R-30);
+    g += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#D2AE63" stroke-opacity=".7"/>`;
+    const [tx,ty]=pt(a+15,R-15);
+    g += `<text x="${tx}" y="${ty}" fill="#EAD7A4" font-size="15" text-anchor="middle" dominant-baseline="central">${SIGNS[i]}︎</text>`;
+    for(let d=0; d<30; d+=5){ if(!d) continue; const [a1,b1]=pt(a+d,R-30); const [a2,b2]=pt(a+d,R-35); g+=`<line x1="${a1}" y1="${b1}" x2="${a2}" y2="${b2}" stroke="#D2AE63" stroke-opacity=".4"/>`;}
+  }
+  // houses (illustrative equal houses from asc)
+  for(let h=0;h<12;h++){ const a=asc+h*30; const [x1,y1]=pt(a,R-30); const [x2,y2]=pt(a,R-92);
+    g += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#ECE6D6" stroke-opacity="${h%3===0?.55:.18}"/>`;
+    const [nx,ny]=pt(a+15,R-84); g+=`<text x="${nx}" y="${ny}" fill="#9A9CC0" font-size="8.5" text-anchor="middle" dominant-baseline="central" font-family="Be Vietnam Pro">${h+1}</text>`;}
+  // aspects
+  ASPECTS.forEach(([a,b,k],i)=>{ const [x1,y1]=pt(PLANETS[a][1],R-96); const [x2,y2]=pt(PLANETS[b][1],R-96);
+    if(k==="con") return;
+    const col = k==="sq" ? "#D79AA6" : "#D2AE63";
+    g += `<line class="aspect" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-opacity=".75" stroke-width="1" stroke-dasharray="400" style="animation-delay:${1000+i*120}ms"/>`;});
+  // planets (nudge overlapping)
+  const used=[];
+  PLANETS.forEach(([s,lon],i)=>{ let r=R-50; used.forEach(u=>{ if(Math.abs(u-lon)<7) r-=16; }); used.push(lon);
+    const [x,y]=pt(lon,r); const [mx,my]=pt(lon,R-30); const [nx,ny]=pt(lon,R-36);
+    g += `<g class="planet" style="transform-origin:${x}px ${y}px;animation-delay:${200+i*80}ms"><line x1="${mx}" y1="${my}" x2="${nx}" y2="${ny}" stroke="#ECE6D6"/>
+      <text x="${x}" y="${y}" fill="#ECE6D6" font-size="17" text-anchor="middle" dominant-baseline="central">${s}︎</text></g>`;});
+  // asc marker
+  const [ax,ay]=pt(asc,R+2); g+=`<text x="${ax-14}" y="${ay}" fill="#D79AA6" font-size="9.5" font-family="Be Vietnam Pro" dominant-baseline="central">AC</text>`;
+  return g + `</svg>`;
+}
+function heroArc(){
+  let g=`<svg class="arc" viewBox="0 0 400 400" aria-hidden="true"><circle cx="200" cy="200" r="190" fill="none" stroke="#D2AE63" stroke-opacity=".55"/><circle cx="200" cy="200" r="150" fill="none" stroke="#D2AE63" stroke-opacity=".35"/><circle cx="200" cy="200" r="70" fill="none" stroke="#7B6BC4" stroke-opacity=".5"/>`;
+  for(let i=0;i<12;i++){const a=i*30*Math.PI/180; g+=`<line x1="${200+150*Math.cos(a)}" y1="${200+150*Math.sin(a)}" x2="${200+190*Math.cos(a)}" y2="${200+190*Math.sin(a)}" stroke="#D2AE63" stroke-opacity=".5"/>`;
+    const b=(i*30+15)*Math.PI/180; g+=`<text x="${200+170*Math.cos(b)}" y="${200+170*Math.sin(b)}" fill="#EAD7A4" fill-opacity=".8" font-size="16" text-anchor="middle" dominant-baseline="central">${SIGNS[i]}︎</text>`;}
+  return g+`<circle cx="268" cy="132" r="5" fill="#EAD7A4"/><circle cx="120" cy="250" r="3" fill="#D79AA6"/></svg>`;
+}
+
+/* ---------- screen templates ---------- */
+const icon = {
+  home:'<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
+  chart:'<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"/><path d="M9 4v16M15 4v16M4 9h16M4 15h16"/></svg>',
+  chartA:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/></svg>',
+  ask:'<svg viewBox="0 0 24 24"><path d="M5 5h14v10H10l-5 4z"/></svg>',
+  acc:'<svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
+  sun:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/></svg>'};
+const tab = active => `<nav class="tabbar" aria-label="Thanh điều hướng">
+  ${[["today","Hôm nay",icon.sun],["chart",site==="tuvi"?"Lá số":"Bản đồ",site==="tuvi"?icon.chart:icon.chartA],["ask",site==="tuvi"?"Hỏi thầy":"Hỏi sao",icon.ask],["account","Tài khoản",icon.acc]]
+  .map(([k,l,i])=>`<button data-go="${k}" ${active===k?'aria-current="true"':""}>${i}${l}</button>`).join("")}</nav>`;
+const topBar = (credits=1) => `<div class="topbar"><span class="brand">${S[site].brand}</span><span class="credits">Còn ${credits} lượt</span></div>`;
+const statusBar = `<div class="status"><span>9:41</span><span>5G</span></div>`;
+const back = (to,label) => `<div class="topbar"><button data-go="${to}" class="brand" style="font-size:15px">‹ ${label}</button><span class="credits">Còn 1 lượt</span></div>`;
+
+const T = {
+  home(){
+    const s=S[site];
+    const hero = site==="tuvi"
+      ? `<div class="tv-hero"><span class="vert" aria-hidden="true">紫微斗數</span>
+          <h2 class="h-display">${s.heroTitle}</h2><p class="lead">${s.heroLead}</p></div>`
+      : `<div class="as-hero">${heroArc()}<h2 class="h-display">${s.heroTitle}</h2><p class="lead">${s.heroLead}</p></div>`;
+    const extra = site==="tuvi"
+      ? `<div class="field"><label>Giới tính</label><div class="seg"><span class="on">Nam</span><span>Nữ</span></div></div>`
+      : `<div class="field"><label>Nơi sinh</label><div class="in">Hà Nội, Việt Nam</div></div>`;
+    return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${topBar()}${hero}
+      <div class="slip">
+        <div class="row2"><div class="field"><label>Ngày sinh (dương lịch)</label><div class="in">12/03/1994</div></div>
+        <div class="field"><label>Giờ sinh</label><div class="in">08:30</div></div></div>
+        ${extra}
+        <button class="btn" data-go="chart">${site==="tuvi"?'<span class="stamp" style="width:22px;height:22px;font-size:14px;background:#7d1912">命</span>':""}${s.cta}</button>
+        <p class="fine" style="margin-top:10px">Không cần đăng nhập. Ngày giờ sinh không được dùng vào việc khác.</p>
+      </div><div class="section-gap"></div></div>${tab("home")}`;
+  },
+  chart(){
+    const s=S[site];
+    const body = site==="tuvi" ? `<div style="padding:0 12px">${board()}</div>` : `<div class="wheel-wrap">${wheel()}</div>`;
+    const legend = site==="tuvi"
+      ? `<p class="fine">M miếu, V vượng, Đ đắc, H hãm. Dấu đỏ là Tứ Hóa. Chạm một cung để đọc.</p>`
+      : `<p class="fine">Đường vàng là góc thuận, đường hồng là góc căng. Chạm một hành tinh để đọc.</p>`;
+    return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${topBar()}
+      <div class="pad" style="padding-bottom:12px;position:relative"><h2 class="h-display" style="font-size:26px">${s.chartTitle}</h2></div>
+      ${body}
+      <div class="pad" style="padding-top:14px;position:relative">${legend}<div class="section-gap"></div>
+        <button class="btn" data-go="basic">Đọc luận giải miễn phí</button>
+        <div style="height:10px"></div>
+        <button class="btn ghost" data-go="share">Chia sẻ ${site==="tuvi"?"lá số":"bản đồ sao"}</button>
+      </div></div>${tab("chart")}`;
+  },
+  basic(){
+    const s=S[site];
+    return `${statusBar}<div class="scroll">${back("chart",S[site].chartTitle)}
+      <div class="pad"><div class="paper"><h3>${s.basicTitle}</h3>${s.basic.map(p=>`<p>${p}</p>`).join("")}</div>
+      <div class="section-gap"></div>
+      <p class="lead" style="color:var(--paper)">Muốn hỏi sâu về tình duyên, công việc hay năm tới?</p>
+      <p class="fine" style="margin:6px 0 14px">Mỗi lượt hỏi được một câu về một chủ đề. Bạn đang có 1 lượt.</p>
+      <button class="btn" data-go="ask">Hỏi theo chủ đề</button></div></div>${tab("chart")}`;
+  },
+  ask(){
+    const s=S[site];
+    return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${topBar()}
+      <div class="pad" style="position:relative"><h2 class="h-display" style="font-size:26px">Bạn muốn hỏi về điều gì?</h2>
+      <p class="fine" style="margin:8px 0 16px">Chọn một chủ đề, rồi viết câu hỏi của bạn.</p>
+      <div class="topic-grid">${s.topics.map((t,i)=>`<button class="topic ${i===(site==="tuvi"?1:0)?"on":""}"><span class="gl" aria-hidden="true">${t[2]}${site==="astro"?"︎":""}</span><span><span class="tn">${t[0]}</span><br><span class="tx">${t[1]}</span></span></button>`).join("")}</div>
+      <div class="section-gap"></div>
+      <div class="field"><label>Câu hỏi của bạn</label><div class="in textarea">${s.question}</div></div>
+      <button class="btn" data-go="reading">Dùng 1 lượt để hỏi</button>
+      <p class="fine" style="margin-top:10px;text-align:center">Kèm 2 câu hỏi nối tiếp trong cùng chủ đề. <button data-go="topup" style="color:var(--metal-soft);text-decoration:underline">Nạp thêm lượt</button></p>
+      </div></div>${tab("ask")}`;
+  },
+  topup(){
+    const packs=[["1 lượt","Thử một câu hỏi","29.000đ",""],["5 lượt","Đủ cho các chủ đề chính","119.000đ","23.800đ mỗi lượt"],["12 lượt","Hỏi thoải mái cả năm","249.000đ","20.750đ mỗi lượt"]];
+    return `${statusBar}<div class="scroll">${back("ask","Hỏi theo chủ đề")}
+      <div class="pad"><h2 class="h-display" style="font-size:26px">Nạp lượt</h2>
+      <p class="fine" style="margin:8px 0 16px">Lượt không hết hạn. Luận giải lỗi sẽ được hoàn lượt.</p>
+      ${packs.map((p,i)=>`<div class="pack ${i===1?"on":""}"><div><div class="pl">${p[0]}</div><div class="ps">${p[1]}</div></div><div class="pp">${p[2]}<small>${p[3]}</small></div></div>`).join("")}
+      <p class="fine" style="margin:4px 0 18px">Giá minh họa, chờ chốt.</p>
+      <button class="btn" data-go="pay">Thanh toán 119.000đ</button>
+      <div style="height:10px"></div><button class="btn ghost">Thanh toán bằng PayPal</button></div></div>${tab("ask")}`;
+  },
+  pay(){
+    let cells=""; for(let i=0;i<441;i++){ const r=Math.floor(i/21),c=i%21; const f=(r<7&&c<7)||(r<7&&c>13)||(r>13&&c<7); const on = f ? ((r%6===0||c%6===0||(r>1&&r<5&&c>1&&c<5)||(r>1&&r<5&&c>15&&c<19)||(r>15&&r<19&&c>1&&c<5)||c===20||r===20)&&!(r===20&&!f)) : ((i*7919)%11<5); cells+=`<rect x="${c}" y="${r}" width="1" height="1" fill="${on?"#111":"#fff"}"/>`;}
+    return `${statusBar}<div class="scroll">${back("topup","Nạp lượt")}
+      <div class="pad"><div class="paper" style="text-align:center">
+        <h3>Quét mã để chuyển khoản</h3>
+        <svg class="qr" viewBox="0 0 21 21" shape-rendering="crispEdges" role="img" aria-label="Mã VietQR minh họa">${cells}</svg>
+        <p style="margin-top:12px;font-size:14px">Số tiền <b>49.000đ</b></p>
+        <p style="font-size:14px">Nội dung <b>TV8K2Q</b></p>
+        <p class="fine" style="color:var(--ink-soft);margin-top:10px">Giữ nguyên nội dung chuyển khoản. Lượt được cộng ngay khi ngân hàng báo về, thường dưới 1 phút.</p>
+      </div><div class="section-gap"></div>
+      <button class="btn ghost" data-go="ask">Đang chờ thanh toán…</button></div></div>${tab("ask")}`;
+  },
+  reading(){
+    const s=S[site];
+    return `${statusBar}<div class="scroll">${back("ask","Hỏi theo chủ đề")}
+      <div class="pad"><div class="paper">
+        ${site==="tuvi"?'<span class="stamp" style="position:absolute;right:16px;top:16px">業</span>':'<span class="tag" style="position:absolute;right:16px;top:18px;color:var(--ink-soft);border-color:var(--ink-soft)">Tình yêu</span>'}
+        <h3 style="max-width:80%">${s.readingTitle}</h3><p class="ask">${s.question}</p>${s.reading.map(p=>`<p>${p}</p>`).join("")}
+        <p class="fine" style="color:var(--ink-soft);margin-top:16px">Mang tính tham khảo, chiêm nghiệm.</p></div>
+      <div class="follow">Còn 2 câu hỏi nối tiếp trong chủ đề này. Viết câu hỏi…</div>
+      <div class="section-gap" style="height:14px"></div>
+      <button class="btn ghost" data-go="share">Chia sẻ bài này</button></div></div>${tab("ask")}`;
+  },
+  share(){
+    const s=S[site];
+    const mini = site==="tuvi"
+      ? `<div style="transform:scale(.52);transform-origin:top left;width:192%;pointer-events:none">${board()}</div>`
+      : `<div style="margin:-6px -4px 0">${wheel(true)}</div>`;
+    return `${statusBar}<div class="scroll">${back("chart",S[site].chartTitle)}
+      <div class="pad"><div class="share-card" style="${site==="tuvi"?"background:linear-gradient(180deg,#2E100C,#1A0A08)":""}">
+        <div style="height:${site==="tuvi"?"212px":"auto"};overflow:hidden">${mini}</div>
+        <p class="sc-t">${s.shareLine}</p><p class="sc-b">${S[site].brand}, xem lá số của bạn</p></div>
+      <div class="channels">${["Zalo","Facebook","Messenger","Sao chép","Tải ảnh"].map(c=>`<button><i>${c.slice(0,2)}</i>${c}</button>`).join("")}</div>
+      <div class="section-gap"></div>
+      <div class="toggle"><div><div style="color:var(--paper)">Link công khai</div><div class="fine">Người xem thấy lá số và luận giải cơ bản. Ngày dương lịch được ẩn.</div></div><span class="sw on" role="switch" aria-checked="true"></span></div>
+      <div class="toggle"><div><div style="color:var(--paper)">Kèm bài luận đã hỏi</div><div class="fine">Tắt mặc định. Bật riêng cho từng bài bạn muốn khoe.</div></div><span class="sw" role="switch" aria-checked="false"></span></div>
+      </div></div>${tab("chart")}`;
+  },
+  account(){
+    const s=S[site];
+    return `${statusBar}<div class="scroll">${topBar()}
+      <div class="pad"><div class="profile"><div class="nm">Nguyễn Minh An</div>
+        <dl class="kv">${s.profileMeta.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+        <p class="lock"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="11" width="14" height="9"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>Mỗi tài khoản là một người. Ngày giờ sinh sẽ khóa sau lượt hỏi đầu tiên.</p>
+        <div style="display:flex;gap:8px;margin-top:14px"><button class="tag">Sửa thông tin</button>${site==="tuvi"?'<button class="tag">Đổi lịch</button>':""}</div></div>
+      <div class="section-gap"></div>
+      <div class="list-item"><div><div class="t">Số lượt còn lại</div><div class="s">Lượt không hết hạn</div></div><button class="r" data-go="topup">1 lượt, nạp thêm</button></div>
+      <h3 class="h-display" style="font-size:19px;margin:22px 0 4px">Bài đã hỏi</h3>
+      ${(site==="tuvi"?[["Sự nghiệp trong năm Đinh Mùi","Sự nghiệp, 24/11/2026"],["Tài lộc nửa cuối năm","Tài lộc, 02/11/2026"]]:[["Tình yêu và nhà thứ bảy","Tình yêu, 24/11/2026"],["Nghề hợp với MC Bạch Dương","Sự nghiệp, 05/11/2026"]])
+        .map(([t,d])=>`<button class="list-item" data-go="reading" style="width:100%;text-align:left"><div><div class="t">${t}</div><div class="s">${d}</div></div><span class="r">Đọc lại</span></button>`).join("")}
+      <div class="section-gap"></div>
+      <button class="btn ghost">Đăng xuất</button>
+      <p class="fine" style="text-align:center;margin-top:14px"><button style="text-decoration:underline">Xóa tài khoản và dữ liệu</button></p>
+      </div></div>${tab("account")}`;
+  },
+  login(){
+    return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}
+      <div class="pad" style="position:relative;padding-top:60px">
+      ${site==="tuvi"?'<span class="stamp" style="width:54px;height:54px;font-size:34px">命</span>':`<svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><circle cx="28" cy="28" r="26" fill="none" stroke="#D2AE63"/><circle cx="28" cy="28" r="14" fill="none" stroke="#D2AE63" stroke-opacity=".5"/><circle cx="40" cy="16" r="3" fill="#EAD7A4"/></svg>`}
+      <h2 class="h-display" style="font-size:30px;margin-top:22px">Lưu lá số và nạp lượt</h2>
+      <p class="lead" style="margin:10px 0 24px">Tạo tài khoản để giữ lá số, lịch sử bài luận và số lượt. Tặng 1 lượt cho lần đầu.</p>
+      <div class="field"><label>Email</label><div class="in">minhan@example.com</div></div>
+      <button class="btn" data-go="account">Gửi link đăng nhập</button>
+      <div style="height:10px"></div><button class="btn ghost" data-go="account">Tiếp tục với Google</button>
+      <p class="fine" style="margin-top:18px">Không dùng mật khẩu. Link có hiệu lực 15 phút.</p></div></div>`;
+  }
+};
+
+/* ---------- characters (SVG tạm, sẽ thay bằng minh họa vẽ riêng) ---------- */
+function sage(){ return `<svg viewBox="0 0 120 140" aria-hidden="true">
+  <circle cx="60" cy="58" r="50" fill="#C8A04A" fill-opacity=".16"/>
+  <circle cx="60" cy="58" r="50" fill="none" stroke="#C8A04A" stroke-opacity=".5"/>
+  <path d="M12 140C16 104 36 90 60 90S104 104 108 140Z" fill="#6B1D15"/>
+  <path d="M12 140C16 104 36 90 60 90S104 104 108 140" fill="none" stroke="#C8A04A" stroke-width="1.2"/>
+  <path d="M44 93L60 128L76 93" fill="none" stroke="#C8A04A" stroke-width="2"/>
+  <ellipse cx="60" cy="60" rx="17" ry="20" fill="#E6C9A0"/>
+  <path d="M42 58C41 38 79 38 78 58C73 49 47 49 42 58Z" fill="#EDE7DB"/>
+  <circle cx="60" cy="32" r="8" fill="#EDE7DB"/>
+  <line x1="47" y1="33" x2="74" y2="29" stroke="#C8A04A" stroke-width="2" stroke-linecap="round"/>
+  <path d="M47 56q-7 2-10 10M73 56q7 2 10 10" fill="none" stroke="#F5F1E8" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M50 61q3 2.5 6 0M64 61q3 2.5 6 0" fill="none" stroke="#3A2618" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M45 69C45 92 52 114 60 128C68 114 75 92 75 69C69 76 51 76 45 69Z" fill="#F2EDE3"/>
+  <path d="M51 72q9-5 18 0q-9 3-18 0Z" fill="#E3DCCF"/>
+  <path d="M60 80v40M55 84q2 18 5 34M65 84q-2 18-5 34" stroke="#D8D0C2" stroke-width=".8" fill="none"/>
+  <!-- hồ lô đeo bên hông -->
+  <path d="M100 96v6" stroke="#C8A04A" stroke-width="1"/>
+  <circle cx="100" cy="105" r="4.2" fill="#B07A2E"/><circle cx="100" cy="115" r="7" fill="#B07A2E"/>
+  <path d="M96 103q4-2 8 0" stroke="#7a1d14" stroke-width="1.6" fill="none"/>
+  <!-- tay áo + cuộn lá số -->
+  <path d="M22 122q8-16 20-18l4 12q-12 4-24 6Z" fill="#7d2318" stroke="#C8A04A" stroke-width=".8"/>
+  <path d="M98 122q-8-16-20-18l-4 12q12 4 24 6Z" fill="#7d2318" stroke="#C8A04A" stroke-width=".8"/>
+  <rect x="33" y="99" width="54" height="19" fill="#F1E6CC" stroke="#C8A04A" stroke-width=".6"/>
+  <g stroke="#A8231B" stroke-width=".6" stroke-opacity=".8"><path d="M46.5 99v19M60 99v19M73.5 99v19M33 105.3h54M33 111.6h54"/></g>
+  <rect x="50" y="104" width="20" height="9" fill="#F1E6CC"/><text x="60" y="111.2" text-anchor="middle" font-family="Ma Shan Zheng,serif" font-size="7" fill="#A8231B">命盤</text>
+  <rect x="29" y="96" width="5" height="25" rx="2" fill="#5A2E14"/><rect x="86" y="96" width="5" height="25" rx="2" fill="#5A2E14"/>
+  <ellipse cx="31.5" cy="110" rx="4.5" ry="5" fill="#E6C9A0"/><ellipse cx="88.5" cy="110" rx="4.5" ry="5" fill="#E6C9A0"/>
+  <text x="96" y="30" font-family="Ma Shan Zheng,serif" font-size="16" fill="#A8231B" fill-opacity=".8">命</text></svg>`; }
+function starKeeper(){ return `<svg viewBox="0 0 120 140" aria-hidden="true">
+  <defs><linearGradient id="cloak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B3577"/><stop offset="1" stop-color="#121842"/></linearGradient></defs>
+  <circle cx="60" cy="56" r="50" fill="none" stroke="#D2AE63" stroke-opacity=".7"/>
+  <circle cx="60" cy="56" r="44" fill="none" stroke="#D2AE63" stroke-opacity=".3"/>
+  ${Array.from({length:12},(_,i)=>{const a=i*Math.PI/6;return `<line x1="${60+44*Math.cos(a)}" y1="${56+44*Math.sin(a)}" x2="${60+50*Math.cos(a)}" y2="${56+50*Math.sin(a)}" stroke="#D2AE63" stroke-opacity=".7"/>`}).join("")}
+  <path d="M16 140C22 100 36 80 42 62C44 40 76 40 78 62C84 80 98 100 104 140Z" fill="url(#cloak)" stroke="#D2AE63" stroke-opacity=".55"/>
+  <path d="M42 62C44 34 76 34 78 62C72 54 48 54 42 62Z" fill="#323D85"/>
+  <ellipse cx="60" cy="66" rx="14" ry="17" fill="#060918"/>
+  <g stroke="#EAD7A4" stroke-width=".8" stroke-opacity=".8"><line x1="54" y1="60" x2="62" y2="57"/><line x1="62" y1="57" x2="66" y2="67"/><line x1="66" y1="67" x2="58" y2="75"/><line x1="58" y1="75" x2="54" y2="60"/></g>
+  <g fill="#FFF4D6"><circle cx="54" cy="60" r="1.6"/><circle cx="62" cy="57" r="1.3"/><circle cx="66" cy="67" r="1.9"/><circle cx="58" cy="75" r="1.3"/></g>
+  <g fill="#ECE6D6" fill-opacity=".8"><circle cx="40" cy="110" r="1"/><circle cx="72" cy="98" r="1.2"/><circle cx="84" cy="122" r="1"/><circle cx="52" cy="128" r="1.3"/><circle cx="64" cy="114" r=".9"/></g>
+  <!-- quả cầu thiên văn trong tay -->
+  <defs><radialGradient id="orb" cx="45%" cy="40%" r="60%"><stop offset="0" stop-color="#FFF6DA"/><stop offset=".45" stop-color="#B9A8F0"/><stop offset="1" stop-color="#3A3F8F"/></radialGradient>
+  <radialGradient id="halo" r="50%"><stop offset="0" stop-color="#EAD7A4" stop-opacity=".55"/><stop offset="1" stop-color="#EAD7A4" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="60" cy="104" r="24" fill="url(#halo)"/>
+  <path d="M30 128q10-18 22-16l2 10q-12 2-24 6Z" fill="#253070" stroke="#D2AE63" stroke-opacity=".6" stroke-width=".8"/>
+  <path d="M90 128q-10-18-22-16l-2 10q12 2 24 6Z" fill="#253070" stroke="#D2AE63" stroke-opacity=".6" stroke-width=".8"/>
+  <circle cx="60" cy="104" r="11" fill="url(#orb)"/>
+  <ellipse cx="60" cy="104" rx="16" ry="5" fill="none" stroke="#D2AE63" stroke-width="1.2" transform="rotate(-18 60 104)"/>
+  <ellipse cx="60" cy="104" rx="5" ry="16" fill="none" stroke="#D2AE63" stroke-width="1" transform="rotate(25 60 104)"/>
+  <circle cx="74.5" cy="99" r="1.6" fill="#FFF4D6"/>
+  <path d="M60 117v6M55 123h10" stroke="#D2AE63" stroke-width="1.4"/></svg>`; }
+const CHAR = {
+  tuvi:{name:"Lão Thiên Cơ",role:"Thầy tử vi",art:sage},
+  astro:{name:"Người Giữ Sao",role:"Kẻ đọc bầu trời",art:starKeeper}};
+const av = () => `<span class="av">${CHAR[site].art()}</span>`;
+const say = arr => arr.map(t=>`<div class="say">${av()}<div class="bubble">${t}</div></div>`).join("");
+const me = t => `<div class="me"><div class="bubble">${t}</div></div>`;
+const charHero = line => `<div class="char-hero">${CHAR[site].art()}<div class="who"><b>${CHAR[site].name}</b><span>${line||CHAR[site].role}</span></div></div>`;
+
+/* lời thoại theo giọng nhân vật */
+Object.assign(S.tuvi,{
+  basicSay:[
+    "Con ngồi xuống đây. Ta đã an sao xong lá số của con rồi.",
+    "Mệnh con có Tử Vi và Thiên Phủ cùng đóng ở cung Dần, cả hai đều miếu địa. Người mang cách này có chí riêng, thích tự mình định liệu, ít chịu đứng sau người khác lâu.",
+    "Thân con cư Quan Lộc, nên càng về sau càng nặng lòng với công danh. Hóa Lộc nằm ở Tài Bạch: tiền đến từ chính cái nghề con theo, không phải từ may rủi.",
+    "Muốn hỏi sâu chuyện gì thì cứ hỏi. Mỗi câu ta xem kỹ một chủ đề."],
+  readSay:[
+    "Câu này ta xem ở cung Quan Lộc. Con có Liêm Trinh, Thiên Tướng đóng ở Ngọ. Năm Đinh Mùi lưu niên đi qua đây kèm Hóa Quyền, nên dù đi hay ở, trách nhiệm của con cũng nặng lên.",
+    "Nửa đầu năm Thất Sát từ Thân chiếu sang, khí thế đổi dời mạnh. Nếu đã có nơi mời cụ thể thì tháng tư đến tháng sáu âm lịch là lúc nên quyết.",
+    "Còn nếu chỉ chán việc mà chưa có chỗ đến, ta khuyên con giữ chỗ cũ qua tháng tám rồi hãy tính.",
+    "Một điều nữa: Nô Bộc có Thiên Lương gặp Hóa Kỵ. Lúc rời đi dễ vướng chuyện với người dưới. Bàn giao cho rõ ràng thì về sau đỡ phiền."],
+  todayGreet:"Hôm nay ngày Kỷ Dậu. Ta xem qua lưu nhật cho con rồi đây.",
+  today:[["Công việc",3,"Thuận","Dễ được người trên ghi nhận"],["Đi lại",2,"Bình","Tránh đi xa sau giờ Dậu"],["Tiền bạc",4,"Tốt","Hợp ký kết, thu nợ"],["Sức khỏe",1,"Lưu ý","Giữ ấm bụng, ngủ sớm"]],
+  todayPaid:"Giờ tốt: Thìn, Tỵ, Thân. Hướng xuất hành: Đông Nam. Nên: gặp đối tác, ký hợp đồng. Tránh: cãi vã với người nhà, động thổ. Ngày mai Canh Tuất: tiền bạc chững lại, công việc vẫn thuận."
+});
+Object.assign(S.astro,{
+  basicSay:[
+    "Ta đã nhìn bầu trời lúc bạn chào đời.",
+    "Mặt Trời ở Song Ngư cho bạn trực giác nhạy và lòng trắc ẩn lớn. Mặt Trăng ở Bọ Cạp làm cảm xúc của bạn sâu và kín, khó tha thứ khi bị phản bội.",
+    "Cung mọc Sư Tử là lớp áo người khác thấy trước: ấm áp, nổi bật, đôi khi bị hiểu là tự tin hơn thực tế.",
+    "Khi bạn muốn biết sâu hơn về một điều, hãy hỏi ta."],
+  readSay:[
+    "Nhà thứ bảy của bạn mở ra ở Bảo Bình, chủ quản là Thổ tinh đang nằm ở nhà chín. Người hợp với bạn thường đến từ nơi học hành, chuyến đi xa, hoặc một nền văn hóa khác, và chín chắn hơn bạn.",
+    "Kim tinh của bạn ở Bạch Dương, tam hợp với Hỏa tinh: bạn bị cuốn hút nhanh và thường là người chủ động. Điều cần giữ là ngọn lửa khi mọi thứ đã thành quen.",
+    "Từ khoảng tháng sáu năm 2027, Mộc tinh đi vào nhà bảy của bạn. Đó là lúc cánh cửa này mở rộng nhất."],
+  todayGreet:"Hôm nay Mặt Trăng đi qua Song Tử, chạm vào nhà mười một của bạn.",
+  today:[["Công việc",3,"Thuận","Hợp làm việc nhóm, họp bàn"],["Đi lại",3,"Thuận","Chuyến đi ngắn suôn sẻ"],["Tiền bạc",2,"Bình","Tránh mua sắm theo cảm hứng"],["Sức khỏe",2,"Bình","Dễ mệt mắt, nghỉ màn hình"]],
+  todayPaid:"Khung giờ thuận: 9h đến 11h, 15h đến 16h. Nên: gửi email quan trọng, gặp bạn cũ. Tránh: quyết định tài chính lớn khi Mặt Trăng vô hiệu sau 20h. Ngày mai Mặt Trăng vào Cự Giải: hợp ở nhà, chăm gia đình."
+});
+
+SCREENS.splice(0,SCREENS.length,
+  ["today","Hôm nay"],["home","Trang chủ (khách)"],["chart","Lá số / bản đồ sao"],["basic","Luận giải miễn phí"],
+  ["ask","Hỏi theo chủ đề"],["reading","Bài luận (hội thoại)"],["topup","Chọn gói"],["pay","Thanh toán VietQR"],
+  ["share","Chia sẻ"],["account","Tài khoản"],["login","Đăng nhập"]);
+
+Object.assign(NOTES,{
+  today:{t:"Hôm nay",b:["Phần tóm tắt 4 mục miễn phí cho mọi người, để có lý do mở web mỗi ngày.","Giờ tốt, hướng xuất hành, nên/tránh và ngày mai chỉ dành cho thẻ tháng/năm.","Xem ngày không gọi AI: tra kho theo lá số + can chi ngày (tử vi) hoặc vị trí Mặt Trăng (chiêm tinh)."],q:"Có muốn gửi lời chào buổi sáng (tóm tắt hôm nay) qua email hoặc Zalo cho người có thẻ không?"},
+  basic:{t:"Luận giải miễn phí",b:["Nhân vật nói chuyện trực tiếp với người dùng thay vì một trang văn bản.","Tử vi: Lão Thiên Cơ xưng ta, gọi con. Chiêm tinh: Người Giữ Sao xưng ta, gọi bạn.","Hình nhân vật hiện là SVG tạm; bản thật sẽ là minh họa vẽ riêng, có vài biểu cảm."],q:"Tên và cách xưng hô của hai nhân vật này bạn thấy ổn không?"},
+  reading:{t:"Bài luận dạng hội thoại",b:["Câu hỏi của người dùng ở bên phải, nhân vật trả lời từng đoạn ngắn như đang nói.","Vẫn còn 2 câu hỏi nối tiếp trong cùng chủ đề.","Bài lưu trong lịch sử, xem lại không tốn lượt."],q:null},
+  topup:{t:"Chọn gói",b:["Theo phương án 2: thẻ tháng, thẻ năm và lượt lẻ.","Thẻ là trả trước (VietQR không tự trừ tiền), hệ thống nhắc gia hạn trước 3 ngày.","Giá là đề xuất, chỉnh sau khi thử."],q:null}
+});
+
+T.today = function(){
+  const s=S[site];
+  return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${topBar()}
+    <div class="pad" style="position:relative">${charHero(site==="tuvi"?"Thứ Tư, 25 tháng 11":"Thứ Tư, 25/11")}
+    ${say([s.todayGreet])}
+    <div style="margin-top:6px">${s.today.map(([n,l,w,d])=>`<div class="aspect-row"><span class="an">${n}</span><span class="lv">${[1,2,3,4].map(i=>`<i class="${i<=l?"f":""}"></i>`).join("")}</span><span class="ad"><b>${w}</b>${d}</span></div>`).join("")}</div>
+    <div class="locked"><div class="blur">${s.todayPaid}</div>
+      <div class="over"><span style="color:var(--paper);font-size:14px">Giờ tốt, hướng đi, việc nên làm và ngày mai</span><button class="btn" data-go="topup" style="width:auto;padding:10px 18px;font-size:14px">Mở bằng thẻ tháng</button></div></div>
+    </div></div>${tab("today")}`;
+};
+T.basic = function(){
+  const s=S[site];
+  return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${back("chart",s.chartTitle)}
+    <div class="pad" style="position:relative">${charHero()}${say(s.basicSay)}
+    <div class="section-gap"></div><button class="btn" data-go="ask">${site==="tuvi"?"Hỏi thầy một câu":"Hỏi Người Giữ Sao"}</button>
+    <p class="fine" style="text-align:center;margin-top:8px">Bạn đang có 1 lượt.</p></div></div>${tab("chart")}`;
+};
+T.reading = function(){
+  const s=S[site];
+  return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${back("ask","Hỏi theo chủ đề")}
+    <div class="pad" style="position:relative">
+    <p class="fine" style="text-align:center;margin:2px 0 12px">${s.readingTitle}</p>
+    ${me(s.question)}${say(s.readSay)}
+    <div class="say">${av()}<div class="bubble typing" aria-label="Đang trả lời"><i></i><i></i><i></i></div></div>
+    <p class="fine" style="margin-top:6px">Mang tính tham khảo, chiêm nghiệm.</p>
+    <div class="follow">Còn 2 câu hỏi nối tiếp trong chủ đề này. Viết câu hỏi…</div>
+    <div class="section-gap" style="height:14px"></div>
+    <button class="btn ghost" data-go="share">Chia sẻ bài này</button></div></div>${tab("ask")}`;
+};
+T.topup = function(){
+  const plans=[["Thẻ tháng","49.000đ",["Xem ngày chi tiết: giờ tốt, hướng đi, nên/tránh","Lịch 7 ngày tới","2 lượt hỏi trong 30 ngày"],true],
+               ["Thẻ năm","399.000đ",["Mọi thứ của thẻ tháng trong 12 tháng","Bài luận vận năm 2027","Tiết kiệm hơn 30%"],false]];
+  return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${back("today","Hôm nay")}
+    <div class="pad" style="position:relative"><h2 class="h-display" style="font-size:26px;margin-bottom:14px">Chọn gói</h2>
+    ${plans.map(([n,p,f,b])=>`<div class="plan-card ${b?"best":""}"><div class="ph"><span class="pn">${n}</span><span class="pr">${p}</span></div><ul>${f.map(x=>`<li>${x}</li>`).join("")}</ul></div>`).join("")}
+    <h3 class="h-display" style="font-size:18px;margin:20px 0 10px">Chỉ muốn hỏi một chuyện</h3>
+    <div class="pack"><div><div class="pl">1 lượt</div><div class="ps">Không hết hạn</div></div><div class="pp">29.000đ</div></div>
+    <div class="pack"><div><div class="pl">5 lượt</div><div class="ps">Không hết hạn</div></div><div class="pp">119.000đ<small>23.800đ mỗi lượt</small></div></div>
+    <p class="fine" style="margin:4px 0 16px">Thẻ trả trước, không tự trừ tiền. Nhắc gia hạn trước 3 ngày.</p>
+    <button class="btn" data-go="pay">Mua thẻ tháng 49.000đ</button>
+    <div style="height:10px"></div><button class="btn ghost">Thanh toán bằng PayPal</button></div></div>${tab("account")}`;
+};
+current = "today";
+
+/* ---------- lời phán hiện dần: tử vi như mực loang + ấn son, chiêm tinh như bụi sao ---------- */
+function animateDialogue(){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const STEP = 55; let t = 350; let lastBubble = null;
+  document.querySelectorAll("#screen .say .bubble:not(.typing)").forEach(b=>{
+    const words = b.textContent.trim().split(/\s+/);
+    b.closest(".say").style.animation = `bubbleIn .45s ${t}ms both`;
+    b.innerHTML = words.map((w,i)=>`<span class="w" style="animation-delay:${t+250+i*STEP}ms">${w}</span>`).join(" ");
+    if(site==="astro"){
+      for(let k=0;k<6;k++){ const s=document.createElement("i"); s.className="spark";
+        s.style.left=(8+Math.random()*84)+"%"; s.style.top=(5+Math.random()*90)+"%";
+        s.style.animationDelay=(t+250+Math.random()*words.length*STEP)+"ms"; b.appendChild(s); }
+    }
+    lastBubble = b; t += 450 + words.length*STEP;
+  });
+  const typing = document.querySelector("#screen .bubble.typing");
+  if(typing) typing.closest(".say").style.animation = `bubbleIn .3s ${t}ms both`;
+  if(site==="tuvi" && lastBubble && current!=="today"){
+    const seal=document.createElement("span"); seal.className="seal-stamp"; seal.textContent="印";
+    seal.style.animationDelay=t+"ms"; lastBubble.appendChild(seal);
+  }
+}
+
+T.topup = function(){
+  const plans=[["Thẻ tháng","49.000đ",["Xem ngày chi tiết: giờ tốt, hướng đi, nên/tránh","Lịch 7 ngày tới","2 lượt hỏi trong 30 ngày"],false],
+               ["Thẻ năm","399.000đ",["Mở tất cả trong 12 tháng","Hỏi không giới hạn mọi chủ đề","Xem ngày chi tiết mỗi ngày","Bài luận vận năm 2027"],true]];
+  return `${statusBar}<div class="scroll">${site==="astro"?'<div class="sky"></div>':""}${back("today","Hôm nay")}
+    <div class="pad" style="position:relative"><h2 class="h-display" style="font-size:26px;margin-bottom:14px">Chọn gói</h2>
+    ${plans.map(([n,p,f,b])=>`<div class="plan-card ${b?"best":""}"><div class="ph"><span class="pn">${n}</span><span class="pr">${p}</span></div>${b?'<span class="tag" style="margin-top:6px">Đáng mua nhất, chỉ 33.000đ mỗi tháng</span>':""}<ul>${f.map(x=>`<li>${x}</li>`).join("")}</ul></div>`).join("")}
+    <h3 class="h-display" style="font-size:18px;margin:20px 0 10px">Chỉ muốn hỏi một chuyện</h3>
+    <div class="pack"><div><div class="pl">1 lượt</div><div class="ps">Không hết hạn</div></div><div class="pp">29.000đ</div></div>
+    <div class="pack"><div><div class="pl">5 lượt</div><div class="ps">Không hết hạn</div></div><div class="pp">119.000đ<small>23.800đ mỗi lượt</small></div></div>
+    <p class="fine" style="margin:4px 0 16px">Thẻ trả trước, không tự trừ tiền. Nhắc gia hạn trước 3 ngày.</p>
+    <button class="btn" data-go="pay">Mua thẻ năm 399.000đ</button>
+    <div style="height:10px"></div><button class="btn ghost">Thanh toán bằng PayPal</button></div></div>${tab("account")}`;
+};
+NOTES.topup = {t:"Chọn gói",b:["Thẻ năm mở tất cả, hỏi không giới hạn, để kéo người dùng lên gói năm.","Không giới hạn nhưng có trần chống lạm dụng ngầm (ví dụ 30 câu/ngày), người dùng bình thường không chạm tới.","Thẻ trả trước, nhắc gia hạn trước 3 ngày."],q:"Đồng ý trần chống lạm dụng ngầm 30 câu/ngày cho thẻ năm không?"};
+NOTES.reading.b.push("Lời phán hiện dần từng chữ. Tử vi: chữ loang như mực rồi đóng ấn son ở cuối. Chiêm tinh: chữ sáng lên như bụi sao, có sao lấp lánh quanh lời nói.");
+
+/* ---------- wiring ---------- */
+function render(){
+  document.documentElement.dataset.site = site;
+  $("#screen").innerHTML = T[current]();
+  if(["reading","basic","today"].includes(current)) animateDialogue();
+  $("#screenList").innerHTML = SCREENS.map(([k,l])=>`<li><button data-go="${k}" ${k===current?'aria-current="true"':""}>${l}</button></li>`).join("");
+  const n = NOTES[current];
+  $("#notes").innerHTML = `<h2>${n.t}</h2><ul>${n.b.map(x=>`<li>${x}</li>`).join("")}</ul>${n.q?`<h3>Cần bạn chốt</h3><div class="q">${n.q}</div>`:""}
+    <h3>Đã chốt</h3><ul><li>Thu phí theo lượt: 1 lượt hỏi 1 câu về 1 chủ đề.</li><li>1 tài khoản xem cho 1 người.</li><li>Có chia sẻ lá số.</li><li>Gói: thẻ tháng/năm + lượt lẻ; xem ngày tóm tắt miễn phí.</li><li>Thẻ năm mở tất cả, hỏi không giới hạn.</li><li>Lời phán hiện dần với hiệu ứng theo chủ đề.</li><li>Luận giải là hội thoại với nhân vật thầy bói.</li></ul>`;
+}
+document.addEventListener("click", e=>{
+  const g = e.target.closest("[data-go]"); if(g){ current = g.dataset.go; render(); const sc=$(".scroll"); if(sc) sc.scrollTop=0; return; }
+  const sw = e.target.closest(".switch button");
+  if(sw){ site = sw.dataset.site; document.querySelectorAll(".switch button").forEach(b=>b.setAttribute("aria-pressed", b===sw)); render(); }
+});
+{ const [hs,hc] = location.hash.slice(1).split("/"); if(S[hs]) site=hs; if(T[hc]) current=hc;
+  document.querySelectorAll(".switch button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.site===site)); }
+render();
+</script>
+</body>
+</html>
