@@ -4,9 +4,11 @@ Dành cho người soạn (Claude, lúc build). Mỗi bản ghi trong `knowledge
 
 ## 1. Giọng và hình thức
 
-- Lão Thiên Cơ xưng **"ta"**, gọi người đọc là **"con"** (bản ghi phải có từ "con").
-- **1 đến 3 câu**, tối đa **320 ký tự**. Dấu kết câu: `.` `!` `?` `…`.
-- Tiếng Việt hiện đại, tự nhiên, như người lớn tuổi hiền hậu nói chuyện. **Không văn dịch**: không giữ trật tự câu Hán, không "giả như", "ấy", "vậy nên thời" kiểu cổ, không dịch từng câu của sách. Đây là bài **biên soạn lại** ý chính của sao/cung cho người hôm nay.
+- Lão Thiên Cơ xưng **"ta"**, gọi người đọc là **"con"**. Bản ghi phải có chữ "con" **dùng để gọi người đọc** ("con nên…", "của con", "con hãy…"). Chữ "con" nằm trong từ ghép như "con người", "con đường", "con cái", "con số" không tính: cổng máy chỉ tìm chữ "con" đứng riêng nên sẽ cho qua, người soạn phải tự soát.
+- **1 đến 3 câu** (nên 2), tối đa **320 ký tự**. Dấu kết câu: `.` `!` `?` `…`.
+- Tiếng Việt hiện đại, tự nhiên, như người lớn tuổi hiền hậu nói chuyện. **Không văn dịch**: không giữ trật tự câu Hán, không "giả như", "vậy nên thời", không dùng "ấy" làm chữ đệm kiểu cổ ở cuối mệnh đề ("Thiên Cơ cư Quan Lộc ấy, …"), không dịch từng câu của sách. "Ấy" chỉ định thông thường của tiếng Việt hôm nay ("cái uy ấy", "người ấy") vẫn dùng được, nhưng đừng lạm dụng. Đây là bài **biên soạn lại** ý chính của sao/cung cho người hôm nay.
+- Đổi cách mở câu: đừng để phần lớn bản ghi cùng bắt đầu bằng "Con…" hay "Sao này…"; mở bằng tên sao/cung, bằng hình ảnh, bằng "Ta thấy…", "Ở cung này…", v.v.
+- Mỗi bản ghi đứng một mình, đọc liền ngay sau lời giới thiệu cung, không lặp lại lời giới thiệu cung.
 - Không chữ Hán trong `content`. Phải có dấu tiếng Việt.
 - Không hai bản ghi trùng `content`. Mỗi bản ghi phải có chi tiết riêng của chính khóa đó (sao, cung, độ sáng), không chép lại câu chung.
 - Có thể dùng placeholder `{palace}`, `{star}`, `{cuc}` khi thật cần.
@@ -17,7 +19,8 @@ Dành cho người soạn (Claude, lúc build). Mỗi bản ghi trong `knowledge
 - **Cấm** các từ: `chết`, `tử vong`, `tai nạn`, `ung thư`, `bệnh nặng`, `giải hạn`, `cúng`, `bùa`, `yểm`, `phá sản`, `ly hôn`, `tuyệt tự`, `đoản mệnh`, `yểu`, và cả `suốt đời`, `chắc chắn sẽ`, `không tránh khỏi` (kiểm tra không phân biệt hoa thường).
 - Không khẳng định số phận ("nhất định", "chắc chắn", "số con sẽ"). Dùng "thường", "dễ", "có xu hướng", "nhiều người".
 - Thế bất lợi (hãm địa, sát tinh, hóa kỵ, Tuần/Triệt) diễn đạt thành **xu hướng kèm lối rẽ tích cực**: "con nên…", "con hãy thử…".
-- Sức khỏe chỉ là lời nhắc lối sống nhẹ nhàng (nghỉ ngơi, vận động, ăn ngủ điều độ), không chẩn đoán, không nêu bệnh.
+- Sức khỏe chỉ là lời nhắc lối sống nhẹ nhàng (nghỉ ngơi, vận động, ăn ngủ điều độ), không chẩn đoán, không nêu tên bệnh hay tên cơ quan trong cơ thể, không khuyên "đi khám" như thể lá số là căn cứ y khoa.
+- Không dọa, không gợi người đọc đi "xem thêm", "nhờ thầy", "kẻo mất…". Hóa Kỵ, Tuần, Triệt là **điểm cần để tâm**, luôn kèm việc con tự làm được.
 - Không nhắc cúng bái, bùa, lễ, hay bất kỳ cách "hóa giải" có phí.
 
 ## 3. Chủ đề (`topic`)
@@ -50,6 +53,13 @@ Chỉ dùng 紫微斗數全書 trên Wikisource (bản đã tải ở `knowledge
 4. `Mệnh có Tử Vi thì phú quý suốt đời, không tránh khỏi vinh hoa.` Cấm `suốt đời`, `không tránh khỏi`, và thiếu "con"/"ta".
 5. `Tử Vi 紫微 là đế tinh.` Có chữ Hán, thiếu giọng "ta"/"con", quá cụt, không nói gì cho người đọc.
 6. `Giả như Thiên Cơ cư Quan Lộc ấy, vậy nên con vì thế mà ở nơi quan trường được thăng tiến vậy.` Văn dịch từng chữ, khó hiểu, khẳng định một chiều, không có lối rẽ cho người đọc.
+
+**Ví dụ xấu mà cổng máy KHÔNG bắt được** (không có từ cấm, vẫn có "con" và "ta", vẫn qua build; người soạn phải tự đọc và loại):
+
+7. `Cự Môn hãm ở Tật Ách thì con dễ đau dạ dày và gan yếu, ta khuyên con đi khám sớm.` Chẩn đoán: nêu tên cơ quan, tên bệnh, khuyên đi khám như thể lá số là căn cứ y khoa. Sức khỏe chỉ được nói như lời nhắc lối sống (ăn ngủ, nghỉ ngơi, vận động).
+8. `Số con nhất định phải xa quê mới khá được, ở nhà thì làm gì cũng hỏng.` Khẳng định số phận tuyệt đối mà không dùng từ cấm ("nhất định", "làm gì cũng hỏng"), không có lối rẽ. Viết lại thành xu hướng: "con thường hợp với việc đi xa…".
+9. `Hóa Kỵ đóng Tài Bạch là điềm xấu lắm, con phải tìm người xem kỹ ngay kẻo mất hết tiền.` Dọa và gợi dịch vụ (đẩy người đọc đi "xem kỹ", "kẻo mất hết"). Hóa Kỵ là điểm cần để tâm, kèm việc con tự làm được.
+10. `Cung Tử Tức tốt nên con cái sau này hiếu thảo, ta mừng.` Chữ "con" chỉ nằm trong "con cái", không gọi người đọc; nên viết "con cái của con…" hoặc "con sẽ thấy…".
 
 ## 7. Quy trình mỗi đợt
 
