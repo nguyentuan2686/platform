@@ -9,7 +9,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class JdbcKnowledgeRepository implements KnowledgePort {
 
-  /** Knowledge school: the chart school family up to the first '+' or ';'. */
+  /**
+   * Knowledge school: one shared corpus for every chart school (VN and CN). The doctrine is about
+   * star meanings, not placement rules, so it does not vary with the chart school.
+   */
   static final String SCHOOL = "iztro-default";
 
   private final JdbcTemplate jdbc;

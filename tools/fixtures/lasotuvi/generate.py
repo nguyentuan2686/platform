@@ -45,6 +45,10 @@ ADJECTIVE = {
     100: "ThienQuan", 101: "ThienPhuc", 103: "ThienTru", 71: "ThienDuc", 72: "NguyetDuc",
     108: "ThienKhong", 96: "CoThan", 97: "QuaTu", 99: "PhaToai", 73: "ThienHinh",
     69: "ThienKhoc", 70: "ThienHu", 89: "ThienSu", 88: "ThienThuong",
+    # Vietnamese-only stars (no iztro counterpart): chart-svc adds them for VN charts.
+    78: "DaoHoa", 81: "ThienGiai", 82: "DiaGiai", 75: "ThienY", 76: "QuocAn",
+    77: "DuongPhu", 106: "VanTinh", 102: "LuuHa", 107: "DauQuan", 90: "ThienLa",
+    91: "DiaVong",
 }
 # The rings of twelve gods: lasotuvi's Tràng sinh, Bác sỹ and Thái tuế rings (the Thái tuế
 # ring is mapped by position to chart-svc's Tuế Tiền names: Thiếu dương = Hối khí, Thiếu âm =

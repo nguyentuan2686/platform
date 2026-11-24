@@ -1,5 +1,5 @@
 {
-  "school": "iztro-default+vn-calendar;hour=local-standard;ty23=next-day",
+  "school": "vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15",
   "calendar": "VN",
   "lunar": {
     "year": 1994,
@@ -49,6 +49,10 @@
         {
           "key": "LongTri",
           "nameVi": "Long Trì"
+        },
+        {
+          "key": "ThienY",
+          "nameVi": "Thiên Y"
         }
       ],
       "rings": {
@@ -99,7 +103,7 @@
         {
           "key": "DiaKiep",
           "nameVi": "Địa Kiếp",
-          "brightness": null,
+          "brightness": "Ham",
           "mutagen": null
         },
         {
@@ -111,8 +115,8 @@
       ],
       "adjective": [
         {
-          "key": "HamTri",
-          "nameVi": "Hàm Trì"
+          "key": "DaoHoa",
+          "nameVi": "Đào Hoa"
         },
         {
           "key": "NguyetDuc",
@@ -166,7 +170,7 @@
         {
           "key": "ThienDong",
           "nameVi": "Thiên Đồng",
-          "brightness": "Binh",
+          "brightness": "Ham",
           "mutagen": null
         }
       ],
@@ -179,6 +183,10 @@
         {
           "key": "ThienThuong",
           "nameVi": "Thiên Thương"
+        },
+        {
+          "key": "ThienLa",
+          "nameVi": "Thiên La"
         }
       ],
       "rings": {
@@ -228,13 +236,13 @@
         {
           "key": "VuKhuc",
           "nameVi": "Vũ Khúc",
-          "brightness": "Binh",
+          "brightness": "Ham",
           "mutagen": "Khoa"
         },
         {
           "key": "PhaQuan",
           "nameVi": "Phá Quân",
-          "brightness": "Binh",
+          "brightness": "Ham",
           "mutagen": "Quyen"
         }
       ],
@@ -276,6 +284,10 @@
         {
           "key": "ThienNguyet",
           "nameVi": "Thiên Nguyệt"
+        },
+        {
+          "key": "VanTinh",
+          "nameVi": "Văn Tinh"
         }
       ],
       "rings": {
@@ -325,7 +337,7 @@
         {
           "key": "ThaiDuong",
           "nameVi": "Thái Dương",
-          "brightness": "Vuong",
+          "brightness": "Mieu",
           "mutagen": "Ky"
         }
       ],
@@ -400,21 +412,15 @@
       ],
       "minor": [
         {
+          "key": "DiaKhong",
+          "nameVi": "Địa Không",
+          "brightness": "Ham",
+          "mutagen": null
+        },
+        {
           "key": "ThienViet",
           "nameVi": "Thiên Việt",
           "brightness": null,
-          "mutagen": null
-        },
-        {
-          "key": "DiaKhong",
-          "nameVi": "Địa Không",
-          "brightness": null,
-          "mutagen": null
-        },
-        {
-          "key": "LinhTinh",
-          "nameVi": "Linh Tinh",
-          "brightness": "Dac",
           "mutagen": null
         }
       ],
@@ -434,6 +440,10 @@
         {
           "key": "QuaTu",
           "nameVi": "Quả Tú"
+        },
+        {
+          "key": "DuongPhu",
+          "nameVi": "Đường Phù"
         }
       ],
       "rings": {
@@ -483,13 +493,13 @@
         {
           "key": "ThienCo",
           "nameVi": "Thiên Cơ",
-          "brightness": "Dac",
+          "brightness": "Vuong",
           "mutagen": null
         },
         {
           "key": "ThaiAm",
           "nameVi": "Thái Âm",
-          "brightness": "Dac",
+          "brightness": "Vuong",
           "mutagen": null
         }
       ],
@@ -497,7 +507,7 @@
         {
           "key": "VanKhuc",
           "nameVi": "Văn Khúc",
-          "brightness": "Dac",
+          "brightness": "Ham",
           "mutagen": null
         },
         {
@@ -509,16 +519,16 @@
       ],
       "adjective": [
         {
-          "key": "GiaiThan",
-          "nameVi": "Giải Thần"
-        },
-        {
           "key": "ThienVu",
           "nameVi": "Thiên Vu"
         },
         {
           "key": "ThienKhoc",
           "nameVi": "Thiên Khốc"
+        },
+        {
+          "key": "DiaGiai",
+          "nameVi": "Địa Giải"
         }
       ],
       "rings": {
@@ -568,13 +578,13 @@
         {
           "key": "TuVi",
           "nameVi": "Tử Vi",
-          "brightness": "Vuong",
+          "brightness": "Binh",
           "mutagen": null
         },
         {
           "key": "ThamLang",
           "nameVi": "Tham Lang",
-          "brightness": "Dac",
+          "brightness": "Ham",
           "mutagen": null
         }
       ],
@@ -598,6 +608,10 @@
         {
           "key": "ThienPhuc",
           "nameVi": "Thiên Phúc"
+        },
+        {
+          "key": "LuuHa",
+          "nameVi": "Lưu Hà"
         }
       ],
       "rings": {
@@ -664,6 +678,18 @@
         {
           "key": "ThienHinh",
           "nameVi": "Thiên Hình"
+        },
+        {
+          "key": "ThienGiai",
+          "nameVi": "Thiên Giải"
+        },
+        {
+          "key": "QuocAn",
+          "nameVi": "Quốc Ấn"
+        },
+        {
+          "key": "DiaVong",
+          "nameVi": "Địa Võng"
         }
       ],
       "rings": {
@@ -717,7 +743,14 @@
           "mutagen": null
         }
       ],
-      "minor": [],
+      "minor": [
+        {
+          "key": "LinhTinh",
+          "nameVi": "Linh Tinh",
+          "brightness": "Ham",
+          "mutagen": null
+        }
+      ],
       "adjective": [
         {
           "key": "ThienHy",
@@ -779,7 +812,7 @@
         {
           "key": "ThienLuong",
           "nameVi": "Thiên Lương",
-          "brightness": "Mieu",
+          "brightness": "Vuong",
           "mutagen": null
         }
       ],
@@ -798,8 +831,8 @@
           "nameVi": "Âm Sát"
         },
         {
-          "key": "NienGiai",
-          "nameVi": "Niên Giải"
+          "key": "GiaiThan",
+          "nameVi": "Giải Thần"
         }
       ],
       "rings": {
@@ -855,21 +888,21 @@
         {
           "key": "ThatSat",
           "nameVi": "Thất Sát",
-          "brightness": "Mieu",
+          "brightness": "Dac",
           "mutagen": null
         }
       ],
       "minor": [
         {
-          "key": "ThienKhoi",
-          "nameVi": "Thiên Khôi",
-          "brightness": null,
+          "key": "DaLa",
+          "nameVi": "Đà La",
+          "brightness": "Dac",
           "mutagen": null
         },
         {
-          "key": "DaLa",
-          "nameVi": "Đà La",
-          "brightness": "Mieu",
+          "key": "ThienKhoi",
+          "nameVi": "Thiên Khôi",
+          "brightness": null,
           "mutagen": null
         }
       ],
@@ -877,6 +910,10 @@
         {
           "key": "PhaToai",
           "nameVi": "Phá Toái"
+        },
+        {
+          "key": "DauQuan",
+          "nameVi": "Đẩu Quân"
         }
       ],
       "rings": {

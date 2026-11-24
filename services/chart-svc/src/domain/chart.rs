@@ -103,6 +103,18 @@ pub enum AdjStarKey {
     ThienSu,
     ThienThuong,
     NienGiai,
+    // Vietnamese-school stars (VN charts only): see `vn_school`.
+    DaoHoa,
+    ThienGiai,
+    DiaGiai,
+    ThienY,
+    QuocAn,
+    DuongPhu,
+    VanTinh,
+    LuuHa,
+    DauQuan,
+    ThienLa,
+    DiaVong,
 }
 
 /// Members of the four rings of twelve gods: Tràng Sinh, Bác Sĩ, Tuế Tiền (Thái Tuế
@@ -294,6 +306,17 @@ labelled!(AdjStarKey {
     ThienSu => "Thiên Sứ",
     ThienThuong => "Thiên Thương",
     NienGiai => "Niên Giải",
+    DaoHoa => "Đào Hoa",
+    ThienGiai => "Thiên Giải",
+    DiaGiai => "Địa Giải",
+    ThienY => "Thiên Y",
+    QuocAn => "Quốc Ấn",
+    DuongPhu => "Đường Phù",
+    VanTinh => "Văn Tinh",
+    LuuHa => "Lưu Hà",
+    DauQuan => "Đẩu Quân",
+    ThienLa => "Thiên La",
+    DiaVong => "Địa Võng",
 });
 
 labelled!(RingStarKey {
@@ -371,6 +394,26 @@ impl StarKey {
     /// One of the 14 major stars (chính tinh)?
     pub fn is_major(self) -> bool {
         (self as usize) < 14
+    }
+}
+
+impl AdjStarKey {
+    /// A star only the Vietnamese school places (`calendar=VN` charts); CN charts have none.
+    pub fn is_vn_only(self) -> bool {
+        matches!(
+            self,
+            AdjStarKey::DaoHoa
+                | AdjStarKey::ThienGiai
+                | AdjStarKey::DiaGiai
+                | AdjStarKey::ThienY
+                | AdjStarKey::QuocAn
+                | AdjStarKey::DuongPhu
+                | AdjStarKey::VanTinh
+                | AdjStarKey::LuuHa
+                | AdjStarKey::DauQuan
+                | AdjStarKey::ThienLa
+                | AdjStarKey::DiaVong
+        )
     }
 }
 
@@ -539,7 +582,14 @@ mod tests {
         assert_eq!(RingStarKey::BacSi.name_vi(), "Bác Sĩ");
         assert_eq!(RingStarKey::LucSi.name_vi(), "Lực Sĩ");
         assert_eq!(AdjStarKey::PhiLiem.key(), RingStarKey::PhiLiem.key());
-        assert_eq!(AdjStarKey::ALL.len(), 35);
+        // 35 stars of the default algorithm plus the 11 Vietnamese-only ones.
+        assert_eq!(AdjStarKey::ALL.len(), 46);
+        assert_eq!(
+            AdjStarKey::ALL.iter().filter(|k| k.is_vn_only()).count(),
+            11
+        );
+        assert_eq!(AdjStarKey::DaoHoa.name_vi(), "Đào Hoa");
+        assert_eq!(AdjStarKey::DiaVong.name_vi(), "Địa Võng");
         assert_eq!(RingStarKey::ALL.len(), 45);
     }
 

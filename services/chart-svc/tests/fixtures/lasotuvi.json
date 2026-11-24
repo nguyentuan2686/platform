@@ -11,6 +11,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Wu"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Si"
     ],
@@ -22,6 +37,9 @@
     ],
     "LongTri": [
      "You"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Xu"
@@ -38,6 +56,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Shen"
     ],
@@ -46,6 +67,9 @@
     ],
     "ThienDuc": [
      "Yin"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -61,6 +85,9 @@
     ],
     "ThienKhong": [
      "Wu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -88,6 +115,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -314,6 +347,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Chen"
+    ],
+    "DiaGiai": [
+     "Wei"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Si"
+    ],
     "GiaiThan": [
      "Chou"
     ],
@@ -325,6 +373,9 @@
     ],
     "LongTri": [
      "Chou"
+    ],
+    "LuuHa": [
+     "Yin"
     ],
     "NguyetDuc": [
      "Yin"
@@ -341,6 +392,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Shen"
+    ],
     "TamThai": [
      "Shen"
     ],
@@ -349,6 +403,9 @@
     ],
     "ThienDuc": [
      "Wu"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "You"
@@ -364,6 +421,9 @@
     ],
     "ThienKhong": [
      "Xu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Si"
@@ -391,6 +451,12 @@
     ],
     "ThienTru": [
      "Xu"
+    ],
+    "ThienY": [
+     "Chou"
+    ],
+    "VanTinh": [
+     "Mao"
     ]
    },
    "boshi": {
@@ -617,6 +683,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "Shen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -628,6 +709,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Chen"
     ],
     "NguyetDuc": [
      "Wu"
@@ -644,6 +728,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -651,6 +738,9 @@
      "Shen"
     ],
     "ThienDuc": [
+     "Xu"
+    ],
+    "ThienGiai": [
      "Xu"
     ],
     "ThienHinh": [
@@ -667,6 +757,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Hai"
@@ -694,6 +787,12 @@
     ],
     "ThienTru": [
      "Si"
+    ],
+    "ThienY": [
+     "Yin"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -920,6 +1019,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Xu"
+    ],
+    "DiaGiai": [
+     "Xu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chou"
+    ],
     "GiaiThan": [
      "Wu"
     ],
@@ -930,6 +1044,9 @@
      "Hai"
     ],
     "LongTri": [
+     "Shen"
+    ],
+    "LuuHa": [
      "Shen"
     ],
     "NguyetDuc": [
@@ -947,6 +1064,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Chen"
+    ],
     "TamThai": [
      "Wei"
     ],
@@ -955,6 +1075,9 @@
     ],
     "ThienDuc": [
      "Chou"
+    ],
+    "ThienGiai": [
+     "Yin"
     ],
     "ThienHinh": [
      "Zi"
@@ -970,6 +1093,9 @@
     ],
     "ThienKhong": [
      "Si"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -997,6 +1123,12 @@
     ],
     "ThienTru": [
      "Yin"
+    ],
+    "ThienY": [
+     "Chen"
+    ],
+    "VanTinh": [
+     "Hai"
     ]
    },
    "boshi": {
@@ -1224,6 +1356,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Wei"
+    ],
+    "DiaGiai": [
+     "Hai"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Si"
+    ],
     "GiaiThan": [
      "Mao"
     ],
@@ -1235,6 +1382,9 @@
     ],
     "LongTri": [
      "Hai"
+    ],
+    "LuuHa": [
+     "Yin"
     ],
     "NguyetDuc": [
      "Zi"
@@ -1251,6 +1401,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Shen"
+    ],
     "TamThai": [
      "Wei"
     ],
@@ -1258,6 +1411,9 @@
      "Xu"
     ],
     "ThienDuc": [
+     "Chen"
+    ],
+    "ThienGiai": [
      "Chen"
     ],
     "ThienHinh": [
@@ -1274,6 +1430,9 @@
     ],
     "ThienKhong": [
      "Shen"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Si"
@@ -1301,6 +1460,12 @@
     ],
     "ThienTru": [
      "Xu"
+    ],
+    "ThienY": [
+     "Si"
+    ],
+    "VanTinh": [
+     "Mao"
     ]
    },
    "boshi": {
@@ -1528,6 +1693,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Chen"
+    ],
+    "DiaGiai": [
+     "Zi"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Zi"
     ],
@@ -1539,6 +1719,9 @@
     ],
     "LongTri": [
      "Yin"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "Mao"
@@ -1555,6 +1738,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Wei"
     ],
@@ -1563,6 +1749,9 @@
     ],
     "ThienDuc": [
      "Wei"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Yin"
@@ -1578,6 +1767,9 @@
     ],
     "ThienKhong": [
      "Hai"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -1605,6 +1797,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "Wu"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -1831,6 +2029,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "Chou"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chou"
+    ],
     "GiaiThan": [
      "Shen"
     ],
@@ -1842,6 +2055,9 @@
     ],
     "LongTri": [
      "Wu"
+    ],
+    "LuuHa": [
+     "Shen"
     ],
     "NguyetDuc": [
      "Wei"
@@ -1858,6 +2074,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Chen"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -1866,6 +2085,9 @@
     ],
     "ThienDuc": [
      "Hai"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "Mao"
@@ -1881,6 +2103,9 @@
     ],
     "ThienKhong": [
      "Mao"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -1908,6 +2133,12 @@
     ],
     "ThienTru": [
      "Yin"
+    ],
+    "ThienY": [
+     "Wei"
+    ],
+    "VanTinh": [
+     "Hai"
     ]
    },
    "boshi": {
@@ -2134,6 +2365,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Hai"
+    ],
+    "DiaGiai": [
+     "Yin"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Si"
+    ],
     "GiaiThan": [
      "Si"
     ],
@@ -2145,6 +2391,9 @@
     ],
     "LongTri": [
      "You"
+    ],
+    "LuuHa": [
+     "Yin"
     ],
     "NguyetDuc": [
      "Xu"
@@ -2161,6 +2410,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Shen"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -2169,6 +2421,9 @@
     ],
     "ThienDuc": [
      "Yin"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Chen"
@@ -2184,6 +2439,9 @@
     ],
     "ThienKhong": [
      "Wu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Si"
@@ -2211,6 +2469,12 @@
     ],
     "ThienTru": [
      "Xu"
+    ],
+    "ThienY": [
+     "Shen"
+    ],
+    "VanTinh": [
+     "Mao"
     ]
    },
    "boshi": {
@@ -2437,6 +2701,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Wei"
+    ],
+    "DiaGiai": [
+     "Chen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Yin"
     ],
@@ -2448,6 +2727,9 @@
     ],
     "LongTri": [
      "Zi"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "Chou"
@@ -2464,6 +2746,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Wei"
     ],
@@ -2472,6 +2757,9 @@
     ],
     "ThienDuc": [
      "Si"
+    ],
+    "ThienGiai": [
+     "Yin"
     ],
     "ThienHinh": [
      "Wu"
@@ -2487,6 +2775,9 @@
     ],
     "ThienKhong": [
      "You"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -2514,6 +2805,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "Xu"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -2741,6 +3038,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Chen"
+    ],
+    "DiaGiai": [
+     "Si"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Hai"
     ],
@@ -2752,6 +3064,9 @@
     ],
     "LongTri": [
      "Mao"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Chen"
@@ -2768,6 +3083,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -2776,6 +3094,9 @@
     ],
     "ThienDuc": [
      "Shen"
+    ],
+    "ThienGiai": [
+     "Chen"
     ],
     "ThienHinh": [
      "Wei"
@@ -2791,6 +3112,9 @@
     ],
     "ThienKhong": [
      "Zi"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -2818,6 +3142,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Hai"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -3045,6 +3375,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Chou"
+    ],
+    "DiaGiai": [
+     "Wei"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Si"
+    ],
     "GiaiThan": [
      "Wei"
     ],
@@ -3056,6 +3401,9 @@
     ],
     "LongTri": [
      "Wei"
+    ],
+    "LuuHa": [
+     "Yin"
     ],
     "NguyetDuc": [
      "Shen"
@@ -3072,6 +3420,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Shen"
+    ],
     "TamThai": [
      "Hai"
     ],
@@ -3080,6 +3431,9 @@
     ],
     "ThienDuc": [
      "Zi"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "You"
@@ -3094,6 +3448,9 @@
      "Mao"
     ],
     "ThienKhong": [
+     "Chen"
+    ],
+    "ThienLa": [
      "Chen"
     ],
     "ThienPhuc": [
@@ -3122,6 +3479,12 @@
     ],
     "ThienTru": [
      "Xu"
+    ],
+    "ThienY": [
+     "Chou"
+    ],
+    "VanTinh": [
+     "Mao"
     ]
    },
    "boshi": {
@@ -3349,6 +3712,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Xu"
+    ],
+    "DiaGiai": [
+     "Shen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Chen"
     ],
@@ -3360,6 +3738,9 @@
     ],
     "LongTri": [
      "Xu"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "Hai"
@@ -3376,6 +3757,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Hai"
     ],
@@ -3384,6 +3768,9 @@
     ],
     "ThienDuc": [
      "Mao"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Xu"
@@ -3399,6 +3786,9 @@
     ],
     "ThienKhong": [
      "Wei"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -3426,6 +3816,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "Yin"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -3652,6 +4048,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Shen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Chou"
     ],
@@ -3663,6 +4074,9 @@
     ],
     "LongTri": [
      "Chou"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Yin"
@@ -3679,6 +4093,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Xu"
     ],
@@ -3687,6 +4104,9 @@
     ],
     "ThienDuc": [
      "Wu"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Xu"
@@ -3702,6 +4122,9 @@
     ],
     "ThienKhong": [
      "Xu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -3729,6 +4152,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Yin"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -3955,6 +4384,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Si"
+    ],
+    "DiaGiai": [
+     "Xu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Si"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -3966,6 +4410,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Yin"
     ],
     "NguyetDuc": [
      "Wu"
@@ -3982,6 +4429,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Shen"
+    ],
     "TamThai": [
      "Mao"
     ],
@@ -3990,6 +4440,9 @@
     ],
     "ThienDuc": [
      "Xu"
+    ],
+    "ThienGiai": [
+     "Yin"
     ],
     "ThienHinh": [
      "Zi"
@@ -4005,6 +4458,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Si"
@@ -4032,6 +4488,12 @@
     ],
     "ThienTru": [
      "Xu"
+    ],
+    "ThienY": [
+     "Chen"
+    ],
+    "VanTinh": [
+     "Mao"
     ]
    },
    "boshi": {
@@ -4258,6 +4720,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Chou"
+    ],
+    "DiaGiai": [
+     "Zi"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Wu"
     ],
@@ -4269,6 +4746,9 @@
     ],
     "LongTri": [
      "Shen"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "You"
@@ -4285,6 +4765,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Xu"
     ],
@@ -4293,6 +4776,9 @@
     ],
     "ThienDuc": [
      "Chou"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Yin"
@@ -4308,6 +4794,9 @@
     ],
     "ThienKhong": [
      "Si"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -4335,6 +4824,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "Wu"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -4562,6 +5057,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Hai"
+    ],
+    "DiaGiai": [
+     "Zi"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Mao"
     ],
@@ -4573,6 +5083,9 @@
     ],
     "LongTri": [
      "Hai"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Zi"
@@ -4589,6 +5102,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "You"
     ],
@@ -4597,6 +5113,9 @@
     ],
     "ThienDuc": [
      "Chen"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Yin"
@@ -4612,6 +5131,9 @@
     ],
     "ThienKhong": [
      "Shen"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -4639,6 +5161,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Wu"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -4866,6 +5394,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Chou"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chen"
+    ],
     "GiaiThan": [
      "Zi"
     ],
@@ -4877,6 +5420,9 @@
     ],
     "LongTri": [
      "Yin"
+    ],
+    "LuuHa": [
+     "Hai"
     ],
     "NguyetDuc": [
      "Mao"
@@ -4893,6 +5439,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Wei"
+    ],
     "TamThai": [
      "You"
     ],
@@ -4901,6 +5450,9 @@
     ],
     "ThienDuc": [
      "Wei"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "Mao"
@@ -4916,6 +5468,9 @@
     ],
     "ThienKhong": [
      "Hai"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -4943,6 +5498,12 @@
     ],
     "ThienTru": [
      "You"
+    ],
+    "ThienY": [
+     "Wei"
+    ],
+    "VanTinh": [
+     "Yin"
     ]
    },
    "boshi": {
@@ -5169,6 +5730,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Si"
+    ],
+    "DiaGiai": [
+     "Mao"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Shen"
     ],
@@ -5180,6 +5756,9 @@
     ],
     "LongTri": [
      "Wu"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "Wei"
@@ -5196,6 +5775,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Yin"
     ],
@@ -5204,6 +5786,9 @@
     ],
     "ThienDuc": [
      "Hai"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Si"
@@ -5219,6 +5804,9 @@
     ],
     "ThienKhong": [
      "Mao"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -5246,6 +5834,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "You"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -5472,6 +6066,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "Chen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Si"
     ],
@@ -5483,6 +6092,9 @@
     ],
     "LongTri": [
      "You"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Xu"
@@ -5499,6 +6111,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Mao"
     ],
@@ -5506,6 +6121,9 @@
      "Zi"
     ],
     "ThienDuc": [
+     "Yin"
+    ],
+    "ThienGiai": [
      "Yin"
     ],
     "ThienHinh": [
@@ -5522,6 +6140,9 @@
     ],
     "ThienKhong": [
      "Wu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -5549,6 +6170,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Xu"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -5775,6 +6402,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "You"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Yin"
+    ],
     "GiaiThan": [
      "Mao"
     ],
@@ -5786,6 +6428,9 @@
     ],
     "LongTri": [
      "Hai"
+    ],
+    "LuuHa": [
+     "Mao"
     ],
     "NguyetDuc": [
      "Zi"
@@ -5802,6 +6447,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Si"
+    ],
     "TamThai": [
      "Shen"
     ],
@@ -5810,6 +6458,9 @@
     ],
     "ThienDuc": [
      "Chen"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -5825,6 +6476,9 @@
     ],
     "ThienKhong": [
      "Shen"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Si"
@@ -5852,6 +6506,12 @@
     ],
     "ThienTru": [
      "Wu"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
+     "Zi"
     ]
    },
    "boshi": {
@@ -6079,6 +6739,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Shen"
+    ],
     "GiaiThan": [
      "Hai"
     ],
@@ -6090,6 +6765,9 @@
     ],
     "LongTri": [
      "Mao"
+    ],
+    "LuuHa": [
+     "Xu"
     ],
     "NguyetDuc": [
      "Chen"
@@ -6106,6 +6784,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Hai"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -6114,6 +6795,9 @@
     ],
     "ThienDuc": [
      "Shen"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -6129,6 +6813,9 @@
     ],
     "ThienKhong": [
      "Zi"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Shen"
@@ -6155,6 +6842,12 @@
      "Xu"
     ],
     "ThienTru": [
+     "Wu"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
      "Wu"
     ]
    },
@@ -6383,6 +7076,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Si"
+    ],
+    "DiaGiai": [
+     "Shen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Wei"
     ],
@@ -6394,6 +7102,9 @@
     ],
     "LongTri": [
      "Wei"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Shen"
@@ -6410,6 +7121,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -6418,6 +7132,9 @@
     ],
     "ThienDuc": [
      "Zi"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Xu"
@@ -6432,6 +7149,9 @@
      "Mao"
     ],
     "ThienKhong": [
+     "Chen"
+    ],
+    "ThienLa": [
      "Chen"
     ],
     "ThienPhuc": [
@@ -6460,6 +7180,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Yin"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -6687,6 +7413,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "You"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chen"
+    ],
     "GiaiThan": [
      "Chen"
     ],
@@ -6698,6 +7439,9 @@
     ],
     "LongTri": [
      "Xu"
+    ],
+    "LuuHa": [
+     "Hai"
     ],
     "NguyetDuc": [
      "Hai"
@@ -6714,6 +7458,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Wei"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -6722,6 +7469,9 @@
     ],
     "ThienDuc": [
      "Mao"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Hai"
@@ -6737,6 +7487,9 @@
     ],
     "ThienKhong": [
      "Wei"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -6764,6 +7517,12 @@
     ],
     "ThienTru": [
      "You"
+    ],
+    "ThienY": [
+     "Mao"
+    ],
+    "VanTinh": [
+     "Yin"
     ]
    },
    "boshi": {
@@ -6990,6 +7749,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Xu"
+    ],
+    "DiaGiai": [
+     "Hai"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Shen"
+    ],
     "GiaiThan": [
      "Chou"
     ],
@@ -7001,6 +7775,9 @@
     ],
     "LongTri": [
      "Chou"
+    ],
+    "LuuHa": [
+     "Xu"
     ],
     "NguyetDuc": [
      "Yin"
@@ -7017,6 +7794,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Hai"
+    ],
     "TamThai": [
      "Shen"
     ],
@@ -7025,6 +7805,9 @@
     ],
     "ThienDuc": [
      "Wu"
+    ],
+    "ThienGiai": [
+     "Chen"
     ],
     "ThienHinh": [
      "Chou"
@@ -7040,6 +7823,9 @@
     ],
     "ThienKhong": [
      "Xu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Shen"
@@ -7066,6 +7852,12 @@
      "Wu"
     ],
     "ThienTru": [
+     "Wu"
+    ],
+    "ThienY": [
+     "Si"
+    ],
+    "VanTinh": [
      "Wu"
     ]
    },
@@ -7293,6 +8085,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Zi"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -7304,6 +8111,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Wu"
@@ -7320,6 +8130,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -7328,6 +8141,9 @@
     ],
     "ThienDuc": [
      "Xu"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Yin"
@@ -7343,6 +8159,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -7370,6 +8189,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Wu"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -7600,6 +8425,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Si"
+    ],
+    "DiaGiai": [
+     "Chou"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chen"
+    ],
     "GiaiThan": [
      "Wu"
     ],
@@ -7611,6 +8451,9 @@
     ],
     "LongTri": [
      "Shen"
+    ],
+    "LuuHa": [
+     "Hai"
     ],
     "NguyetDuc": [
      "You"
@@ -7627,6 +8470,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Wei"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -7635,6 +8481,9 @@
     ],
     "ThienDuc": [
      "Chou"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "Mao"
@@ -7650,6 +8499,9 @@
     ],
     "ThienKhong": [
      "Si"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -7677,6 +8529,12 @@
     ],
     "ThienTru": [
      "You"
+    ],
+    "ThienY": [
+     "Wei"
+    ],
+    "VanTinh": [
+     "Yin"
     ]
    },
    "boshi": {
@@ -7904,6 +8762,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "Yin"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Shen"
+    ],
     "GiaiThan": [
      "Mao"
     ],
@@ -7915,6 +8788,9 @@
     ],
     "LongTri": [
      "Hai"
+    ],
+    "LuuHa": [
+     "Xu"
     ],
     "NguyetDuc": [
      "Zi"
@@ -7931,6 +8807,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Hai"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -7939,6 +8818,9 @@
     ],
     "ThienDuc": [
      "Chen"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Chen"
@@ -7954,6 +8836,9 @@
     ],
     "ThienKhong": [
      "Shen"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Shen"
@@ -7980,6 +8865,12 @@
      "Zi"
     ],
     "ThienTru": [
+     "Wu"
+    ],
+    "ThienY": [
+     "Shen"
+    ],
+    "VanTinh": [
      "Wu"
     ]
    },
@@ -8208,6 +9099,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Hai"
+    ],
+    "DiaGiai": [
+     "Mao"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Zi"
     ],
@@ -8219,6 +9125,9 @@
     ],
     "LongTri": [
      "Yin"
+    ],
+    "LuuHa": [
+     "Si"
     ],
     "NguyetDuc": [
      "Mao"
@@ -8235,6 +9144,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -8243,6 +9155,9 @@
     ],
     "ThienDuc": [
      "Wei"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Si"
@@ -8258,6 +9173,9 @@
     ],
     "ThienKhong": [
      "Hai"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Mao"
@@ -8285,6 +9203,12 @@
     ],
     "ThienTru": [
      "Wu"
+    ],
+    "ThienY": [
+     "You"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -8511,6 +9435,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Si"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chen"
+    ],
     "GiaiThan": [
      "Shen"
     ],
@@ -8522,6 +9461,9 @@
     ],
     "LongTri": [
      "Wu"
+    ],
+    "LuuHa": [
+     "Hai"
     ],
     "NguyetDuc": [
      "Wei"
@@ -8538,6 +9480,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Wei"
+    ],
     "TamThai": [
      "Si"
     ],
@@ -8546,6 +9491,9 @@
     ],
     "ThienDuc": [
      "Hai"
+    ],
+    "ThienGiai": [
+     "Chen"
     ],
     "ThienHinh": [
      "Wei"
@@ -8561,6 +9509,9 @@
     ],
     "ThienKhong": [
      "Mao"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -8588,6 +9539,12 @@
     ],
     "ThienTru": [
      "You"
+    ],
+    "ThienY": [
+     "Hai"
+    ],
+    "VanTinh": [
+     "Yin"
     ]
    },
    "boshi": {
@@ -8814,6 +9771,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Chen"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Wei"
+    ],
     "GiaiThan": [
      "Wu"
     ],
@@ -8825,6 +9797,9 @@
     ],
     "LongTri": [
      "Shen"
+    ],
+    "LuuHa": [
+     "You"
     ],
     "NguyetDuc": [
      "You"
@@ -8841,6 +9816,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Xu"
+    ],
     "TamThai": [
      "Chen"
     ],
@@ -8849,6 +9827,9 @@
     ],
     "ThienDuc": [
      "Chou"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -8864,6 +9845,9 @@
     ],
     "ThienKhong": [
      "Si"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "You"
@@ -8890,6 +9874,12 @@
      "Wei"
     ],
     "ThienTru": [
+     "Si"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
      "Si"
     ]
    },
@@ -9118,6 +10108,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Wu"
+    ],
+    "DiaGiai": [
+     "Wei"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Shen"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -9129,6 +10134,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Xu"
     ],
     "NguyetDuc": [
      "Wu"
@@ -9145,6 +10153,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Hai"
+    ],
     "TamThai": [
      "Chen"
     ],
@@ -9153,6 +10164,9 @@
     ],
     "ThienDuc": [
      "Xu"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "You"
@@ -9168,6 +10182,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Shen"
@@ -9194,6 +10211,12 @@
      "Yin"
     ],
     "ThienTru": [
+     "Wu"
+    ],
+    "ThienY": [
+     "Chou"
+    ],
+    "VanTinh": [
      "Wu"
     ]
    },
@@ -9421,6 +10444,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Wu"
+    ],
+    "DiaGiai": [
+     "Wei"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Yin"
     ],
@@ -9432,6 +10470,9 @@
     ],
     "LongTri": [
      "Zi"
+    ],
+    "LuuHa": [
+     "Si"
     ],
     "NguyetDuc": [
      "Chou"
@@ -9448,6 +10489,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Chen"
     ],
@@ -9456,6 +10500,9 @@
     ],
     "ThienDuc": [
      "Si"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "You"
@@ -9471,6 +10518,9 @@
     ],
     "ThienKhong": [
      "You"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Mao"
@@ -9498,6 +10548,12 @@
     ],
     "ThienTru": [
      "Wu"
+    ],
+    "ThienY": [
+     "Chou"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -9725,6 +10781,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Hai"
+    ],
+    "DiaGiai": [
+     "Wei"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Hai"
     ],
@@ -9736,6 +10807,9 @@
     ],
     "LongTri": [
      "Mao"
+    ],
+    "LuuHa": [
+     "Chen"
     ],
     "NguyetDuc": [
      "Chen"
@@ -9752,6 +10826,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Chen"
     ],
@@ -9759,6 +10836,9 @@
      "Wu"
     ],
     "ThienDuc": [
+     "Shen"
+    ],
+    "ThienGiai": [
      "Shen"
     ],
     "ThienHinh": [
@@ -9775,6 +10855,9 @@
     ],
     "ThienKhong": [
      "Zi"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Hai"
@@ -9802,6 +10885,12 @@
     ],
     "ThienTru": [
      "Si"
+    ],
+    "ThienY": [
+     "Chou"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -10029,6 +11118,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Xu"
+    ],
+    "DiaGiai": [
+     "Shen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Si"
+    ],
     "GiaiThan": [
      "Wei"
     ],
@@ -10040,6 +11144,9 @@
     ],
     "LongTri": [
      "Wei"
+    ],
+    "LuuHa": [
+     "Yin"
     ],
     "NguyetDuc": [
      "Shen"
@@ -10056,6 +11163,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Shen"
+    ],
     "TamThai": [
      "Mao"
     ],
@@ -10064,6 +11174,9 @@
     ],
     "ThienDuc": [
      "Zi"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Xu"
@@ -10078,6 +11191,9 @@
      "Mao"
     ],
     "ThienKhong": [
+     "Chen"
+    ],
+    "ThienLa": [
      "Chen"
     ],
     "ThienPhuc": [
@@ -10106,6 +11222,12 @@
     ],
     "ThienTru": [
      "Xu"
+    ],
+    "ThienY": [
+     "Yin"
+    ],
+    "VanTinh": [
+     "Mao"
     ]
    },
    "boshi": {
@@ -10333,6 +11455,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "You"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Shen"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -10344,6 +11481,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Xu"
     ],
     "NguyetDuc": [
      "Wu"
@@ -10360,6 +11500,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Hai"
+    ],
     "TamThai": [
      "You"
     ],
@@ -10368,6 +11511,9 @@
     ],
     "ThienDuc": [
      "Xu"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Hai"
@@ -10383,6 +11529,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Shen"
@@ -10409,6 +11558,12 @@
      "Wu"
     ],
     "ThienTru": [
+     "Wu"
+    ],
+    "ThienY": [
+     "Mao"
+    ],
+    "VanTinh": [
      "Wu"
     ]
    },
@@ -10640,6 +11795,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Chou"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Wei"
     ],
@@ -10651,6 +11821,9 @@
     ],
     "LongTri": [
      "Wei"
+    ],
+    "LuuHa": [
+     "Chen"
     ],
     "NguyetDuc": [
      "Shen"
@@ -10667,6 +11840,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Hai"
     ],
@@ -10675,6 +11851,9 @@
     ],
     "ThienDuc": [
      "Zi"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "Mao"
@@ -10689,6 +11868,9 @@
      "Mao"
     ],
     "ThienKhong": [
+     "Chen"
+    ],
+    "ThienLa": [
      "Chen"
     ],
     "ThienPhuc": [
@@ -10717,6 +11899,12 @@
     ],
     "ThienTru": [
      "Si"
+    ],
+    "ThienY": [
+     "Wei"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -10944,6 +12132,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "You"
+    ],
+    "DiaGiai": [
+     "Chen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chen"
+    ],
     "GiaiThan": [
      "Wu"
     ],
@@ -10955,6 +12158,9 @@
     ],
     "LongTri": [
      "Shen"
+    ],
+    "LuuHa": [
+     "Hai"
     ],
     "NguyetDuc": [
      "You"
@@ -10971,6 +12177,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Wei"
+    ],
     "TamThai": [
      "Chou"
     ],
@@ -10979,6 +12188,9 @@
     ],
     "ThienDuc": [
      "Chou"
+    ],
+    "ThienGiai": [
+     "Yin"
     ],
     "ThienHinh": [
      "Wu"
@@ -10994,6 +12206,9 @@
     ],
     "ThienKhong": [
      "Si"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -11021,6 +12236,12 @@
     ],
     "ThienTru": [
      "You"
+    ],
+    "ThienY": [
+     "Xu"
+    ],
+    "VanTinh": [
+     "Yin"
     ]
    },
    "boshi": {
@@ -11248,6 +12469,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Chou"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Si"
     ],
@@ -11259,6 +12495,9 @@
     ],
     "LongTri": [
      "You"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Xu"
@@ -11275,6 +12514,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Yin"
     ],
@@ -11283,6 +12525,9 @@
     ],
     "ThienDuc": [
      "Yin"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -11298,6 +12543,9 @@
     ],
     "ThienKhong": [
      "Wu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -11325,6 +12573,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -11551,6 +12805,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Xu"
+    ],
+    "DiaGiai": [
+     "Si"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Yin"
     ],
@@ -11562,6 +12831,9 @@
     ],
     "LongTri": [
      "Zi"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "Chou"
@@ -11578,6 +12850,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Hai"
     ],
@@ -11586,6 +12861,9 @@
     ],
     "ThienDuc": [
      "Si"
+    ],
+    "ThienGiai": [
+     "Chen"
     ],
     "ThienHinh": [
      "Wei"
@@ -11601,6 +12879,9 @@
     ],
     "ThienKhong": [
      "You"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -11628,6 +12909,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "Hai"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -11855,6 +13142,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Mao"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Hai"
     ],
@@ -11866,6 +13168,9 @@
     ],
     "LongTri": [
      "Mao"
+    ],
+    "LuuHa": [
+     "Chen"
     ],
     "NguyetDuc": [
      "Chen"
@@ -11882,6 +13187,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -11890,6 +13198,9 @@
     ],
     "ThienDuc": [
      "Shen"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Si"
@@ -11905,6 +13216,9 @@
     ],
     "ThienKhong": [
      "Zi"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Hai"
@@ -11932,6 +13246,12 @@
     ],
     "ThienTru": [
      "Si"
+    ],
+    "ThienY": [
+     "You"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -12159,6 +13479,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Shen"
+    ],
+    "DiaGiai": [
+     "Yin"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "Si"
     ],
@@ -12170,6 +13505,9 @@
     ],
     "LongTri": [
      "You"
+    ],
+    "LuuHa": [
+     "Wu"
     ],
     "NguyetDuc": [
      "Xu"
@@ -12186,6 +13524,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Wei"
     ],
@@ -12194,6 +13535,9 @@
     ],
     "ThienDuc": [
      "Yin"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Chen"
@@ -12209,6 +13553,9 @@
     ],
     "ThienKhong": [
      "Wu"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Yin"
@@ -12236,6 +13583,12 @@
     ],
     "ThienTru": [
      "Shen"
+    ],
+    "ThienY": [
+     "Shen"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -12462,6 +13815,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "Hai"
+    ],
+    "DiaGiai": [
+     "Chou"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chou"
+    ],
     "GiaiThan": [
      "Shen"
     ],
@@ -12473,6 +13841,9 @@
     ],
     "LongTri": [
      "Wu"
+    ],
+    "LuuHa": [
+     "Shen"
     ],
     "NguyetDuc": [
      "Wei"
@@ -12489,6 +13860,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Chen"
+    ],
     "TamThai": [
      "Xu"
     ],
@@ -12497,6 +13871,9 @@
     ],
     "ThienDuc": [
      "Hai"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "Mao"
@@ -12512,6 +13889,9 @@
     ],
     "ThienKhong": [
      "Mao"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -12539,6 +13919,12 @@
     ],
     "ThienTru": [
      "Yin"
+    ],
+    "ThienY": [
+     "Wei"
+    ],
+    "VanTinh": [
+     "Hai"
     ]
    },
    "boshi": {
@@ -12765,6 +14151,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Zi"
+    ],
+    "DiaGiai": [
+     "Mao"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Wei"
+    ],
     "GiaiThan": [
      "Xu"
     ],
@@ -12776,6 +14177,9 @@
     ],
     "LongTri": [
      "Chen"
+    ],
+    "LuuHa": [
+     "You"
     ],
     "NguyetDuc": [
      "Si"
@@ -12792,6 +14196,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Xu"
+    ],
     "TamThai": [
      "Hai"
     ],
@@ -12800,6 +14207,9 @@
     ],
     "ThienDuc": [
      "You"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Si"
@@ -12815,6 +14225,9 @@
     ],
     "ThienKhong": [
      "Chou"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "You"
@@ -12841,6 +14254,12 @@
      "Wei"
     ],
     "ThienTru": [
+     "Si"
+    ],
+    "ThienY": [
+     "You"
+    ],
+    "VanTinh": [
      "Si"
     ]
    },
@@ -13069,6 +14488,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Yin"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chou"
+    ],
     "GiaiThan": [
      "Xu"
     ],
@@ -13080,6 +14514,9 @@
     ],
     "LongTri": [
      "Chen"
+    ],
+    "LuuHa": [
+     "Shen"
     ],
     "NguyetDuc": [
      "Si"
@@ -13096,6 +14533,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Chen"
+    ],
     "TamThai": [
      "Chou"
     ],
@@ -13104,6 +14544,9 @@
     ],
     "ThienDuc": [
      "You"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -13119,6 +14562,9 @@
     ],
     "ThienKhong": [
      "Chou"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -13146,6 +14592,12 @@
     ],
     "ThienTru": [
      "Yin"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
+     "Hai"
     ]
    },
    "boshi": {
@@ -13373,6 +14825,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "You"
+    ],
+    "DiaGiai": [
+     "Si"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Yin"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -13384,6 +14851,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Mao"
     ],
     "NguyetDuc": [
      "Wu"
@@ -13400,6 +14870,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Si"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -13408,6 +14881,9 @@
     ],
     "ThienDuc": [
      "Xu"
+    ],
+    "ThienGiai": [
+     "Chen"
     ],
     "ThienHinh": [
      "Wei"
@@ -13423,6 +14899,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Si"
@@ -13450,6 +14929,12 @@
     ],
     "ThienTru": [
      "Wu"
+    ],
+    "ThienY": [
+     "Hai"
+    ],
+    "VanTinh": [
+     "Zi"
     ]
    },
    "boshi": {
@@ -13676,6 +15161,21 @@
     "CoThan": [
      "Hai"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Hai"
+    ],
+    "DiaGiai": [
+     "Mao"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Wei"
+    ],
     "GiaiThan": [
      "Yin"
     ],
@@ -13687,6 +15187,9 @@
     ],
     "LongTri": [
      "Zi"
+    ],
+    "LuuHa": [
+     "You"
     ],
     "NguyetDuc": [
      "Chou"
@@ -13703,6 +15206,9 @@
     "QuaTu": [
      "Wei"
     ],
+    "QuocAn": [
+     "Xu"
+    ],
     "TamThai": [
      "Zi"
     ],
@@ -13711,6 +15217,9 @@
     ],
     "ThienDuc": [
      "Si"
+    ],
+    "ThienGiai": [
+     "Zi"
     ],
     "ThienHinh": [
      "Si"
@@ -13726,6 +15235,9 @@
     ],
     "ThienKhong": [
      "You"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "You"
@@ -13752,6 +15264,12 @@
      "Chen"
     ],
     "ThienTru": [
+     "Si"
+    ],
+    "ThienY": [
+     "You"
+    ],
+    "VanTinh": [
      "Si"
     ]
    },
@@ -13980,6 +15498,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "Wu"
+    ],
+    "DauQuan": [
+     "Chen"
+    ],
+    "DiaGiai": [
+     "Shen"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Hai"
+    ],
     "GiaiThan": [
      "You"
     ],
@@ -13991,6 +15524,9 @@
     ],
     "LongTri": [
      "Si"
+    ],
+    "LuuHa": [
+     "Chen"
     ],
     "NguyetDuc": [
      "Wu"
@@ -14007,6 +15543,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Yin"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -14014,6 +15553,9 @@
      "Xu"
     ],
     "ThienDuc": [
+     "Xu"
+    ],
+    "ThienGiai": [
      "Xu"
     ],
     "ThienHinh": [
@@ -14030,6 +15572,9 @@
     ],
     "ThienKhong": [
      "Yin"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Hai"
@@ -14057,6 +15602,12 @@
     ],
     "ThienTru": [
      "Si"
+    ],
+    "ThienY": [
+     "Yin"
+    ],
+    "VanTinh": [
+     "You"
     ]
    },
    "boshi": {
@@ -14283,6 +15834,21 @@
     "CoThan": [
      "Si"
     ],
+    "DaoHoa": [
+     "Zi"
+    ],
+    "DauQuan": [
+     "Wu"
+    ],
+    "DiaGiai": [
+     "Chou"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Yin"
+    ],
     "GiaiThan": [
      "Wei"
     ],
@@ -14294,6 +15860,9 @@
     ],
     "LongTri": [
      "Wei"
+    ],
+    "LuuHa": [
+     "Mao"
     ],
     "NguyetDuc": [
      "Shen"
@@ -14310,6 +15879,9 @@
     "QuaTu": [
      "Chou"
     ],
+    "QuocAn": [
+     "Si"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -14318,6 +15890,9 @@
     ],
     "ThienDuc": [
      "Zi"
+    ],
+    "ThienGiai": [
+     "Shen"
     ],
     "ThienHinh": [
      "Mao"
@@ -14332,6 +15907,9 @@
      "Mao"
     ],
     "ThienKhong": [
+     "Chen"
+    ],
+    "ThienLa": [
      "Chen"
     ],
     "ThienPhuc": [
@@ -14360,6 +15938,12 @@
     ],
     "ThienTru": [
      "Wu"
+    ],
+    "ThienY": [
+     "Wei"
+    ],
+    "VanTinh": [
+     "Zi"
     ]
    },
    "boshi": {
@@ -14587,6 +16171,21 @@
     "CoThan": [
      "Shen"
     ],
+    "DaoHoa": [
+     "Mao"
+    ],
+    "DauQuan": [
+     "You"
+    ],
+    "DiaGiai": [
+     "Wu"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Xu"
+    ],
     "GiaiThan": [
      "Chen"
     ],
@@ -14598,6 +16197,9 @@
     ],
     "LongTri": [
      "Xu"
+    ],
+    "LuuHa": [
+     "Wei"
     ],
     "NguyetDuc": [
      "Hai"
@@ -14614,6 +16216,9 @@
     "QuaTu": [
      "Chen"
     ],
+    "QuocAn": [
+     "Chou"
+    ],
     "TamThai": [
      "Wu"
     ],
@@ -14622,6 +16227,9 @@
     ],
     "ThienDuc": [
      "Mao"
+    ],
+    "ThienGiai": [
+     "Wu"
     ],
     "ThienHinh": [
      "Shen"
@@ -14637,6 +16245,9 @@
     ],
     "ThienKhong": [
      "Wei"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Zi"
@@ -14664,6 +16275,12 @@
     ],
     "ThienTru": [
      "Zi"
+    ],
+    "ThienY": [
+     "Zi"
+    ],
+    "VanTinh": [
+     "Shen"
     ]
    },
    "boshi": {
@@ -14890,6 +16507,21 @@
     "CoThan": [
      "Yin"
     ],
+    "DaoHoa": [
+     "You"
+    ],
+    "DauQuan": [
+     "Zi"
+    ],
+    "DiaGiai": [
+     "Yin"
+    ],
+    "DiaVong": [
+     "Xu"
+    ],
+    "DuongPhu": [
+     "Chou"
+    ],
     "GiaiThan": [
      "Xu"
     ],
@@ -14901,6 +16533,9 @@
     ],
     "LongTri": [
      "Chen"
+    ],
+    "LuuHa": [
+     "Shen"
     ],
     "NguyetDuc": [
      "Si"
@@ -14917,6 +16552,9 @@
     "QuaTu": [
      "Xu"
     ],
+    "QuocAn": [
+     "Chen"
+    ],
     "TamThai": [
      "Chen"
     ],
@@ -14925,6 +16563,9 @@
     ],
     "ThienDuc": [
      "You"
+    ],
+    "ThienGiai": [
+     "Xu"
     ],
     "ThienHinh": [
      "Chen"
@@ -14940,6 +16581,9 @@
     ],
     "ThienKhong": [
      "Chou"
+    ],
+    "ThienLa": [
+     "Chen"
     ],
     "ThienPhuc": [
      "Wu"
@@ -14967,6 +16611,12 @@
     ],
     "ThienTru": [
      "Yin"
+    ],
+    "ThienY": [
+     "Shen"
+    ],
+    "VanTinh": [
+     "Hai"
     ]
    },
    "boshi": {
