@@ -8,6 +8,7 @@ import dev.platform.reading.tuvi.domain.KnowledgeKey;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -64,14 +65,27 @@ class JsonlKnowledgeImporterIT {
     return Files.writeString(tmp.resolve(name), String.join("\n", lines) + "\n");
   }
 
+  /** Records in the real knowledge tree (frames, daily, doctrine); grows as the corpus grows. */
+  private static int seedRecords() throws IOException {
+    int n = 0;
+    try (Stream<Path> s = Files.walk(SEED)) {
+      for (Path f : s.filter(p -> p.getFileName().toString().endsWith(".jsonl")).toList()) {
+        n += (int) Files.readAllLines(f).stream().filter(l -> !l.isBlank()).count();
+      }
+    }
+    return n;
+  }
+
   @Test
-  void first_import_inserts_seed_and_second_is_a_noop() {
+  void first_import_inserts_seed_and_second_is_a_noop() throws IOException {
+    int seed = seedRecords();
+    assertThat(seed).isGreaterThanOrEqualTo(24);
     ImportResult first = importer.importDir(SEED);
-    assertThat(first).isEqualTo(new ImportResult(24, 0, 0));
+    assertThat(first).isEqualTo(new ImportResult(seed, 0, 0));
     assertThat(port.version()).isEqualTo(1);
 
     ImportResult second = importer.importDir(SEED);
-    assertThat(second).isEqualTo(new ImportResult(0, 0, 24));
+    assertThat(second).isEqualTo(new ImportResult(0, 0, seed));
     assertThat(port.version()).isEqualTo(1);
   }
 
