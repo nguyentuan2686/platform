@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use platform_core::messaging::{Envelope, EventHandler, MalformedEvent};
+use sqlx::postgres::PgDatabaseError;
 use sqlx::{Postgres, Transaction};
 use tracing::info;
 
@@ -19,8 +20,9 @@ pub const CONSUMER_NAME: &str = "notify-svc";
 ///
 /// Invalid `data` (missing/mistyped field, or rejected by the domain, e.g. a malformed total) can
 /// never succeed, so it is returned as [`MalformedEvent`]: the runner logs it at WARN and commits
-/// past it instead of retrying forever. Repository errors are transient and retried. Cancel-safe:
-/// the only await is inside the runner's transaction, which is rolled back if dropped.
+/// past it instead of retrying forever. The same applies to data Postgres rejects (SQLSTATE class
+/// 22/23, see [`rejected_by_database`]); every other repository error is transient and retried.
+/// Cancel-safe: the only await is inside the runner's transaction, which is rolled back if dropped.
 pub struct OrderPlacedHandler<R> {
     service: Arc<NotificationService<R>>,
 }
@@ -44,6 +46,40 @@ fn parse_data(data: &serde_json::Value) -> Result<OrderPlaced, MalformedEvent> {
             MalformedEvent::new(format!("data.{path} has an invalid value"))
         }
     })
+}
+
+/// SQLSTATE class 22 (data exception, e.g. `\u0000` in text) or 23 (integrity constraint
+/// violation): Postgres rejects the event's data itself, so retrying can never succeed.
+fn is_invalid_data_sqlstate(code: &str) -> bool {
+    code.len() == 5 && (code.starts_with("22") || code.starts_with("23"))
+}
+
+/// `Some` when a repository error is Postgres rejecting the data (see
+/// [`is_invalid_data_sqlstate`]). The reason names the SQLSTATE and, when Postgres reports them,
+/// the column or constraint; never the server message, which can echo values.
+fn rejected_by_database(e: &anyhow::Error) -> Option<MalformedEvent> {
+    let db = e
+        .chain()
+        .find_map(|c| c.downcast_ref::<sqlx::Error>())?
+        .as_database_error()?;
+    let code = db.code()?;
+    if !is_invalid_data_sqlstate(&code) {
+        return None;
+    }
+    let column = db
+        .try_downcast_ref::<PgDatabaseError>()
+        .and_then(PgDatabaseError::column);
+    let mut reason = format!("data rejected by the database (SQLSTATE {code}");
+    if let Some(column) = column {
+        reason.push_str(", column ");
+        reason.push_str(column);
+    }
+    if let Some(constraint) = db.constraint() {
+        reason.push_str(", constraint ");
+        reason.push_str(constraint);
+    }
+    reason.push(')');
+    Some(MalformedEvent::new(reason))
 }
 
 #[async_trait]
@@ -71,6 +107,10 @@ impl<R: NotificationRepositoryPort + 'static> EventHandler for OrderPlacedHandle
             Err(AppError::Domain(e)) => {
                 Err(MalformedEvent::new(format!("data rejected: {e}")).into())
             }
+            Err(AppError::Repository(e)) => match rejected_by_database(&e) {
+                Some(m) => Err(m.into()),
+                None => Err(anyhow::Error::new(AppError::Repository(e))),
+            },
             Err(e) => Err(anyhow::Error::new(e)),
         }
     }
@@ -107,5 +147,82 @@ mod tests {
             parse_data(&json!("secret-value")).unwrap_err().reason(),
             "data is not an OrderPlaced object"
         );
+    }
+
+    /// Synthetic driver error: lets the classification be tested without a database.
+    #[derive(Debug)]
+    struct FakeDbError {
+        code: &'static str,
+        constraint: Option<&'static str>,
+    }
+    impl std::fmt::Display for FakeDbError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("invalid input syntax: \"secret-value\"")
+        }
+    }
+    impl std::error::Error for FakeDbError {}
+    impl sqlx::error::DatabaseError for FakeDbError {
+        fn message(&self) -> &'static str {
+            "invalid input syntax: \"secret-value\""
+        }
+        fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+            Some(self.code.into())
+        }
+        fn constraint(&self) -> Option<&str> {
+            self.constraint
+        }
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::Other
+        }
+    }
+
+    fn repo_error(code: &'static str, constraint: Option<&'static str>) -> anyhow::Error {
+        anyhow::Error::new(sqlx::Error::Database(Box::new(FakeDbError {
+            code,
+            constraint,
+        })))
+        .context("inserting notification")
+    }
+
+    #[test]
+    fn data_exception_and_integrity_classes_are_invalid_data() {
+        for code in ["22021", "22P02", "22001", "23505", "23502", "23514"] {
+            assert!(is_invalid_data_sqlstate(code), "{code}");
+        }
+        for code in [
+            "40001", "40P01", "08006", "53300", "57014", "42P01", "2", "",
+        ] {
+            assert!(!is_invalid_data_sqlstate(code), "{code}");
+        }
+    }
+
+    #[test]
+    fn database_rejection_becomes_malformed_naming_code_and_constraint_not_values() {
+        let m = rejected_by_database(&repo_error("23505", Some("notifications_pkey")))
+            .expect("integrity violation is permanent");
+        assert!(m.reason().contains("23505"), "{}", m.reason());
+        assert!(m.reason().contains("notifications_pkey"), "{}", m.reason());
+        assert!(!m.reason().contains("secret-value"), "{}", m.reason());
+
+        let m = rejected_by_database(&repo_error("22021", None)).expect("data exception");
+        assert!(m.reason().contains("22021"), "{}", m.reason());
+        assert!(!m.reason().contains("secret-value"), "{}", m.reason());
+    }
+
+    #[test]
+    fn transient_and_non_database_errors_stay_retryable() {
+        assert!(rejected_by_database(&repo_error("40001", None)).is_none());
+        assert!(rejected_by_database(&repo_error("08006", None)).is_none());
+        assert!(rejected_by_database(&anyhow::Error::new(sqlx::Error::PoolTimedOut)).is_none());
+        assert!(rejected_by_database(&anyhow::anyhow!("db down")).is_none());
     }
 }

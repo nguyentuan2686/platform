@@ -456,6 +456,16 @@ async fn invalid_data_is_skipped_and_consumer_continues(env: &Env) -> anyhow::Re
             "data": {"order_id": Uuid::new_v4()}
         }))?;
         env.produce(&missing_field, None).await?;
+        // Valid JSON and domain-valid, but Postgres rejects NUL in text (SQLSTATE 22021).
+        let nul_customer = Uuid::new_v4();
+        let nul_event = serde_json::to_vec(&serde_json::json!({
+            "event_id": Uuid::new_v4(),
+            "event_type": "OrderPlaced",
+            "occurred_at": "2026-11-24T10:15:30Z",
+            "data": {"order_id": nul_customer, "customer_id": "c\u{0}1",
+                     "total": "1.00", "item_count": 1}
+        }))?;
+        env.produce(&nul_event, None).await?;
         let good = Uuid::new_v4();
         env.produce(&envelope(Uuid::new_v4(), good, "3.00"), None)
             .await?;
@@ -468,6 +478,10 @@ async fn invalid_data_is_skipped_and_consumer_continues(env: &Env) -> anyhow::Re
         ensure!(
             count_rows(&db_url, bad_total).await? == 0,
             "invalid total stored"
+        );
+        ensure!(
+            count_rows(&db_url, nul_customer).await? == 0,
+            "NUL customer_id stored"
         );
         Ok(())
     }
