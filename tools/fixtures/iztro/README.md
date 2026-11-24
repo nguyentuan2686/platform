@@ -17,7 +17,7 @@ daily flow layers).
 
 ## Reference
 
-- Package: [`iztro`](https://www.npmjs.com/package/iztro) **2.5.8** by SylarLong, licence
+- Package: [`iztro`](https://www.npmjs.com/package/iztro) **2.6.3** by SylarLong, licence
   **MIT**, pinned with its dependencies in `package-lock.json`.
 - Output names are zh-CN; the test maps them to chart-svc keys. Default config,
   `fixLeap = true` (iztro's default). Seeded PRNG, no clock: the output is reproducible.
@@ -62,20 +62,20 @@ daily flow layers).
 - **Month can chi** is not compared (iztro may use solar terms); the chart fields above
   do not depend on it.
 
-## Known engine differences (asserted exactly)
+## Why 2.6.3, not 2.5.8
 
-x-iztro ports iztro 2.6.3; iztro changed three brightness values in the Dậu (酉) palace
-after 2.5.8. Checked by diffing `lib/data/stars.js` of iztro 2.5.8 and 2.6.3 (no other
-brightness or Tứ Hóa table differs):
+The plan first pinned iztro 2.5.8. x-iztro 0.9.0 ports 2.6.3, and upstream corrected
+three brightness values in the Dậu (酉) palace after 2.5.8; diffing `lib/data/stars.js`
+of the two versions shows no other brightness or Tứ Hóa table change:
 
 | Star | 2.5.8 | 2.6.3 / x-iztro | chart-svc (5 levels) |
 |---|---|---|---|
-| 太阳 Thái Dương | 陷 | 平 | Bình (not Hãm) |
-| 太阴 Thái Âm | 不 | 旺 | Vượng (not Bình) |
-| 七杀 Thất Sát | 庙 | 旺 | Vượng (not Miếu) |
+| 太阳 Thái Dương | 陷 | 平 | Bình |
+| 太阴 Thái Âm | 不 | 旺 | Vượng |
+| 七杀 Thất Sát | 庙 | 旺 | Vượng |
 
-`golden.rs` lists exactly these three (`ENGINE_BRIGHTNESS_DIFFERENCES`); any other
-difference fails the test, and so does a listed one that stops occurring.
+The fixture therefore comes from the version the engine ports, and `golden.rs` has no
+exceptions: every field of every case must match.
 
 ## Regenerate
 

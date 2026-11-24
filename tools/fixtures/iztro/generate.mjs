@@ -182,7 +182,7 @@ for (let y = 1900; y <= 2099; y++) {
 }
 
 // One case per line keeps diffs of a regenerated fixture readable.
-const SOURCE = 'iztro@2.5.8 (MIT), zh-CN names, default config, fixLeap=true; tools/fixtures/iztro/generate.mjs';
+const SOURCE = 'iztro@2.6.3 (MIT), zh-CN names, default config, fixLeap=true; tools/fixtures/iztro/generate.mjs';
 process.stdout.write(`{\n"source": ${JSON.stringify(SOURCE)},\n"leapEquivalenceChecks": ${leapChecks},\n"cases": [\n`);
 process.stdout.write(cases.map((c) => JSON.stringify(c)).join(',\n'));
 process.stdout.write('\n]\n}\n');

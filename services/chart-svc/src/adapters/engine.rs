@@ -13,6 +13,26 @@
 //! follow the VN calendar too. The flow layers depend on that date only through the
 //! year's can chi, the month (with the same leap rule) and the day, except the daily stem,
 //! which is the real day's can chi; the adapter sets it and its Tứ Hóa.
+//!
+//! # Why three VN date adaptations exist
+//!
+//! The engine only knows the official Chinese calendar; Vietnam's (UTC+7) sometimes
+//! differs. Without these, some VN births would fail or be charted on the wrong month:
+//!
+//! 1. **VN-only leap months** (e.g. 1985 leap 2, which China did not have): the engine
+//!    rejects or ignores the leap flag, so days 1-15 go in as plain month m and days
+//!    16-30 as plain month m + 1 — exactly how iztro's `fixLeap` charts a real leap
+//!    month (checked on every real leap month 1900-2099 by the fixture generator).
+//! 2. **Day 30 of a month that has 29 days in the engine's calendar**: no engine date
+//!    exists, so the same month and day 60·k years away is used; the year's can chi,
+//!    and therefore the whole chart, is unchanged.
+//! 3. **Flows on the chart's calendar**: feeding the real solar day would make lưu
+//!    nguyệt / lưu nhật follow the Chinese calendar on days the calendars disagree
+//!    (300 days in 2020-2050, e.g. Tết 2030), so the flow day goes through 1 and 2 as
+//!    well and only the daily stem comes from the real day.
+//!
+//! `tests::every_vn_and_cn_day_1900_2100_has_an_engine_date` proves every day in the
+//! supported range maps to an engine date.
 
 use crate::application::birth::NormalizedBirth;
 use crate::application::ports::ZiweiEngine;
