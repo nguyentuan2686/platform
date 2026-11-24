@@ -144,6 +144,22 @@ class JsonlKnowledgeImporterIT {
     assertThat(count()).isZero();
   }
 
+  @Test
+  void nested_directories_are_imported_and_errors_carry_the_relative_path() throws IOException {
+    Files.createDirectories(tmp.resolve("doctrine"));
+    write("doctrine/x.vi.jsonl", line("tuvi:frame=missing", "chưa có"));
+    write("a.jsonl", line("tuvi:frame=closing", "hẹn gặp"));
+    importer.importDir(tmp);
+    assertThat(count()).isEqualTo(2);
+    assertThat(port.find(KnowledgeKey.frame("missing"), "vi")).contains("chưa có");
+
+    write("doctrine/x.vi.jsonl", line("tuvi:frame=missing", ""));
+    assertThatThrownBy(() -> importer.importDir(tmp))
+        .isInstanceOf(KnowledgeImportException.class)
+        .hasMessageContaining("doctrine")
+        .hasMessageContaining("x.vi.jsonl:1");
+  }
+
   private void assertRejected(String first, String second, String where) throws IOException {
     write("bad.jsonl", first, second);
     assertThatThrownBy(() -> importer.importDir(tmp))

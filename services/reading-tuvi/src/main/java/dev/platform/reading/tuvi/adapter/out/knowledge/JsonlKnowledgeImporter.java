@@ -142,8 +142,12 @@ public class JsonlKnowledgeImporter {
 
   private List<Record> parseAll(Path dir) {
     List<Path> files;
-    try (Stream<Path> s = Files.list(dir)) {
-      files = s.filter(p -> p.getFileName().toString().endsWith(".jsonl")).sorted().toList();
+    try (Stream<Path> s = Files.walk(dir)) {
+      files =
+          s.filter(Files::isRegularFile)
+              .filter(p -> p.getFileName().toString().endsWith(".jsonl"))
+              .sorted()
+              .toList();
     } catch (IOException e) {
       throw new KnowledgeImportException("cannot read knowledge dir " + dir, e);
     }
@@ -160,7 +164,7 @@ public class JsonlKnowledgeImporter {
         if (lines.get(i).isBlank()) {
           continue;
         }
-        String where = file + ":" + (i + 1);
+        String where = dir.relativize(file) + ":" + (i + 1);
         Record r = parseLine(lines.get(i), where);
         String id = identity(r.key, r.school, r.lang);
         String first = seen.putIfAbsent(id, where);

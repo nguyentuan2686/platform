@@ -45,8 +45,11 @@ class KnowledgeFilesTest {
   }
 
   private static List<Path> files() throws IOException {
-    try (Stream<Path> s = Files.list(KNOWLEDGE)) {
-      return s.filter(p -> p.getFileName().toString().endsWith(".jsonl")).sorted().toList();
+    try (Stream<Path> s = Files.walk(KNOWLEDGE)) {
+      return s.filter(Files::isRegularFile)
+          .filter(p -> p.getFileName().toString().endsWith(".jsonl"))
+          .sorted()
+          .toList();
     }
   }
 
@@ -63,7 +66,7 @@ class KnowledgeFilesTest {
           continue;
         }
         JsonNode node = JsonMapper.shared().readTree(line);
-        assertThat(schema.validate(node)).as("%s:%d", file, n).isEmpty();
+        assertThat(schema.validate(node)).as("%s:%d", KNOWLEDGE.relativize(file), n).isEmpty();
         new KnowledgeKey(node.get("key").stringValue());
         String identity =
             node.get("key").stringValue()
