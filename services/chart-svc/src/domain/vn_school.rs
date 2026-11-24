@@ -200,7 +200,7 @@ pub fn apply_vn_flow(flow: &mut Flow) {
     }
 }
 
-/// Moves `star` to the palace at `branch` (minor stars, in the order the engine lists).
+/// Moves `star` to the palace at `branch`: appended to its minor stars, after the engine's order.
 fn move_minor(chart: &mut Chart, star: StarKey, branch: Branch) {
     let mut moved = None;
     for palace in &mut chart.palaces {
@@ -232,12 +232,8 @@ fn move_adjective(chart: &mut Chart, star: AdjStarKey, branch: Branch) {
 
 /// Applies the Vietnamese school to a chart cast by the engine: the Vietnamese placement of
 /// Khôi/Việt, Hỏa/Linh, Giải Thần and Phá Toái, brightness from [`vn_brightness`] and the
-/// natal Tứ Hóa of the year stem. `flow`, when given, gets the Vietnamese Tứ Hóa on its
-/// layers.
-pub fn apply_vn_school(chart: &mut Chart, flow: Option<&mut Flow>) {
-    if let Some(flow) = flow {
-        apply_vn_flow(flow);
-    }
+/// natal Tứ Hóa of the year stem. Flows are handled by [`apply_vn_flow`].
+pub fn apply_vn_school(chart: &mut Chart) {
     let (khoi, viet) = vn_khoi_viet(chart.year.stem);
     let (hoa, linh) = vn_hoa_linh(chart.year, chart.hour_branch, chart.gender);
     move_minor(chart, StarKey::ThienKhoi, khoi);
@@ -425,7 +421,7 @@ mod tests {
 
     #[test]
     fn hoa_linh_follow_polarity_and_hour() {
-        use Branch::{Chou, Hai, Mao, Shen, Si, Wei, Yin, Zi};
+        use Branch::{Chou, Hai, Mao, Si, Wei, Yin, Zi};
         let jia_zi = CanChi {
             stem: Stem::Jia,
             branch: Zi,
@@ -435,7 +431,6 @@ mod tests {
         assert_eq!(vn_hoa_linh(jia_zi, Mao, Gender::Male), (Si, Wei));
         // Same chart, female: "-" polarity runs the other way.
         assert_eq!(vn_hoa_linh(jia_zi, Mao, Gender::Female), (Hai, Chou));
-        let _ = Shen;
     }
 
     #[test]

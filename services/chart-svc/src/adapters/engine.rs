@@ -246,7 +246,7 @@ fn map_chart(b: &NormalizedBirth, g: Gender, a: &iz::Astrolabe) -> anyhow::Resul
         },
     };
     if b.calendar == CalendarKind::Vn {
-        apply_vn_school(&mut chart, None);
+        apply_vn_school(&mut chart);
     }
     Ok(chart)
 }

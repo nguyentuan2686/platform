@@ -7,12 +7,15 @@
 //! adjective stars, the rings) differs by school; `report_school_differences` prints the
 //! diff table, run with `--ignored --nocapture`.
 
+mod common;
+
 use chart_svc::adapters::engine::IztroAdapter;
 use chart_svc::application::birth::NormalizedBirth;
 use chart_svc::application::service::{ChartRequest, ChartService};
 use chart_svc::domain::calendar::{Branch, CalendarKind};
-use chart_svc::domain::chart::{AdjStarKey, Brightness, Chart, Gender, Palace, PalaceKey, StarKey};
+use chart_svc::domain::chart::{Brightness, Chart, Gender, Palace, PalaceKey, StarKey};
 use chart_svc::domain::vn_school::vn_brightness;
+use common::assert_each_star_once;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use time::macros::format_description;
@@ -235,34 +238,13 @@ fn fixture_has_fifty_cases_covering_every_hour_and_both_genders() {
     }
 }
 
-/// Every star key (major, minor, adjective) is on exactly one palace of the chart.
-fn assert_each_star_once(id: &str, chart: &Chart) {
-    for &star in StarKey::ALL {
-        let n = chart
-            .palaces
-            .iter()
-            .flat_map(|p| p.major.iter().chain(&p.minor))
-            .filter(|st| st.key == star)
-            .count();
-        assert_eq!(n, 1, "{id}: {star:?} appears {n} times");
-    }
-    for &star in AdjStarKey::ALL {
-        let n = chart
-            .palaces
-            .iter()
-            .flat_map(|p| &p.adjective)
-            .filter(|a| **a == star)
-            .count();
-        assert_eq!(n, 1, "{id}: {star:?} appears {n} times");
-    }
-}
-
 #[test]
 fn every_star_appears_exactly_once_in_each_of_the_fifty_charts() {
     for case in fixture() {
         assert_each_star_once(s(&case["id"]), &chart_of(&case));
     }
 }
+
 #[test]
 fn must_match_facts_equal_lasotuvi() {
     let cases = fixture();

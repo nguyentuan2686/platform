@@ -1,5 +1,5 @@
-//! Vietnamese school: flow Tứ Hóa on `calendar=VN` charts (CN keeps iztro's), and every
-//! star appearing exactly once per chart.
+//! Vietnamese school: flow Tứ Hóa on `calendar=VN` charts (CN keeps iztro's). The "each
+//! star exactly once per chart" checks live in `golden.rs` and `vn_crosscheck.rs`.
 
 use chart_svc::adapters::engine::IztroAdapter;
 use chart_svc::application::birth::NormalizedBirth;
