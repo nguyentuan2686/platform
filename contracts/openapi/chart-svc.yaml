@@ -81,6 +81,8 @@ components:
     ChartRequest:
       type: object
       required: [birth, gender]
+      additionalProperties: false
+      description: Unknown fields are rejected (400 on `body`).
       properties:
         birth:
           type: string
@@ -111,16 +113,24 @@ components:
             Lunar calendar of the lunar dates (VN computed at UTC+7, CN at UTC+8). It changes
             only the lunar date, never the hour branch.
     DailyRequest:
-      allOf:
-        - $ref: '#/components/schemas/ChartRequest'
-        - type: object
-          required: [date]
-          properties:
-            date:
-              type: string
-              format: date
-              description: Solar day to cast, YYYY-MM-DD, years 1900-2100.
-              examples: ['2026-11-25']
+      type: object
+      required: [birth, gender, date]
+      additionalProperties: false
+      description: The ChartRequest fields plus `date`; unknown fields are rejected (400 on `body`).
+      properties:
+        birth:
+          $ref: '#/components/schemas/ChartRequest/properties/birth'
+        zone:
+          $ref: '#/components/schemas/ChartRequest/properties/zone'
+        gender:
+          $ref: '#/components/schemas/ChartRequest/properties/gender'
+        calendar:
+          $ref: '#/components/schemas/ChartRequest/properties/calendar'
+        date:
+          type: string
+          format: date
+          description: Solar day to cast, YYYY-MM-DD, years 1900-2100.
+          examples: ['2026-11-25']
     Lunar:
       type: object
       required: [year, month, day, leap]

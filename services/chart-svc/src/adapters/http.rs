@@ -1,18 +1,19 @@
 //! HTTP API: `POST /tuvi/chart`, `POST /tuvi/daily`, the platform health endpoints and a
-//! problem+json 404 fallback.
+//! problem+json `not-found` fallbacks (unknown path, wrong method).
 //!
-//! The JSON DTOs (camelCase) live only here; the domain stays serde-free. Request fields are
-//! validated by hand so that every bad input names its field (`birth`, `zone`, `gender`,
-//! `calendar`, `date`; `body` for malformed JSON or a non-object body) in a 400 problem.
+//! The JSON DTOs (camelCase) live only here; the domain stays serde-free. Request DTOs keep
+//! each field as raw JSON and deny unknown fields; the fields are validated by hand so that
+//! every bad input names its field (`birth`, `zone`, `gender`, `calendar`, `date`; `body` for
+//! malformed JSON, a non-object body or an unknown field) in a 400 problem.
 
 use axum::extract::{FromRequest, Request, State};
 use axum::routing::post;
 use axum::{Json, Router};
 use platform_core::http::{health_router, trace_layer, ApiError, FieldError};
-use serde::Serialize;
-use serde_json::{Map, Value};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use time::{Date, Month, PrimitiveDateTime, Time};
-use tracing::error;
 
 use crate::app::AppState;
 use crate::application::birth::{normalize, BirthError};
@@ -27,8 +28,8 @@ const DEFAULT_ZONE: &str = "Asia/Ho_Chi_Minh";
 /// Supported solar years for `date`.
 const YEARS: std::ops::RangeInclusive<i32> = 1900..=2100;
 
-/// Router with the two Tu Vi endpoints, `/health/live`, `/health/ready` and a `not-found`
-/// problem fallback, traced per request.
+/// Router with the two Tu Vi endpoints, `/health/live`, `/health/ready` and `not-found`
+/// problem fallbacks for unknown paths and wrong methods, traced per request.
 pub fn router(state: AppState) -> Router {
     let readiness = state.readiness.clone();
     Router::new()
@@ -37,6 +38,7 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
         .merge(health_router(readiness))
         .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed)
         .layer(trace_layer())
 }
 
@@ -44,6 +46,15 @@ async fn not_found(req: Request) -> ApiError {
     ApiError::NotFound {
         resource: "route",
         id: req.uri().path().to_owned(),
+    }
+}
+
+/// A known path with the wrong method. platform-core's `ApiError` has no 405 variant, so
+/// this is the closest one, a `not-found` problem naming the method and path.
+async fn method_not_allowed(req: Request) -> ApiError {
+    ApiError::NotFound {
+        resource: "route",
+        id: format!("{} {}", req.method(), req.uri().path()),
     }
 }
 
@@ -74,6 +85,56 @@ fn fe(field: &str, message: &str) -> FieldError {
     }
 }
 
+/// Fields of a `POST /tuvi/chart` body. Every value stays raw JSON so each field is
+/// validated by hand and named in errors; unknown fields are rejected on `body`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChartFields {
+    birth: Option<Value>,
+    zone: Option<Value>,
+    gender: Option<Value>,
+    calendar: Option<Value>,
+}
+
+/// Fields of a `POST /tuvi/daily` body: the chart fields plus `date`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DailyFields {
+    birth: Option<Value>,
+    zone: Option<Value>,
+    gender: Option<Value>,
+    calendar: Option<Value>,
+    date: Option<Value>,
+}
+
+impl DailyFields {
+    fn split(self) -> (ChartFields, Option<Value>) {
+        let chart = ChartFields {
+            birth: self.birth,
+            zone: self.zone,
+            gender: self.gender,
+            calendar: self.calendar,
+        };
+        (chart, self.date)
+    }
+}
+
+/// Reads the body's fields; a non-object body or an unknown field is a 400 on `body`.
+fn fields<T: DeserializeOwned>(body: Value) -> Result<T, ApiError> {
+    if !body.is_object() {
+        return Err(field_error("body", "must be a JSON object"));
+    }
+    // Every field is an optional raw value, so only an unknown field can fail here.
+    serde_json::from_value(body).map_err(|_| field_error("body", "has an unknown field"))
+}
+
+/// The `date` field: not part of the chart endpoint, required (raw value) for daily.
+#[derive(Debug, Clone, Copy)]
+enum DateField<'a> {
+    NotUsed,
+    Required(Option<&'a Value>),
+}
+
 /// The parts of a request that need no zone lookup.
 struct Parsed {
     local: PrimitiveDateTime,
@@ -83,12 +144,10 @@ struct Parsed {
     date: Option<Date>,
 }
 
-fn parse(body: &Value, want_date: bool) -> Result<Parsed, ApiError> {
-    let Some(obj) = body.as_object() else {
-        return Err(field_error("body", "must be a JSON object"));
-    };
+/// Validates the fields (and `date` for the daily endpoint).
+fn parse(f: &ChartFields, date: DateField<'_>) -> Result<Parsed, ApiError> {
     let mut errors = Vec::new();
-    let local = required_str(obj, "birth", &mut errors).and_then(|s| {
+    let local = required_str(f.birth.as_ref(), "birth", &mut errors).and_then(|s| {
         parse_birth(s).or_else(|| {
             errors.push(fe(
                 "birth",
@@ -97,8 +156,8 @@ fn parse(body: &Value, want_date: bool) -> Result<Parsed, ApiError> {
             None
         })
     });
-    let zone = optional_str(obj, "zone", &mut errors).unwrap_or(DEFAULT_ZONE);
-    let gender = required_str(obj, "gender", &mut errors).and_then(|s| match s {
+    let zone = optional_str(f.zone.as_ref(), "zone", &mut errors).unwrap_or(DEFAULT_ZONE);
+    let gender = required_str(f.gender.as_ref(), "gender", &mut errors).and_then(|s| match s {
         "male" => Some(Gender::Male),
         "female" => Some(Gender::Female),
         _ => {
@@ -106,7 +165,7 @@ fn parse(body: &Value, want_date: bool) -> Result<Parsed, ApiError> {
             None
         }
     });
-    let calendar = match optional_str(obj, "calendar", &mut errors) {
+    let calendar = match optional_str(f.calendar.as_ref(), "calendar", &mut errors) {
         None | Some("VN") => Some(CalendarKind::Vn),
         Some("CN") => Some(CalendarKind::Cn),
         Some(_) => {
@@ -114,8 +173,12 @@ fn parse(body: &Value, want_date: bool) -> Result<Parsed, ApiError> {
             None
         }
     };
-    let date = if want_date {
-        required_str(obj, "date", &mut errors).and_then(|s| {
+    let date = match date {
+        DateField::NotUsed => None,
+        DateField::Required(raw) => Some(raw),
+    };
+    let date = date.and_then(|raw| {
+        required_str(raw, "date", &mut errors).and_then(|s| {
             parse_date(s)
                 .filter(|d| YEARS.contains(&d.year()))
                 .or_else(|| {
@@ -123,9 +186,7 @@ fn parse(body: &Value, want_date: bool) -> Result<Parsed, ApiError> {
                     None
                 })
         })
-    } else {
-        None
-    };
+    });
     match (local, gender, calendar) {
         (Some(local), Some(gender), Some(calendar)) if errors.is_empty() => Ok(Parsed {
             local,
@@ -140,11 +201,11 @@ fn parse(body: &Value, want_date: bool) -> Result<Parsed, ApiError> {
 
 /// A required string field; records an error when missing or not a string.
 fn required_str<'a>(
-    obj: &'a Map<String, Value>,
+    v: Option<&'a Value>,
     name: &str,
     errors: &mut Vec<FieldError>,
 ) -> Option<&'a str> {
-    match obj.get(name) {
+    match v {
         None | Some(Value::Null) => {
             errors.push(fe(name, "is required"));
             None
@@ -159,11 +220,11 @@ fn required_str<'a>(
 
 /// An optional string field; `null` counts as absent.
 fn optional_str<'a>(
-    obj: &'a Map<String, Value>,
+    v: Option<&'a Value>,
     name: &str,
     errors: &mut Vec<FieldError>,
 ) -> Option<&'a str> {
-    match obj.get(name) {
+    match v {
         None | Some(Value::Null) => None,
         Some(Value::String(s)) => Some(s),
         Some(_) => {
@@ -227,10 +288,10 @@ fn chart_request(p: &Parsed) -> Result<ChartRequest, ApiError> {
     })
 }
 
+/// An engine failure as a 500; `ApiError::Internal` logs it once, with the cause chain.
 fn engine_failure(e: ChartError) -> ApiError {
-    error!(error = %e, error_type = "ChartEngineError", "chart engine failed");
     let ChartError::Engine(cause) = e;
-    ApiError::Internal(cause)
+    ApiError::Internal(cause.context("chart engine failed"))
 }
 
 // ---------------------------------------------------------------- handlers
@@ -239,7 +300,7 @@ async fn chart(
     State(state): State<AppState>,
     Body(body): Body,
 ) -> Result<Json<ChartDto>, ApiError> {
-    let parsed = parse(&body, false)?;
+    let parsed = parse(&fields::<ChartFields>(body)?, DateField::NotUsed)?;
     let req = chart_request(&parsed)?;
     let chart = state.service.chart(&req).map_err(engine_failure)?;
     Ok(Json(ChartDto::new(&chart, parsed.calendar)))
@@ -249,7 +310,8 @@ async fn daily(
     State(state): State<AppState>,
     Body(body): Body,
 ) -> Result<Json<DailyDto>, ApiError> {
-    let parsed = parse(&body, true)?;
+    let (fields, date) = fields::<DailyFields>(body)?.split();
+    let parsed = parse(&fields, DateField::Required(date.as_ref()))?;
     let req = chart_request(&parsed)?;
     let date = parsed
         .date
@@ -524,23 +586,31 @@ mod tests {
 
     #[test]
     fn parse_collects_field_errors_and_defaults() {
-        let ok = parse(
-            &json!({"birth": "1994-03-12T08:30", "gender": "male"}),
-            false,
-        )
-        .unwrap();
+        let chart = |v: Value| parse(&fields::<ChartFields>(v)?, DateField::NotUsed);
+        let ok = chart(json!({"birth": "1994-03-12T08:30", "gender": "male"})).unwrap();
         assert_eq!(ok.zone, DEFAULT_ZONE);
         assert_eq!(ok.calendar, CalendarKind::Vn);
-        let err = parse(&json!({"birth": 5, "gender": null, "zone": 1}), false);
-        let Err(ApiError::Validation(fields)) = err else {
+        let err = chart(json!({"birth": 5, "gender": null, "zone": 1}));
+        let Err(ApiError::Validation(errs)) = err else {
             panic!("expected validation error");
         };
-        let names: Vec<_> = fields.iter().map(|f| f.field.as_str()).collect();
+        let names: Vec<_> = errs.iter().map(|f| f.field.as_str()).collect();
         assert_eq!(names, ["birth", "zone", "gender"]);
-        assert!(matches!(
-            parse(&json!([1]), false),
-            Err(ApiError::Validation(f)) if f[0].field == "body"
-        ));
+        for bad in [
+            json!([1]),
+            json!({"birth": "1994-03-12T08:30", "gender": "male", "x": 1}),
+        ] {
+            assert!(matches!(
+                chart(bad),
+                Err(ApiError::Validation(f)) if f[0].field == "body"
+            ));
+        }
+        let daily = fields::<DailyFields>(json!({"date": "2026-11-25"})).unwrap();
+        let (f, date) = daily.split();
+        let Err(ApiError::Validation(errs)) = parse(&f, DateField::Required(date.as_ref())) else {
+            panic!("expected validation error");
+        };
+        assert!(errs.iter().all(|e| e.field != "date"));
     }
 
     fn chart_1994() -> Chart {

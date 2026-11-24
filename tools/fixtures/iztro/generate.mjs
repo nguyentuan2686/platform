@@ -237,7 +237,6 @@ for (let i = 0; shiftChecks < 150 || shiftDay30Checks < 30; i++) {
   if (d === 30) shiftDay30Checks += 1;
 }
 
-
 // One case per line keeps diffs of a regenerated fixture readable.
 const SOURCE = 'iztro@2.6.3 (MIT), zh-CN names, default config, fixLeap=true; tools/fixtures/iztro/generate.mjs';
 process.stdout.write(`{\n"source": ${JSON.stringify(SOURCE)},\n"leapEquivalenceChecks": ${leapChecks},\n"shiftEquivalenceChecks": ${shiftChecks},\n"shiftDay30Checks": ${shiftDay30Checks},\n"cases": [\n`);

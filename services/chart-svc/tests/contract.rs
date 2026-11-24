@@ -150,6 +150,19 @@ fn request_schemas_reject_bad_requests() {
     }
     let daily = validator(DAILY_REQ);
     assert!(!daily.is_valid(&base()), "date is required for daily");
+    let mut extra = base();
+    extra["timezone"] = json!("America/New_York");
+    assert!(!chart.is_valid(&extra), "unknown field on chart");
+    let mut extra = daily_body();
+    extra["timezone"] = json!("America/New_York");
+    assert!(!daily.is_valid(&extra), "unknown field on daily");
+    assert!(!chart.is_valid(&daily_body()), "date is not a chart field");
+    let mut bad = daily_body();
+    bad["gender"] = json!("other");
+    assert!(
+        !daily.is_valid(&bad),
+        "daily fields resolve to the chart field schemas"
+    );
 }
 
 #[tokio::test]

@@ -50,6 +50,17 @@ async fn unknown_route_is_a_not_found_problem() {
     assert!(body["trace_id"].is_string(), "{body}");
 }
 
+#[tokio::test]
+async fn wrong_method_on_a_route_is_a_problem() {
+    // platform-core's ApiError has no method-not-allowed variant; the closest is not-found.
+    let (status, ct, body) = get("/tuvi/chart").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(body["type"], "urn:problem:not-found");
+    assert_eq!(body["detail"], "route GET /tuvi/chart not found");
+    assert!(body["trace_id"].is_string(), "{body}");
+}
+
 // ---------------------------------------------------------------- POST /tuvi/*
 
 struct Reply {
@@ -300,6 +311,25 @@ async fn invalid_inputs_are_400_validation_errors_naming_the_field() {
 #[tokio::test]
 async fn invalid_zone_gender_calendar_date_and_body_are_400_naming_the_field() {
     let cases: Vec<(&str, Value, &str)> = vec![
+        (
+            "/tuvi/chart",
+            with(base(), "timezone", json!("America/New_York")),
+            "body",
+        ),
+        (
+            "/tuvi/chart",
+            with(base(), "date", json!("2026-11-25")),
+            "body",
+        ),
+        (
+            "/tuvi/daily",
+            with(
+                with(base(), "date", json!("2026-11-25")),
+                "timezone",
+                json!("UTC"),
+            ),
+            "body",
+        ),
         (
             "/tuvi/chart",
             with(base(), "zone", json!("Mars/Base")),

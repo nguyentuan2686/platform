@@ -140,10 +140,8 @@ pub fn engine_lunar_date(l: LunarDate) -> anyhow::Result<EngineLunar> {
     let month = if l.leap && day > 15 { month + 1 } else { month };
     if month > 12 {
         return Err(anyhow!(
-            "no engine equivalent for lunar {}-{}-{} (leap 12th month, second half)",
-            l.year,
-            l.month,
-            l.day
+            "no engine equivalent in lunar year {} (leap 12th month, second half)",
+            l.year
         ));
     }
     // A remapped leap month may fit in its own year; otherwise move by 60-year cycles.
@@ -158,14 +156,7 @@ pub fn engine_lunar_date(l: LunarDate) -> anyhow::Result<EngineLunar> {
             day,
             leap: false,
         })
-        .ok_or_else(|| {
-            anyhow!(
-                "no engine equivalent for lunar {}-{}-{}",
-                l.year,
-                l.month,
-                l.day
-            )
-        })
+        .ok_or_else(|| anyhow!("no engine equivalent in lunar year {}", l.year))
 }
 
 /// iztro's time index of an hour branch: Tý 0 (early Zi; late Zi, 12, never occurs since
@@ -204,7 +195,8 @@ fn astrolabe(b: &NormalizedBirth, g: Gender) -> anyhow::Result<iz::Astrolabe> {
         iz::Language::ZhCN,
         iz::Config::default(),
     )
-    .with_context(|| format!("engine chart for lunar {date} (leap {})", l.leap))
+    // Logs must not carry the birth date (spec §7): the lunar year at most.
+    .with_context(|| format!("engine chart for lunar year {}", l.year))
 }
 
 fn map_chart(b: &NormalizedBirth, g: Gender, a: &iz::Astrolabe) -> anyhow::Result<Chart> {
@@ -518,20 +510,50 @@ mod tests {
 
     #[test]
     fn every_vn_and_cn_day_1900_2100_has_an_engine_date() {
+        // Every day maps to an engine date; every remapped or shifted one (the engine date
+        // differs from the input) is also a date the engine can convert and cast a chart on.
         let mut day = Date::from_calendar_date(1900, Month::January, 1).unwrap();
         let end = Date::from_calendar_date(2100, Month::December, 31).unwrap();
         let mut failures = vec![];
         let mut seen = HashSet::new();
+        let mut adapted = 0;
         while day <= end {
             for cal in [CalendarKind::Vn, CalendarKind::Cn] {
                 let l = solar_to_lunar(day, cal);
-                if seen.insert(l) && engine_lunar_date(l).is_err() {
-                    failures.push(format!("{cal:?} {l:?}"));
+                if !seen.insert(l) {
+                    continue;
+                }
+                let e = match engine_lunar_date(l) {
+                    Ok(e) => e,
+                    Err(err) => {
+                        failures.push(format!("{cal:?} {l:?}: {err:#}"));
+                        continue;
+                    }
+                };
+                let verbatim = (e.year, e.month, e.day, e.leap)
+                    == (
+                        i64::from(l.year),
+                        u32::from(l.month),
+                        u32::from(l.day),
+                        l.leap,
+                    );
+                if verbatim {
+                    continue;
+                }
+                adapted += 1;
+                if let Err(err) = iz::lunar_to_solar(e.year, e.month, e.day, e.leap) {
+                    failures.push(format!("{cal:?} {l:?} -> {e:?}: lunar_to_solar {err:?}"));
+                }
+                let birth = NormalizedBirth::from_parts(day, Branch::Zi, cal);
+                if let Err(err) = IztroAdapter.chart(&birth, Gender::Female) {
+                    failures.push(format!("{cal:?} {l:?} -> {e:?}: chart {err:#}"));
                 }
             }
             day = day.next_day().unwrap();
         }
         assert!(failures.is_empty(), "{failures:?}");
+        assert!(adapted > 0, "no remapped or shifted date was exercised");
+        eprintln!("adapted engine dates checked: {adapted}");
     }
 
     fn birth_1994() -> NormalizedBirth {

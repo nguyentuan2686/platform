@@ -26,8 +26,10 @@ COPY --from=planner /src/recipe.json recipe.json
 RUN cargo chef cook --release --locked --recipe-path recipe.json -p chart-svc
 COPY . .
 RUN cargo build --release --locked -p chart-svc
-# ldd output stays in the build log: only libc/libm/libgcc_s are needed, all in distroless/cc (no libz, unlike notify-svc).
-RUN ldd target/release/chart-svc
+# ldd output stays in the build log: only libc/libm/libgcc_s are needed, all in distroless/cc.
+# distroless/cc has no libz (notify-svc needs it, chart-svc must not), so linking libz fails the build.
+RUN ldd target/release/chart-svc \
+ && ! ldd target/release/chart-svc | grep -q libz
 
 # distroless/cc: glibc, libgcc; non-root uid 65532. jiff embeds the tz database, so no zoneinfo needed.
 FROM gcr.io/distroless/cc-debian12:nonroot
