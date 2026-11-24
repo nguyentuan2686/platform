@@ -25,6 +25,7 @@ local $/; my $d = JSON::PP->new->utf8->decode(<STDIN>);
 my $MISSING = "Điều này ta chưa lật";
 my $speaker = "**Lão Thiên Cơ:**";
 my $missing = 0;
+my %LEVEL = (Thuan => "Thuận", Binh => "Bình", LuuY => "Lưu ý");
 if ($mode eq "basic") {
   for my $s (@{ $d->{sections} }) {
     print "### $s->{title}\n\n" if defined $s->{title};
@@ -44,7 +45,8 @@ if ($mode eq "basic") {
   print "### Hôm nay ($d->{date}, âm lịch $d->{lunar}, ngày $d->{dayCanChi})\n\n";
   print "$speaker $d->{opening}\n\n";
   for my $a (@{ $d->{areas} }) {
-    print "- **$a->{label}** ($a->{level}): $a->{line}\n";
+    my $lv = $LEVEL{$a->{level}} // $a->{level};
+    print "- **$a->{label}** ($lv): $a->{line}\n";
     $missing++ if index($a->{line}, $MISSING) == 0;
   }
   print "\n$speaker $d->{closing}\n\n";
@@ -54,6 +56,9 @@ if ($mode eq "basic") {
 
 CHI=(Tý Sửu Dần Mão Thìn Tỵ Ngọ Mùi Thân Dậu Tuất Hợi)
 CAN=(Canh Tân Nhâm Quý Giáp Ất Bính Đinh Mậu Kỷ)
+# NOTE: the year can chi is computed from the solar (Gregorian) year, not the lunar year, so it is
+# only right for births after Tết; the three sample dates below are all post-Tết. Do not reuse
+# for January/early-February births.
 header() { # BIRTH GENDER -> header line (hour branch + year only; no full date)
   local birth="$1" gender="$2" y h hr g
   y=${birth:0:4}; h=$((10#${birth:11:2}))

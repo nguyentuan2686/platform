@@ -12,7 +12,7 @@ _Nam, sinh giờ Thìn năm Giáp Tuất_
 
 **Lão Thiên Cơ:** Ở cung Mệnh, ta đọc tính nết bẩm sinh của con: cách con nghĩ, cách con phản ứng và điều con coi trọng. Sách xưa dặn xem cung này trước tiên, vì mọi cung khác đều được nhìn qua lăng kính đó.
 
-**Lão Thiên Cơ:** Nếu Thiên Tướng đắc địa ở Mệnh, con sống ngăn nắp, làm việc đúng mực và giữ lời. Vai người phụ tá giỏi hay người giữ quy trình rất vừa; cứ vững như vậy, cơ hội đứng đầu sẽ tự tìm đến.
+**Lão Thiên Cơ:** Sống ngăn nắp, làm việc đúng mực và giữ lời là nết của con khi Thiên Tướng đắc địa ở Mệnh. Vai người phụ tá giỏi hay người giữ quy trình rất vừa; cứ vững như vậy, cơ hội đứng đầu sẽ tự tìm đến.
 
 ### Cung Thân, nếp sống về sau
 
@@ -72,7 +72,7 @@ _Nam, sinh giờ Thìn năm Giáp Tuất_
 
 **Lão Thiên Cơ:** Tật Ách nói về sức vóc và nhịp sinh hoạt của con, nơi cơ thể nhắc con lúc nào cần nghỉ, lúc nào cần điều chỉnh. Ta chỉ đọc cung này như lời nhắc giữ nếp sống, nó không thay được lời của thầy thuốc.
 
-**Lão Thiên Cơ:** Có Thái Dương ở Tật Ách, con hay làm việc quá sức, ít chịu nghỉ và dễ mỏi mệt mỗi khi thiếu ngủ. Ra nắng sớm, nghỉ ngắn giữa giờ làm và ngủ đủ giấc là cách giữ sức đơn giản nhất.
+**Lão Thiên Cơ:** Có Thái Dương ở Tật Ách, con hay làm việc quá sức, ít chịu nghỉ và dễ mỏi mệt mỗi khi thiếu ngủ. Ra nắng sớm, nghỉ ngắn giữa giờ làm và ngủ đủ giấc, con sẽ thấy người nhẹ và tỉnh hơn hẳn.
 
 **Lão Thiên Cơ:** Hóa Kỵ đóng Tật Ách nhắc con dễ để căng thẳng dồn lại thành mệt mỏi kéo dài. Con hãy giữ giờ ngủ, uống đủ nước, thỉnh thoảng cho mình một ngày nghỉ thật sự, đó là cách giữ sức đơn giản nhất.
 
@@ -98,7 +98,7 @@ _Nam, sinh giờ Thìn năm Giáp Tuất_
 
 **Lão Thiên Cơ:** Phu Thê là cung của tình duyên và hôn nhân: con hợp với người thế nào, và hai người giữ nhau ra sao. Ta đọc ở đây khuynh hướng trong chuyện thương yêu, còn hạnh phúc thì vẫn do hai người cùng vun.
 
-**Lão Thiên Cơ:** Ai đúng ai sai, con và người thương dễ giằng co chuyện đó khi Tử Vi chỉ bình hòa, vì cả hai đều có ý riêng mạnh. Thay câu hỏi ai đúng bằng câu hỏi điều gì tốt cho nhà mình, nhiều nút thắt sẽ tự gỡ.
+**Lão Thiên Cơ:** Ai đúng ai sai, con và người thương dễ giằng co chuyện đó khi Tử Vi bình hòa, vì cả hai đều có ý riêng mạnh. Thay câu hỏi ai đúng bằng câu hỏi điều gì tốt cho nhà mình, nhiều nút thắt sẽ tự gỡ.
 
 **Lão Thiên Cơ:** Tham Lang hãm trong Phu Thê khiến chuyện tình cảm của con dễ có những lúc chông chênh, lòng hay bị cảm xúc nhất thời kéo đi. Chậm lại khi chọn người, coi trọng sự tin cậy hơn sức hút ban đầu; khi đã chọn, cùng nhau giữ lời hứa thì lòng sẽ yên.
 
@@ -120,10 +120,10 @@ _Nam, sinh giờ Thìn năm Giáp Tuất_
 
 **Lão Thiên Cơ:** Hôm nay là 25/11/2026, âm lịch 17/10, ngày Quý Mão, ta nhìn lá số của con theo bốn việc quen thuộc.
 
-- **Công việc** (Binh): Công việc hôm nay đều đều, không lên không xuống, con cứ làm cho tròn phần của mình. Sự đều đặn cũng là một cách tiến bước đấy.
-- **Đi lại** (Thuan): Đường đi hôm nay có vẻ thuận, con ra khỏi nhà thong thả thì dễ gặp người giúp đỡ. Tiện đường thì ngắm cảnh một chút cho vui.
-- **Tiền bạc** (Binh): Tiền bạc hôm nay êm đềm, thu chi cứ theo nếp cũ là ổn. Con ghi sổ vài dòng cho khỏi sót.
-- **Sức khỏe** (Binh): Nếp sinh hoạt hôm nay cứ như thường, con giữ giờ giấc quen thuộc là được. Một tách trà ấm cũng dễ chịu lắm.
+- **Công việc** (Bình): Công việc hôm nay đều đều, không lên không xuống, con cứ làm cho tròn phần của mình. Sự đều đặn cũng là một cách tiến bước đấy.
+- **Đi lại** (Thuận): Đường đi hôm nay có vẻ thuận, con ra khỏi nhà thong thả thì dễ gặp người giúp đỡ. Tiện đường thì ngắm cảnh một chút cho vui.
+- **Tiền bạc** (Bình): Tiền bạc hôm nay êm đềm, thu chi cứ theo nếp cũ là ổn. Con ghi sổ vài dòng cho khỏi sót.
+- **Sức khỏe** (Bình): Nếp sinh hoạt hôm nay cứ như thường, con giữ giờ giấc quen thuộc là được. Một tách trà ấm cũng dễ chịu lắm.
 
 **Lão Thiên Cơ:** Ngày nào cũng là một trang mới, con cứ thong thả mà bước nhé.
 
@@ -137,9 +137,9 @@ _Nữ, sinh giờ Tý năm Mậu Thìn_
 
 **Lão Thiên Cơ:** Ở cung Mệnh, ta đọc tính nết bẩm sinh của con: cách con nghĩ, cách con phản ứng và điều con coi trọng. Sách xưa dặn xem cung này trước tiên, vì mọi cung khác đều được nhìn qua lăng kính đó.
 
-**Lão Thiên Cơ:** Ta thấy lòng tự trọng của con vẫn cao khi Tử Vi chỉ bình hòa, nhưng cái uy chưa tự đến mà phải nhờ việc làm và người cùng chí. Càng gần người giỏi, chịu học hỏi, phong thái dẫn dắt của con càng rõ ra.
+**Lão Thiên Cơ:** Ta thấy lòng tự trọng của con vẫn cao khi Tử Vi ở mức bình hòa, nhưng cái uy chưa tự đến mà phải nhờ việc làm và người cùng chí. Càng gần người giỏi, chịu học hỏi, phong thái dẫn dắt của con càng rõ ra.
 
-**Lão Thiên Cơ:** Nếu Tham Lang hãm ở Mệnh, những cuộc vui và ham muốn trước mắt dễ kéo con đi, tiêu sức lực vào chỗ không đáng. Vài thói quen lành mạnh làm điểm tựa, bạn bè chọn kỹ hơn, sức sống dồi dào của con sẽ thành tài năng.
+**Lão Thiên Cơ:** Khi Tham Lang hãm ở Mệnh, những cuộc vui và ham muốn trước mắt dễ kéo con đi, tiêu sức lực vào chỗ không đáng. Vài thói quen lành mạnh làm điểm tựa, bạn bè chọn kỹ hơn, sức sống dồi dào của con sẽ thành tài năng.
 
 **Lão Thiên Cơ:** Đi đâu con cũng dễ gặp người sẵn lòng giúp, cơ hội hay tự tìm đến, vì Hóa Lộc vào Mệnh cho con nét dễ mến. Chỉ cần con biết đáp lại lòng tốt đó, lộc có trao qua trao lại thì mới bền.
 
@@ -245,10 +245,10 @@ _Nữ, sinh giờ Tý năm Mậu Thìn_
 
 **Lão Thiên Cơ:** Hôm nay là 25/11/2026, âm lịch 17/10, ngày Quý Mão, ta nhìn lá số của con theo bốn việc quen thuộc.
 
-- **Công việc** (Binh): Công việc hôm nay đều đều, không lên không xuống, con cứ làm cho tròn phần của mình. Sự đều đặn cũng là một cách tiến bước đấy.
-- **Đi lại** (Binh): Chuyến đi hôm nay bình thường thôi, con chuẩn bị đủ đầy như mọi khi là được. Đi chậm mà chắc.
-- **Tiền bạc** (Thuan): Chuyện tiền bạc hôm nay có phần dễ chịu, thấy cơ hội nhỏ thì con cứ cân nhắc kỹ rồi hãy chọn. Vui với phần mình đang có cũng là một cái phúc.
-- **Sức khỏe** (Binh): Nếp sinh hoạt hôm nay cứ như thường, con giữ giờ giấc quen thuộc là được. Một tách trà ấm cũng dễ chịu lắm.
+- **Công việc** (Bình): Công việc hôm nay đều đều, không lên không xuống, con cứ làm cho tròn phần của mình. Sự đều đặn cũng là một cách tiến bước đấy.
+- **Đi lại** (Bình): Chuyến đi hôm nay bình thường thôi, con chuẩn bị đủ đầy như mọi khi là được. Đi chậm mà chắc.
+- **Tiền bạc** (Thuận): Chuyện tiền bạc hôm nay có phần dễ chịu, thấy cơ hội nhỏ thì con cứ cân nhắc kỹ rồi hãy chọn. Vui với phần mình đang có cũng là một cái phúc.
+- **Sức khỏe** (Bình): Nếp sinh hoạt hôm nay cứ như thường, con giữ giờ giấc quen thuộc là được. Một tách trà ấm cũng dễ chịu lắm.
 
 **Lão Thiên Cơ:** Ngày nào cũng là một trang mới, con cứ thong thả mà bước nhé.
 
@@ -262,7 +262,7 @@ _Nữ, sinh giờ Mùi năm Tân Tỵ_
 
 **Lão Thiên Cơ:** Ở cung Mệnh, ta đọc tính nết bẩm sinh của con: cách con nghĩ, cách con phản ứng và điều con coi trọng. Sách xưa dặn xem cung này trước tiên, vì mọi cung khác đều được nhìn qua lăng kính đó.
 
-**Lão Thiên Cơ:** Ta thấy lòng tự trọng của con vẫn cao khi Tử Vi chỉ bình hòa, nhưng cái uy chưa tự đến mà phải nhờ việc làm và người cùng chí. Càng gần người giỏi, chịu học hỏi, phong thái dẫn dắt của con càng rõ ra.
+**Lão Thiên Cơ:** Ta thấy lòng tự trọng của con vẫn cao khi Tử Vi ở mức bình hòa, nhưng cái uy chưa tự đến mà phải nhờ việc làm và người cùng chí. Càng gần người giỏi, chịu học hỏi, phong thái dẫn dắt của con càng rõ ra.
 
 **Lão Thiên Cơ:** Nhanh tay, quyết nhanh, không thích chờ đợi: Thất Sát vượng ở Mệnh làm con ghét sự lề mề. Tốc độ là lợi thế; thêm một bước nghe người khác trước khi chốt, thành công sẽ ít va vấp hơn.
 
@@ -298,7 +298,7 @@ _Nữ, sinh giờ Mùi năm Tân Tỵ_
 
 **Lão Thiên Cơ:** Quan Lộc là cung của sự nghiệp: con hợp loại việc nào, làm việc theo cách nào và được ghi nhận ra sao. Ta đọc ở đây cái hướng đi nghề nghiệp, còn đi nhanh hay chậm thì phần lớn nằm ở sự bền bỉ của con.
 
-**Lão Thiên Cơ:** Nếu Liêm Trinh hãm nơi Quan Lộc, con dễ bị cuốn vào những môi trường nhiều cạnh tranh, nóng lên vì hơn thua. Sổ sách và quy trình thật minh bạch, tránh mọi lối tắt; sự trong sạch chính là tấm khiên giữ cho con đi xa.
+**Lão Thiên Cơ:** Ta thấy con dễ bị cuốn vào những môi trường nhiều cạnh tranh khi Liêm Trinh hãm nơi Quan Lộc, nóng lên vì hơn thua. Sổ sách và quy trình thật minh bạch, tránh mọi lối tắt; sự trong sạch chính là tấm khiên giữ cho con đi xa.
 
 **Lão Thiên Cơ:** Phá Quân hãm trong Quan Lộc khiến đường nghề của con nhiều lần làm lại, bắt đầu hăng mà dễ đứt quãng. Chọn một lĩnh vực để tích lũy lâu dài và làm trọn từng việc nhỏ; mỗi lần làm lại sẽ là một bậc cao hơn.
 
@@ -334,7 +334,7 @@ _Nữ, sinh giờ Mùi năm Tân Tỵ_
 
 **Lão Thiên Cơ:** Vũ Khúc miếu ở Tài Bạch là tài tinh về đúng nhà: con có cả bản năng kiếm tiền lẫn kỷ luật giữ tiền, dễ gây dựng cơ nghiệp lớn. Càng khá giả càng nên rộng tay với việc tốt, vì tiền đi đúng chỗ thì lộc mới bền.
 
-**Lão Thiên Cơ:** Tham Lang miếu ở Tài Bạch mang đến những cú bứt phá về tiền: cơ hội lớn hay đến bất ngờ và con đủ nhạy để nắm lấy. Thắng lớn thì tận hưởng một chút rồi chuyển phần lớn sang tài sản bền, đừng dồn hết vào ván kế tiếp.
+**Lão Thiên Cơ:** Tham Lang miếu ở Tài Bạch mang đến những cú bứt phá về tiền: cơ hội lớn hay đến bất ngờ và con đủ nhạy để nắm lấy. Khi có khoản thu lớn, con cứ tận hưởng một chút rồi cất phần lớn vào quỹ để dành, đừng dồn hết vào một cơ hội kế tiếp.
 
 ### Cung Tử Tức
 
@@ -354,7 +354,7 @@ _Nữ, sinh giờ Mùi năm Tân Tỵ_
 
 **Lão Thiên Cơ:** Phu Thê là cung của tình duyên và hôn nhân: con hợp với người thế nào, và hai người giữ nhau ra sao. Ta đọc ở đây khuynh hướng trong chuyện thương yêu, còn hạnh phúc thì vẫn do hai người cùng vun.
 
-**Lão Thiên Cơ:** Nếu Thiên Tướng hãm trong Phu Thê, chuyện riêng của con và người thương dễ bị ý kiến bên ngoài chi phối, mỗi người nghe một phía. Giữ chuyện nhà trong nhà và nói thẳng với nhau trước, lòng tin của hai người sẽ vững.
+**Lão Thiên Cơ:** Chuyện riêng của con và người thương dễ bị ý kiến bên ngoài chi phối khi Thiên Tướng hãm trong Phu Thê, mỗi người nghe một phía. Giữ chuyện nhà trong nhà và nói thẳng với nhau trước, lòng tin của hai người sẽ vững.
 
 **Lão Thiên Cơ:** Chuyện tình cảm của con hay chậm mà chắc khi Phu Thê gặp Tuần: quen lâu mới thành, hoặc lập gia đình muộn hơn bạn bè. Đừng vì sốt ruột mà chọn vội, người hợp thường đến khi con đã hiểu rõ mình cần gì.
 
@@ -374,10 +374,10 @@ _Nữ, sinh giờ Mùi năm Tân Tỵ_
 
 **Lão Thiên Cơ:** Hôm nay là 25/11/2026, âm lịch 17/10, ngày Quý Mão, ta nhìn lá số của con theo bốn việc quen thuộc.
 
-- **Công việc** (Thuan): Việc công hôm nay trôi chảy như nước xuôi dòng, con cứ yên tâm bắt tay vào việc chính. Có ai góp lời thì con lắng nghe, vui vẻ mà làm nhé.
-- **Đi lại** (Binh): Chuyến đi hôm nay bình thường thôi, con chuẩn bị đủ đầy như mọi khi là được. Đi chậm mà chắc.
-- **Tiền bạc** (Binh): Tiền bạc hôm nay êm đềm, thu chi cứ theo nếp cũ là ổn. Con ghi sổ vài dòng cho khỏi sót.
-- **Sức khỏe** (Binh): Nếp sinh hoạt hôm nay cứ như thường, con giữ giờ giấc quen thuộc là được. Một tách trà ấm cũng dễ chịu lắm.
+- **Công việc** (Thuận): Việc công hôm nay trôi chảy như nước xuôi dòng, con cứ yên tâm bắt tay vào việc chính. Có ai góp lời thì con lắng nghe, vui vẻ mà làm nhé.
+- **Đi lại** (Bình): Chuyến đi hôm nay bình thường thôi, con chuẩn bị đủ đầy như mọi khi là được. Đi chậm mà chắc.
+- **Tiền bạc** (Bình): Tiền bạc hôm nay êm đềm, thu chi cứ theo nếp cũ là ổn. Con ghi sổ vài dòng cho khỏi sót.
+- **Sức khỏe** (Bình): Nếp sinh hoạt hôm nay cứ như thường, con giữ giờ giấc quen thuộc là được. Một tách trà ấm cũng dễ chịu lắm.
 
 **Lão Thiên Cơ:** Ngày nào cũng là một trang mới, con cứ thong thả mà bước nhé.
 
