@@ -6,6 +6,7 @@ is idempotent and only changed records bump their `version`.
 
 - `frames.vi.jsonl`: voice frames (key `tuvi:frame=<id>`), source_ref `original:frame`.
 - `daily.vi.jsonl`: "Hôm nay" lines (key `tuvi:daily:area=<A>:level=<L>`), source_ref `original:daily`.
+- `doctrine/*.vi.jsonl`: compiled doctrine (Plan F1.2b); imported recursively. Rules: `STYLE.md`, enforced by `KnowledgeQualityTest`.
 
 Voice: Lão Thiên Cơ says "ta" and calls the reader "con"; at most two sentences per record.
 Placeholders allowed: `{palace}`, `{star}`, `{cuc}`, `{date}`, `{lunar}`, `{canchi}`.
