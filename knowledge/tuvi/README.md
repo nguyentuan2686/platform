@@ -8,7 +8,7 @@ is idempotent and only changed records bump their `version`.
 - `daily.vi.jsonl`: "Hôm nay" lines (key `tuvi:daily:area=<A>:level=<L>`), source_ref `original:daily`.
 - `doctrine/*.vi.jsonl`: compiled doctrine (Plan F1.2b); imported recursively. Rules: `STYLE.md`, enforced by `KnowledgeQualityTest`.
 
-Voice: Lão Thiên Cơ says "ta" and calls the reader "con"; at most two sentences per record.
+Voice: Lão Thiên Cơ says "ta" and calls the reader "con"; 1 to 3 sentences per record (≤ 320 characters), see `STYLE.md`.
 Placeholders allowed: `{palace}`, `{star}`, `{cuc}`, `{date}`, `{lunar}`, `{canchi}`.
 Content rules: culture/entertainment tone; no fear, no death/illness/disaster predictions, no
 remedies or paid offers; health lines are never medical advice. Only `approved` records are served.
