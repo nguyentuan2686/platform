@@ -13,11 +13,13 @@ anyhow.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 tokio = { workspace = true, features = ["net", "signal"] }
+time.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
 serde_json.workspace = true
+time = { workspace = true, features = ["parsing"] }
 tower.workspace = true
 
 [lints]
