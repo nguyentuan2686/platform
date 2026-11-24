@@ -150,7 +150,10 @@ async fn chart_is_deterministic_and_matches_the_committed_snapshot() {
 #[tokio::test]
 async fn chart_has_the_contract_shape() {
     let c = chart_of(&base()).await;
-    assert_eq!(c["school"], "iztro-default+vn-calendar");
+    assert_eq!(
+        c["school"],
+        "iztro-default+vn-calendar;hour=local-standard;ty23=next-day"
+    );
     assert_eq!(c["calendar"], "VN");
     assert_eq!(c["hourBranch"], "Chen");
     let palaces = c["palaces"].as_array().unwrap();
@@ -177,7 +180,10 @@ async fn zone_and_calendar_default_and_cn_has_its_own_school() {
     let defaulted = chart_of(&json!({"birth": "1994-03-12T08:30", "gender": "male"})).await;
     assert_eq!(defaulted, chart_of(&base()).await);
     let cn = chart_of(&with(base(), "calendar", json!("CN"))).await;
-    assert_eq!(cn["school"], "iztro-default");
+    assert_eq!(
+        cn["school"],
+        "iztro-default;hour=local-standard;ty23=next-day"
+    );
     assert_eq!(cn["calendar"], "CN");
     // Seconds are accepted.
     let secs = chart_of(&with(base(), "birth", json!("1994-03-12T08:30:45"))).await;
@@ -194,7 +200,8 @@ async fn births_in_the_zi_hour_roll_to_the_next_day() {
 }
 
 #[tokio::test]
-async fn south_vietnam_1970_is_utc_plus_8_so_2330_is_hour_hai_same_day() {
+async fn south_vietnam_1970_is_read_at_utc_plus_7_so_2330_is_hour_hai_same_day() {
+    // 23:30 at the then UTC+8 is 22:30 at UTC+7.
     let late = chart_of(&json!({"birth": "1970-06-01T23:30", "gender": "female"})).await;
     assert_eq!(late["hourBranch"], "Hai");
     // 00:10 on 06-02 at UTC+8 is 23:10 on 06-01 at UTC+7: next solar day, hour Zi.
@@ -204,6 +211,23 @@ async fn south_vietnam_1970_is_utc_plus_8_so_2330_is_hour_hai_same_day() {
         next["lunar"]["day"].as_u64().unwrap(),
         late["lunar"]["day"].as_u64().unwrap() + 1
     );
+}
+
+#[tokio::test]
+async fn hour_is_local_standard_time_and_the_calendar_never_changes_it() {
+    let ny = |birth: &str, cal: &str| json!({"birth": birth, "zone": "America/New_York", "gender": "male", "calendar": cal});
+    for cal in ["VN", "CN"] {
+        // January: no daylight saving, local noon is hour Ngọ on the same day.
+        let c = chart_of(&ny("2000-01-01T12:00", cal)).await;
+        assert_eq!(c["hourBranch"], "Wu", "{cal}");
+        // July: 12:30 EDT is 11:30 standard time, still Ngọ.
+        let c = chart_of(&ny("2000-07-01T12:30", cal)).await;
+        assert_eq!(c["hourBranch"], "Wu", "{cal}");
+    }
+    let vn = chart_of(&base()).await;
+    let cn = chart_of(&with(base(), "calendar", json!("CN"))).await;
+    assert_eq!(vn["hourBranch"], "Chen");
+    assert_eq!(cn["hourBranch"], "Chen");
 }
 
 #[tokio::test]

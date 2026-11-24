@@ -408,7 +408,10 @@ fn cn_charts_equal_iztro() {
         }
         match svc.chart(&req) {
             Ok(chart) => {
-                assert_eq!(chart.school, "iztro-default");
+                assert_eq!(
+                    chart.school,
+                    "iztro-default;hour=local-standard;ty23=next-day"
+                );
                 assert_eq!(chart.lunar, req.birth.lunar);
                 diff(
                     id,
@@ -480,7 +483,10 @@ fn vn_charts_equal_iztro_by_lunar_input() {
         let e = &c["expect"];
         match svc.chart(&req) {
             Ok(chart) => {
-                assert_eq!(chart.school, "iztro-default+vn-calendar");
+                assert_eq!(
+                    chart.school,
+                    "iztro-default+vn-calendar;hour=local-standard;ty23=next-day"
+                );
                 assert_eq!(chart.lunar, lunar(&c["lunar"]));
                 diff(
                     id,

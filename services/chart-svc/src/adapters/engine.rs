@@ -48,9 +48,9 @@ use time::Date;
 use x_iztro as iz;
 
 /// `school` of a chart cast on the Vietnamese calendar.
-pub const SCHOOL_VN: &str = "iztro-default+vn-calendar";
+pub const SCHOOL_VN: &str = "iztro-default+vn-calendar;hour=local-standard;ty23=next-day";
 /// `school` of a chart cast on the Chinese calendar.
-pub const SCHOOL_CN: &str = "iztro-default";
+pub const SCHOOL_CN: &str = "iztro-default;hour=local-standard;ty23=next-day";
 
 /// [`ZiweiEngine`] backed by `x-iztro` with iztro's default configuration.
 #[derive(Debug, Clone, Copy, Default)]

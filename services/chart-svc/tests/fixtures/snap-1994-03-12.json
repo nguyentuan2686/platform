@@ -1,5 +1,5 @@
 {
-  "school": "iztro-default+vn-calendar",
+  "school": "iztro-default+vn-calendar;hour=local-standard;ty23=next-day",
   "calendar": "VN",
   "lunar": {
     "year": 1994,
