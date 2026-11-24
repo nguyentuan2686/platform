@@ -1,4 +1,4 @@
-# Local dev stack. Infra only by default; add `--profile app` to also run order-svc and notify-svc.
+# Local dev stack. Infra only by default; add `--profile app` to also run the services (order-svc, notify-svc, chart-svc, reading-tuvi).
 name: platform-local
 services:
   postgres:
@@ -116,6 +116,33 @@ services:
     ports:
       - "127.0.0.1:${CHART_SVC_PORT:-8082}:8082"
     mem_limit: 64m
+
+  reading-tuvi:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/reading-tuvi/Dockerfile
+    image: reading-tuvi:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chart-svc:
+        condition: service_started
+      lgtm:
+        condition: service_started
+    environment:
+      PORT: "8083"
+      DB_URL: jdbc:postgresql://postgres:5432/reading_tuvi
+      DB_USER: ${READING_DB_USER:-reading}
+      DB_PASSWORD: ${READING_DB_PASSWORD:-reading}
+      CHART_SVC_URL: http://chart-svc:8082
+      KNOWLEDGE_DIR: /app/knowledge/tuvi
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=60"
+    ports:
+      - "127.0.0.1:${READING_TUVI_PORT:-8083}:8083"
+    mem_limit: 384m
 
 volumes:
   pgdata:
