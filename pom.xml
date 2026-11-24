@@ -20,6 +20,7 @@
   <modules>
     <module>libs/java/platform-starter</module>
     <module>services/order-svc</module>
+    <module>services/reading-tuvi</module>
   </modules>
 
   <properties>
