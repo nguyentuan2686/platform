@@ -14,7 +14,7 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 CLAUDE.md, .claude/{settings.json,skills/}
 Cargo.toml, rust-toolchain.toml, deny.toml, tools/rust-dev/Dockerfile   # Rust workspace + dev image
 contracts/{openapi/<svc>.yaml, events/<event>.schema.json}
-services/{order-svc (Java), notify-svc (Rust)}
+services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust)}
 libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service}
 deploy/{local/docker-compose.yml, k8s/{base,overlays/prod,platform}, argocd}
@@ -50,8 +50,9 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `mvn -q verify` - build, test, Spotless check, coverage gate
 - `mvn spotless:apply` - auto-format
 - `docker compose -f deploy/local/docker-compose.yml up -d` - local Postgres + Redpanda + otel-lgtm
-- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080) and notify-svc (:8081)  (if a `pgdata` volume from before Plan 2 exists, run `down -v` once so `init-db.sql` creates the notify db)
+- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080), notify-svc (:8081) and chart-svc (:8082, stateless)  (if a `pgdata` volume from before Plan 2 exists, run `down -v` once so `init-db.sql` creates the notify db)
 - `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
+- `scripts/smoke-chart.sh http://localhost:8082` - POST /tuvi/chart happy path: 12 palaces, lunar.month 2
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
 
 ## Lessons loop

@@ -99,5 +99,23 @@ services:
       - "127.0.0.1:${NOTIFY_SVC_PORT:-8081}:8081"
     mem_limit: 128m
 
+  chart-svc:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/chart-svc/Dockerfile
+    image: chart-svc:local
+    depends_on:
+      lgtm:
+        condition: service_started
+    environment:
+      PORT: "8082"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_SERVICE_NAME: chart-svc
+      RUST_LOG: ${CHART_RUST_LOG:-info}
+    ports:
+      - "127.0.0.1:${CHART_SVC_PORT:-8082}:8082"
+    mem_limit: 64m
+
 volumes:
   pgdata:
