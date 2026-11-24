@@ -75,7 +75,7 @@ class KnowledgeCoverageTest {
       Set<String> p2 = new HashSet<>();
       KeyCatalog.p2(palace).forEach(k -> p2.add(k.value()));
       allowed.addAll(p2);
-      report.add("P2 " + palace + " covered " + count(p2, present) + "/" + p2.size());
+      report.add("P2 " + palace + " covered " + count(p2, approved) + "/" + p2.size());
     }
     int covered = count(p1, approved);
     System.out.println("P1 covered " + covered + "/" + p1.size());
