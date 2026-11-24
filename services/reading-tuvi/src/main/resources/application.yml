@@ -1,0 +1,22 @@
+server:
+  port: ${PORT:8083}
+
+spring:
+  application:
+    name: reading-tuvi
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/reading_tuvi}
+    username: ${DB_USER:reading}
+    password: ${DB_PASSWORD:reading}
+  flyway:
+    locations: classpath:db/migration
+
+# chart-svc base URL, used by the readings adapter (later task).
+chart-svc:
+  url: ${CHART_SVC_URL:http://localhost:8082}
+
+# OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
+
+# Directory of knowledge *.jsonl files, imported at startup (before readiness); unset = no import.
+knowledge:
+  dir: ${KNOWLEDGE_DIR:}

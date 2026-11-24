@@ -17,11 +17,11 @@
 - Pure function: same input → byte-identical JSON output (no clocks, no randomness in the chart path).
 - Config via env: `PORT` (default `8082`), `OTEL_EXPORTER_OTLP_ENDPOINT` (unset → no exporter), `OTEL_SERVICE_NAME` (default `chart-svc`), `RUST_LOG` (default `info`).
 - Supported birth years: 1900–2100 inclusive (solar). Outside → 400 on field `birth`.
-- **Giờ Tý rule (spec §6.3):** 23:00–23:59 local standard time counts as the **next solar day**, hour branch Tý.
+- **Hour rule:** superseded by ruling R8: the hour branch is read in the birthplace's local standard time (`hour=local-standard`), 23:00–23:59 counting as the next solar day, hour branch Tý (`ty23=next-day`); `school` strings are `"iztro-default+vn-calendar;hour=local-standard;ty23=next-day"` (VN) and `"iztro-default;hour=local-standard;ty23=next-day"` (CN).
 - **Calendar VN:** lunar calendar computed at UTC+7 (Hồ Ngọc Đức method: new moons + major solar terms, astronomical, not tables). **CN:** UTC+8. Birth time is first converted from the birth zone's historical offset to the calendar's standard offset (VN +7, CN +8).
 - Stable keys are ASCII and never translated: earthly branches `Zi Chou Yin Mao Chen Si Wu Wei Shen You Xu Hai`, heavenly stems `Jia Yi Bing Ding Wu Ji Geng Xin Ren Gui`, palaces `Menh PhuMau PhucDuc DienTrach QuanLoc NoBoc ThienDi TatAch TaiBach TuTuc PhuThe HuynhDe`, 14 major stars `TuVi ThienCo ThaiDuong VuKhuc ThienDong LiemTrinh ThienPhu ThaiAm ThamLang CuMon ThienTuong ThienLuong ThatSat PhaQuan`, mutagens `Loc Quyen Khoa Ky`. Every key has a Vietnamese label (`name_vi`) in one table in `domain`.
 - Brightness (Vietnamese 5 levels) mapped from iztro's 7: 庙→`Mieu`, 旺→`Vuong`, 得/利→`Dac`, 平/不→`Binh`, 陷→`Ham`.
-- Every chart response carries `school` = `"iztro-default+vn-calendar"` (VN) or `"iztro-default"` (CN).
+- Every chart response carries `school` per ruling R8 (see the hour rule above).
 - Quality gates as platform: fmt, clippy `-D warnings`, `cargo deny check` (licences must pass deny.toml — engine crate included), workspace line coverage ≥ 80%.
 - Images: non-root, multi-arch, `ghcr.io/<owner>/chart-svc`, `mem_limit` 64m locally, port `127.0.0.1:8082`.
 - All cargo via `scripts/cargo.sh`; Node only via `docker run node:22-alpine`.

@@ -1,0 +1,12 @@
+{"key":"tuvi:frame=greeting","school":"iztro-default","lang":"vi","content":"Con đến rồi đấy à, lại đây ngồi, ta mở lá số của con ra xem nào. Cứ thong thả, ta kể từng trang một cho con nghe.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=menh_title","school":"iztro-default","lang":"vi","content":"Cung Mệnh, gốc của lá số","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=than_title","school":"iztro-default","lang":"vi","content":"Cung Thân, nếp sống về sau","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=than_intro","school":"iztro-default","lang":"vi","content":"Cung Thân là nếp sống con dần mang theo khi đã đi qua nhiều năm tháng. Thân của con cư tại cung {palace}, ta xem tiếp nhé.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=cuc_title","school":"iztro-default","lang":"vi","content":"Cục, nhịp nền của lá số","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=cuc_intro","school":"iztro-default","lang":"vi","content":"Lá số của con thuộc {cuc}, như nhịp trống nền để các sao cất tiếng theo. Ta nói theo sách xưa để con tham khảo thôi.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=palace_title","school":"iztro-default","lang":"vi","content":"Cung {palace}","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=missing","school":"iztro-default","lang":"vi","content":"Điều này ta chưa lật tới trang sách, con hỏi lại ta sau nhé.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=closing","school":"iztro-default","lang":"vi","content":"Thôi, hôm nay ta kể tới đây, điều nào hợp với con thì con cứ giữ lấy. Đường đời vẫn là do chính con bước.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=disclaimer","school":"iztro-default","lang":"vi","content":"Những lời trên chỉ để tham khảo văn hóa và giải trí, con đừng lấy làm căn cứ cho các quyết định quan trọng.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=today_opening","school":"iztro-default","lang":"vi","content":"Hôm nay là {date}, âm lịch {lunar}, ngày {canchi}, ta nhìn lá số của con theo bốn việc quen thuộc.","source_ref":"original:frame","status":"approved"}
+{"key":"tuvi:frame=today_closing","school":"iztro-default","lang":"vi","content":"Ngày nào cũng là một trang mới, con cứ thong thả mà bước nhé.","source_ref":"original:frame","status":"approved"}

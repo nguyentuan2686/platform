@@ -62,6 +62,106 @@ pub enum StarKey {
     ThienViet,
 }
 
+/// Adjective stars (tạp diệu) the chart places in a palace, as the default algorithm
+/// lays them out. The Tuần/Triệt-type stars the engine also places (`xunkong`, `xunzhong`,
+/// `jiekong`, `jielu`, `kongwang`) are not here: the chart reports Tuần and Triệt as
+/// palace pairs instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AdjStarKey {
+    HongLoan,
+    ThienHy,
+    ThienRieu,
+    HamTri,
+    GiaiThan,
+    TamThai,
+    BatToa,
+    AnQuang,
+    ThienQuy,
+    LongTri,
+    PhuongCac,
+    ThienTai,
+    ThienTho,
+    ThaiPhu,
+    PhongCao,
+    ThienVu,
+    HoaCai,
+    ThienQuan,
+    ThienPhuc,
+    ThienTru,
+    ThienNguyet,
+    ThienDuc,
+    NguyetDuc,
+    ThienKhong,
+    CoThan,
+    QuaTu,
+    PhiLiem,
+    PhaToai,
+    ThienHinh,
+    AmSat,
+    ThienKhoc,
+    ThienHu,
+    ThienSu,
+    ThienThuong,
+    NienGiai,
+}
+
+/// Members of the four rings of twelve gods: Tràng Sinh, Bác Sĩ, Tuế Tiền (Thái Tuế
+/// ring) and Tướng Tiền. The rings share a few stars (Tiểu Hao, Đại Hao, Bệnh Phù), which
+/// are one variant here. Quan Phủ (Bác Sĩ ring) and Quan Phù (Thái Tuế ring) fold to the
+/// same ASCII, so the latter's key is `QuanPhuTue`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RingStarKey {
+    // Tràng Sinh
+    TrangSinh,
+    MocDuc,
+    QuanDoi,
+    LamQuan,
+    DeVuong,
+    Suy,
+    Benh,
+    Tu,
+    Mo,
+    Tuyet,
+    Thai,
+    Duong,
+    // Bác Sĩ
+    BacSi,
+    LucSi,
+    ThanhLong,
+    TieuHao,
+    TuongQuan,
+    TauThu,
+    PhiLiem,
+    HyThan,
+    BenhPhu,
+    DaiHao,
+    PhucBinh,
+    QuanPhu,
+    // Thái Tuế (Tuế Tiền)
+    TueKien,
+    HoiKhi,
+    TangMon,
+    QuanTac,
+    QuanPhuTue,
+    LongDuc,
+    BachHo,
+    ThienDuc,
+    DieuKhach,
+    // Tướng Tiền
+    TuongTinh,
+    PhanAn,
+    TueDich,
+    TucThan,
+    HoaCai,
+    KiepSat,
+    TaiSat,
+    ThienSat,
+    ChiBoi,
+    HamTri,
+    NguyetSat,
+    VongThan,
+}
+
 /// Star brightness on the Vietnamese five-level scale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Brightness {
@@ -158,6 +258,92 @@ labelled!(StarKey {
     ThienViet => "Thiên Việt",
 });
 
+labelled!(AdjStarKey {
+    HongLoan => "Hồng Loan",
+    ThienHy => "Thiên Hỷ",
+    ThienRieu => "Thiên Riêu",
+    HamTri => "Hàm Trì",
+    GiaiThan => "Giải Thần",
+    TamThai => "Tam Thai",
+    BatToa => "Bát Tọa",
+    AnQuang => "Ân Quang",
+    ThienQuy => "Thiên Quý",
+    LongTri => "Long Trì",
+    PhuongCac => "Phượng Các",
+    ThienTai => "Thiên Tài",
+    ThienTho => "Thiên Thọ",
+    ThaiPhu => "Thai Phụ",
+    PhongCao => "Phong Cáo",
+    ThienVu => "Thiên Vu",
+    HoaCai => "Hoa Cái",
+    ThienQuan => "Thiên Quan",
+    ThienPhuc => "Thiên Phúc",
+    ThienTru => "Thiên Trù",
+    ThienNguyet => "Thiên Nguyệt",
+    ThienDuc => "Thiên Đức",
+    NguyetDuc => "Nguyệt Đức",
+    ThienKhong => "Thiên Không",
+    CoThan => "Cô Thần",
+    QuaTu => "Quả Tú",
+    PhiLiem => "Phi Liêm",
+    PhaToai => "Phá Toái",
+    ThienHinh => "Thiên Hình",
+    AmSat => "Âm Sát",
+    ThienKhoc => "Thiên Khốc",
+    ThienHu => "Thiên Hư",
+    ThienSu => "Thiên Sứ",
+    ThienThuong => "Thiên Thương",
+    NienGiai => "Niên Giải",
+});
+
+labelled!(RingStarKey {
+    TrangSinh => "Tràng Sinh",
+    MocDuc => "Mộc Dục",
+    QuanDoi => "Quan Đới",
+    LamQuan => "Lâm Quan",
+    DeVuong => "Đế Vượng",
+    Suy => "Suy",
+    Benh => "Bệnh",
+    Tu => "Tử",
+    Mo => "Mộ",
+    Tuyet => "Tuyệt",
+    Thai => "Thai",
+    Duong => "Dưỡng",
+    BacSi => "Bác Sĩ",
+    LucSi => "Lực Sĩ",
+    ThanhLong => "Thanh Long",
+    TieuHao => "Tiểu Hao",
+    TuongQuan => "Tướng Quân",
+    TauThu => "Tấu Thư",
+    PhiLiem => "Phi Liêm",
+    HyThan => "Hỷ Thần",
+    BenhPhu => "Bệnh Phù",
+    DaiHao => "Đại Hao",
+    PhucBinh => "Phục Binh",
+    QuanPhu => "Quan Phủ",
+    TueKien => "Tuế Kiện",
+    HoiKhi => "Hối Khí",
+    TangMon => "Tang Môn",
+    QuanTac => "Quán Tác",
+    QuanPhuTue => "Quan Phù",
+    LongDuc => "Long Đức",
+    BachHo => "Bạch Hổ",
+    ThienDuc => "Thiên Đức",
+    DieuKhach => "Điếu Khách",
+    TuongTinh => "Tướng Tinh",
+    PhanAn => "Phan Án",
+    TueDich => "Tuế Dịch",
+    TucThan => "Tức Thần",
+    HoaCai => "Hoa Cái",
+    KiepSat => "Kiếp Sát",
+    TaiSat => "Tai Sát",
+    ThienSat => "Thiên Sát",
+    ChiBoi => "Chỉ Bối",
+    HamTri => "Hàm Trì",
+    NguyetSat => "Nguyệt Sát",
+    VongThan => "Vong Thần",
+});
+
 labelled!(Brightness {
     Mieu => "Miếu",
     Vuong => "Vượng",
@@ -232,6 +418,15 @@ pub struct Palace {
     pub major: Vec<StarInPalace>,
     pub minor: Vec<StarInPalace>,
     pub decade: (u8, u8),
+    /// Adjective stars in the order the engine places them.
+    pub adjective: Vec<AdjStarKey>,
+    /// The palace's god in each of the four rings.
+    pub changsheng: RingStarKey,
+    pub boshi: RingStarKey,
+    pub suiqian: RingStarKey,
+    pub jiangqian: RingStarKey,
+    /// Nominal ages (tiểu hạn) that fall on this palace, ascending.
+    pub small_limit_ages: Vec<u8>,
 }
 
 /// A natal chart. `palaces` is ordered by branch starting at Dần (Yin), the order the
@@ -247,6 +442,10 @@ pub struct Chart {
     pub than_chu: StarKey,
     pub than_palace: PalaceKey,
     pub palaces: [Palace; 12],
+    /// Tuần: the two branches whose palaces it covers.
+    pub tuan: [Branch; 2],
+    /// Triệt: the two branches whose palaces it covers.
+    pub triet: [Branch; 2],
     pub school: &'static str,
 }
 
@@ -287,6 +486,8 @@ mod tests {
         assert_table(Gender::ALL, Gender::key, Gender::name_vi);
         assert_table(PalaceKey::ALL, PalaceKey::key, PalaceKey::name_vi);
         assert_table(StarKey::ALL, StarKey::key, StarKey::name_vi);
+        assert_table(AdjStarKey::ALL, AdjStarKey::key, AdjStarKey::name_vi);
+        assert_table(RingStarKey::ALL, RingStarKey::key, RingStarKey::name_vi);
         assert_table(Brightness::ALL, Brightness::key, Brightness::name_vi);
         assert_table(Mutagen::ALL, Mutagen::key, Mutagen::name_vi);
         assert_table(Element::ALL, Element::key, Element::name_vi);
@@ -326,6 +527,20 @@ mod tests {
         assert_eq!(cuc(Element::Kim, 4), "Kim tứ cục");
         assert_eq!(cuc(Element::Tho, 5), "Thổ ngũ cục");
         assert_eq!(cuc(Element::Hoa, 6), "Hỏa lục cục");
+    }
+
+    #[test]
+    fn adjective_and_ring_labels_follow_vietnamese_convention() {
+        assert_eq!(AdjStarKey::ThienRieu.name_vi(), "Thiên Riêu");
+        assert_eq!(AdjStarKey::ThienRieu.key(), "ThienRieu");
+        assert_eq!(AdjStarKey::PhuongCac.name_vi(), "Phượng Các");
+        assert_eq!(AdjStarKey::ThaiPhu.name_vi(), "Thai Phụ");
+        assert_eq!(RingStarKey::TrangSinh.name_vi(), "Tràng Sinh");
+        assert_eq!(RingStarKey::BacSi.name_vi(), "Bác Sĩ");
+        assert_eq!(RingStarKey::LucSi.name_vi(), "Lực Sĩ");
+        assert_eq!(AdjStarKey::PhiLiem.key(), RingStarKey::PhiLiem.key());
+        assert_eq!(AdjStarKey::ALL.len(), 35);
+        assert_eq!(RingStarKey::ALL.len(), 45);
     }
 
     #[test]

@@ -40,7 +40,49 @@
           "brightness": null,
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "ThienRieu",
+          "nameVi": "Thiên Riêu"
+        },
+        {
+          "key": "LongTri",
+          "nameVi": "Long Trì"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "TrangSinh",
+          "nameVi": "Tràng Sinh"
+        },
+        "boshi": {
+          "key": "BacSi",
+          "nameVi": "Bác Sĩ"
+        },
+        "suiqian": {
+          "key": "QuanPhuTue",
+          "nameVi": "Quan Phù"
+        },
+        "jiangqian": {
+          "key": "ChiBoi",
+          "nameVi": "Chỉ Bối"
+        }
+      },
+      "smallLimitAges": [
+        11,
+        23,
+        35,
+        47,
+        59,
+        71,
+        83,
+        95,
+        107,
+        119
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "QuanLoc",
@@ -66,7 +108,49 @@
           "brightness": "Ham",
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "HamTri",
+          "nameVi": "Hàm Trì"
+        },
+        {
+          "key": "NguyetDuc",
+          "nameVi": "Nguyệt Đức"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "MocDuc",
+          "nameVi": "Mộc Dục"
+        },
+        "boshi": {
+          "key": "LucSi",
+          "nameVi": "Lực Sĩ"
+        },
+        "suiqian": {
+          "key": "TieuHao",
+          "nameVi": "Tiểu Hao"
+        },
+        "jiangqian": {
+          "key": "HamTri",
+          "nameVi": "Hàm Trì"
+        }
+      },
+      "smallLimitAges": [
+        12,
+        24,
+        36,
+        48,
+        60,
+        72,
+        84,
+        96,
+        108,
+        120
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "NoBoc",
@@ -86,7 +170,49 @@
           "mutagen": null
         }
       ],
-      "minor": []
+      "minor": [],
+      "adjective": [
+        {
+          "key": "ThienHu",
+          "nameVi": "Thiên Hư"
+        },
+        {
+          "key": "ThienThuong",
+          "nameVi": "Thiên Thương"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "QuanDoi",
+          "nameVi": "Quan Đới"
+        },
+        "boshi": {
+          "key": "ThanhLong",
+          "nameVi": "Thanh Long"
+        },
+        "suiqian": {
+          "key": "DaiHao",
+          "nameVi": "Đại Hao"
+        },
+        "jiangqian": {
+          "key": "NguyetSat",
+          "nameVi": "Nguyệt Sát"
+        }
+      },
+      "smallLimitAges": [
+        1,
+        13,
+        25,
+        37,
+        49,
+        61,
+        73,
+        85,
+        97,
+        109
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "ThienDi",
@@ -125,7 +251,65 @@
           "brightness": "Dac",
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "HongLoan",
+          "nameVi": "Hồng Loan"
+        },
+        {
+          "key": "TamThai",
+          "nameVi": "Tam Thai"
+        },
+        {
+          "key": "AnQuang",
+          "nameVi": "Ân Quang"
+        },
+        {
+          "key": "ThienTho",
+          "nameVi": "Thiên Thọ"
+        },
+        {
+          "key": "ThienTru",
+          "nameVi": "Thiên Trù"
+        },
+        {
+          "key": "ThienNguyet",
+          "nameVi": "Thiên Nguyệt"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "LamQuan",
+          "nameVi": "Lâm Quan"
+        },
+        "boshi": {
+          "key": "TieuHao",
+          "nameVi": "Tiểu Hao"
+        },
+        "suiqian": {
+          "key": "LongDuc",
+          "nameVi": "Long Đức"
+        },
+        "jiangqian": {
+          "key": "VongThan",
+          "nameVi": "Vong Thần"
+        }
+      },
+      "smallLimitAges": [
+        2,
+        14,
+        26,
+        38,
+        50,
+        62,
+        74,
+        86,
+        98,
+        110
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "TatAch",
@@ -152,7 +336,49 @@
           "brightness": "Ham",
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "PhongCao",
+          "nameVi": "Phong Cáo"
+        },
+        {
+          "key": "ThienSu",
+          "nameVi": "Thiên Sứ"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "DeVuong",
+          "nameVi": "Đế Vượng"
+        },
+        "boshi": {
+          "key": "TuongQuan",
+          "nameVi": "Tướng Quân"
+        },
+        "suiqian": {
+          "key": "BachHo",
+          "nameVi": "Bạch Hổ"
+        },
+        "jiangqian": {
+          "key": "TuongTinh",
+          "nameVi": "Tướng Tinh"
+        }
+      },
+      "smallLimitAges": [
+        3,
+        15,
+        27,
+        39,
+        51,
+        63,
+        75,
+        87,
+        99,
+        111
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "TaiBach",
@@ -191,7 +417,57 @@
           "brightness": "Dac",
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "ThienQuy",
+          "nameVi": "Thiên Quý"
+        },
+        {
+          "key": "ThienQuan",
+          "nameVi": "Thiên Quan"
+        },
+        {
+          "key": "ThienDuc",
+          "nameVi": "Thiên Đức"
+        },
+        {
+          "key": "QuaTu",
+          "nameVi": "Quả Tú"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Suy",
+          "nameVi": "Suy"
+        },
+        "boshi": {
+          "key": "TauThu",
+          "nameVi": "Tấu Thư"
+        },
+        "suiqian": {
+          "key": "ThienDuc",
+          "nameVi": "Thiên Đức"
+        },
+        "jiangqian": {
+          "key": "PhanAn",
+          "nameVi": "Phan Án"
+        }
+      },
+      "smallLimitAges": [
+        4,
+        16,
+        28,
+        40,
+        52,
+        64,
+        76,
+        88,
+        100,
+        112
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "TuTuc",
@@ -230,7 +506,53 @@
           "brightness": null,
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "GiaiThan",
+          "nameVi": "Giải Thần"
+        },
+        {
+          "key": "ThienVu",
+          "nameVi": "Thiên Vu"
+        },
+        {
+          "key": "ThienKhoc",
+          "nameVi": "Thiên Khốc"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Benh",
+          "nameVi": "Bệnh"
+        },
+        "boshi": {
+          "key": "PhiLiem",
+          "nameVi": "Phi Liêm"
+        },
+        "suiqian": {
+          "key": "DieuKhach",
+          "nameVi": "Điếu Khách"
+        },
+        "jiangqian": {
+          "key": "TueDich",
+          "nameVi": "Tuế Dịch"
+        }
+      },
+      "smallLimitAges": [
+        5,
+        17,
+        29,
+        41,
+        53,
+        65,
+        77,
+        89,
+        101,
+        113
+      ],
+      "tuan": true,
+      "triet": true
     },
     {
       "key": "PhuThe",
@@ -263,7 +585,53 @@
           "brightness": null,
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "BatToa",
+          "nameVi": "Bát Tọa"
+        },
+        {
+          "key": "ThienTai",
+          "nameVi": "Thiên Tài"
+        },
+        {
+          "key": "ThienPhuc",
+          "nameVi": "Thiên Phúc"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Tu",
+          "nameVi": "Tử"
+        },
+        "boshi": {
+          "key": "HyThan",
+          "nameVi": "Hỷ Thần"
+        },
+        "suiqian": {
+          "key": "BenhPhu",
+          "nameVi": "Bệnh Phù"
+        },
+        "jiangqian": {
+          "key": "TucThan",
+          "nameVi": "Tức Thần"
+        }
+      },
+      "smallLimitAges": [
+        6,
+        18,
+        30,
+        42,
+        54,
+        66,
+        78,
+        90,
+        102,
+        114
+      ],
+      "tuan": true,
+      "triet": true
     },
     {
       "key": "HuynhDe",
@@ -283,7 +651,53 @@
           "mutagen": null
         }
       ],
-      "minor": []
+      "minor": [],
+      "adjective": [
+        {
+          "key": "ThaiPhu",
+          "nameVi": "Thai Phụ"
+        },
+        {
+          "key": "HoaCai",
+          "nameVi": "Hoa Cái"
+        },
+        {
+          "key": "ThienHinh",
+          "nameVi": "Thiên Hình"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Mo",
+          "nameVi": "Mộ"
+        },
+        "boshi": {
+          "key": "BenhPhu",
+          "nameVi": "Bệnh Phù"
+        },
+        "suiqian": {
+          "key": "TueKien",
+          "nameVi": "Tuế Kiện"
+        },
+        "jiangqian": {
+          "key": "HoaCai",
+          "nameVi": "Hoa Cái"
+        }
+      },
+      "smallLimitAges": [
+        7,
+        19,
+        31,
+        43,
+        55,
+        67,
+        79,
+        91,
+        103,
+        115
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "Menh",
@@ -303,7 +717,53 @@
           "mutagen": null
         }
       ],
-      "minor": []
+      "minor": [],
+      "adjective": [
+        {
+          "key": "ThienHy",
+          "nameVi": "Thiên Hỷ"
+        },
+        {
+          "key": "ThienKhong",
+          "nameVi": "Thiên Không"
+        },
+        {
+          "key": "CoThan",
+          "nameVi": "Cô Thần"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Tuyet",
+          "nameVi": "Tuyệt"
+        },
+        "boshi": {
+          "key": "DaiHao",
+          "nameVi": "Đại Hao"
+        },
+        "suiqian": {
+          "key": "HoiKhi",
+          "nameVi": "Hối Khí"
+        },
+        "jiangqian": {
+          "key": "KiepSat",
+          "nameVi": "Kiếp Sát"
+        }
+      },
+      "smallLimitAges": [
+        8,
+        20,
+        32,
+        44,
+        56,
+        68,
+        80,
+        92,
+        104,
+        116
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "PhuMau",
@@ -323,7 +783,57 @@
           "mutagen": null
         }
       ],
-      "minor": []
+      "minor": [],
+      "adjective": [
+        {
+          "key": "PhuongCac",
+          "nameVi": "Phượng Các"
+        },
+        {
+          "key": "PhiLiem",
+          "nameVi": "Phi Liêm"
+        },
+        {
+          "key": "AmSat",
+          "nameVi": "Âm Sát"
+        },
+        {
+          "key": "NienGiai",
+          "nameVi": "Niên Giải"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Thai",
+          "nameVi": "Thai"
+        },
+        "boshi": {
+          "key": "PhucBinh",
+          "nameVi": "Phục Binh"
+        },
+        "suiqian": {
+          "key": "TangMon",
+          "nameVi": "Tang Môn"
+        },
+        "jiangqian": {
+          "key": "TaiSat",
+          "nameVi": "Tai Sát"
+        }
+      },
+      "smallLimitAges": [
+        9,
+        21,
+        33,
+        45,
+        57,
+        69,
+        81,
+        93,
+        105,
+        117
+      ],
+      "tuan": false,
+      "triet": false
     },
     {
       "key": "PhucDuc",
@@ -362,7 +872,53 @@
           "brightness": "Mieu",
           "mutagen": null
         }
-      ]
+      ],
+      "adjective": [
+        {
+          "key": "PhaToai",
+          "nameVi": "Phá Toái"
+        }
+      ],
+      "rings": {
+        "changsheng": {
+          "key": "Duong",
+          "nameVi": "Dưỡng"
+        },
+        "boshi": {
+          "key": "QuanPhu",
+          "nameVi": "Quan Phủ"
+        },
+        "suiqian": {
+          "key": "QuanTac",
+          "nameVi": "Quán Tác"
+        },
+        "jiangqian": {
+          "key": "ThienSat",
+          "nameVi": "Thiên Sát"
+        }
+      },
+      "smallLimitAges": [
+        10,
+        22,
+        34,
+        46,
+        58,
+        70,
+        82,
+        94,
+        106,
+        118
+      ],
+      "tuan": false,
+      "triet": false
     }
+  ],
+  "tuan": [
+    "Shen",
+    "You"
+  ],
+  "triet": [
+    "Shen",
+    "You"
   ]
 }

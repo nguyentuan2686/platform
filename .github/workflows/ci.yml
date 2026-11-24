@@ -24,6 +24,7 @@ jobs:
       starter: ${{ steps.filter.outputs.starter }}
       notify: ${{ steps.filter.outputs.notify }}
       chart: ${{ steps.filter.outputs.chart }}
+      reading: ${{ steps.filter.outputs.reading }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -54,6 +55,12 @@ jobs:
               - 'deny.toml'
               - '.cargo/**'
               - 'contracts/openapi/chart-svc.yaml'
+            reading:
+              - 'services/reading-tuvi/**'
+              - 'knowledge/tuvi/**'
+              - 'contracts/openapi/reading-tuvi.yaml'
+              - 'contracts/knowledge/**'
+              - 'libs/java/**'
             root:
               - 'pom.xml'
               - '.github/**'
@@ -97,10 +104,22 @@ jobs:
       dockerfile: services/chart-svc/Dockerfile
       publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+  reading-tuvi:
+    needs: changes
+    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_java-service.yml
+    with:
+      module: services/reading-tuvi
+      image: reading-tuvi
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled
