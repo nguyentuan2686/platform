@@ -5,17 +5,12 @@ use axum::routing::{get, post};
 use axum::Router;
 use http::{header, Request, StatusCode};
 use http_body_util::BodyExt;
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry_sdk::propagation::TraceContextPropagator;
-use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
 use platform_core::http::{
     health_router, trace_layer, ApiError, ApiJson, ApiPath, ApiQuery, FieldError, ReadinessCheck,
 };
-use platform_core::telemetry::current_trace_id;
 use serde::Deserialize;
 use serde_json::Value;
 use tower::ServiceExt as _;
-use tracing_subscriber::layer::SubscriberExt;
 
 struct Fixed(bool);
 
@@ -74,7 +69,6 @@ fn app() -> Router {
             "/p/{id}",
             get(|ApiPath(id): ApiPath<u32>| async move { id.to_string() }),
         )
-        .route("/trace", get(|| async { current_trace_id() }))
         .merge(health_router(Arc::new(Fixed(true))))
         .layer(trace_layer())
 }
@@ -196,49 +190,6 @@ async fn ready_follows_check() {
             status
         );
     }
-}
-
-#[tokio::test]
-async fn traceparent_header_sets_handler_trace_id_and_span_attrs() {
-    opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
-    let exporter = InMemorySpanExporter::default();
-    let provider = SdkTracerProvider::builder()
-        .with_simple_exporter(exporter.clone())
-        .build();
-    let subscriber = tracing_subscriber::registry()
-        .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
-    let _guard = tracing::subscriber::set_default(subscriber);
-    // Callsite interest is cached process-wide; tests running in parallel without a subscriber can
-    // cache "never" for the spans below. Rebuild so this thread-local subscriber is consulted.
-    tracing::callsite::rebuild_interest_cache();
-
-    let trace_id = "4bf92f3577b34da6a3ce929d0e0e4736";
-    let req = Request::get("/trace")
-        .header("traceparent", format!("00-{trace_id}-00f067aa0ba902b7-01"))
-        .body(Body::empty())
-        .unwrap();
-    let (s, _, b) = call(app(), req).await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(String::from_utf8(b).unwrap(), trace_id);
-
-    let (_, _, b) = call(app(), get_req("/nope")).await;
-    drop(b);
-    let spans = exporter.get_finished_spans().unwrap();
-    let routed = spans
-        .iter()
-        .find(|s| s.name == "GET /trace")
-        .expect("span named by route");
-    let attr = |k: &str| {
-        routed
-            .attributes
-            .iter()
-            .find(|kv| kv.key.as_str() == k)
-            .map(|kv| kv.value.to_string())
-    };
-    assert_eq!(attr("http.route").as_deref(), Some("/trace"));
-    assert_eq!(attr("http.request.method").as_deref(), Some("GET"));
-    assert_eq!(attr("http.response.status_code").as_deref(), Some("200"));
-    assert!(spans.iter().any(|s| s.name == "GET unmatched"));
 }
 
 struct Hang;

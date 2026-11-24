@@ -56,6 +56,7 @@ A test in `tests/architecture.rs` walks `src/domain/**/*.rs` and fails if any li
 2. Application tests with in-memory fakes of ports (hand-written fakes over mock frameworks).
 3. Adapter tests: HTTP via `tower::ServiceExt::oneshot`; db/messaging against real Postgres/Kafka (testcontainers), never SQLite/mocks.
 4. Integration tests in `tests/` with testcontainers (Postgres + Redpanda): few, happy path plus key failures.
+- Tests that assert on spans/trace context (subscriber-dependent) live in their own `tests/<name>.rs` binary with exactly one test and a global subscriber; never `set_default` in a binary with other parallel tests (process-wide callsite interest races, see `docs/lessons/2026-11-24-tracing-interest-flake-recurred.md`).
 - Gate: >= 80% line coverage (`llvm-cov`) excluding `main.rs` and files under `tests/`. Inline `#[cfg(test)]` modules live in `src/` and therefore count toward the measured lines.
 
 ## Lints / quality
