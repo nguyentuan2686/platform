@@ -12,13 +12,14 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 ## Repo map
 ```
 CLAUDE.md, .claude/{settings.json,skills/}
+Cargo.toml, rust-toolchain.toml, deny.toml, tools/rust-dev/Dockerfile   # Rust workspace + dev image
 contracts/{openapi/<svc>.yaml, events/<event>.schema.json}
 services/{order-svc (Java), notify-svc (Rust)}
 libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service}
 deploy/{local/docker-compose.yml, k8s/{base,overlays/prod,platform}, argocd}
 infra/bootstrap/   # idempotent host setup: k3s + argocd + sealed-secrets
-scripts/           # new-service, verify-deploy, public-url
+scripts/           # cargo.sh/cargo.ps1 (Docker Rust), new-service, verify-deploy, public-url
 docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 .github/{workflows, dependabot.yml}
 ```
@@ -42,10 +43,16 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
 - Dev machine is weak (2 cores / 12GB): local stack <= ~3GB; heavy verification runs in CI.
 
+## Rust conventions
+See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all cargo via `scripts/cargo.sh` (Docker). Toolchain pinned in `rust-toolchain.toml`.
+
 ## Commands
 - `mvn -q verify` - build, test, Spotless check, coverage gate
 - `mvn spotless:apply` - auto-format
 - `docker compose -f deploy/local/docker-compose.yml up -d` - local Postgres + Redpanda + otel-lgtm
+- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080) and notify-svc (:8081)  (if a `pgdata` volume from before Plan 2 exists, run `down -v` once so `init-db.sql` creates the notify db)
+- `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
+- `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
 
 ## Lessons loop
 Record in `docs/lessons/YYYY-MM-DD-<slug>.md` (template in `docs/lessons/README.md`). Escalation ladder:

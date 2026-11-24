@@ -7,6 +7,13 @@ updates:
     groups:
       maven-minor-patch:
         update-types: [minor, patch]
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -24,6 +31,16 @@ updates:
         update-types: [version-update:semver-major]
       # build-stage image: its tag encodes the JDK in a suffix Dependabot cannot version-compare; bump manually
       - dependency-name: maven
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /services/notify-svc
+    schedule:
+      interval: weekly
+    # Rust toolchain is pinned in rust-toolchain.toml; bump it deliberately together with the Dockerfile tags.
+    ignore:
+      - dependency-name: rust
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
