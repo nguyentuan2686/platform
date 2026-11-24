@@ -1,0 +1,413 @@
+openapi: 3.1.0
+info:
+  title: chart-svc
+  version: 1.0.0
+  description: >-
+    Stateless Tu Vi (Zi Wei Dou Shu) chart service. Pure function: the same request always
+    yields byte-identical JSON. Stable keys (branches, stems, palaces, stars, mutagens,
+    brightness, elements) are ASCII and never translated; every key has a Vietnamese label
+    (nameVi). Supported years are 1900-2100.
+
+    Hour convention (R8): the hour branch is read in the birthplace's local standard time,
+    i.e. the zone's offset at the birth instant with daylight saving removed;
+    Asia/Ho_Chi_Minh (and its alias Asia/Saigon) is always read at UTC+7, so South
+    Vietnam's UTC+8 period (1960-1975) does not shift the hour. A birth at 23:00-23:59 in that
+    time counts as the next solar day, hour branch Zi. The lunar date is that local date in
+    the chosen calendar; the calendar never changes the hour.
+paths:
+  /tuvi/chart:
+    post:
+      operationId: castChart
+      summary: Cast the natal chart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChartRequest'
+      responses:
+        '200':
+          description: The natal chart. Palaces are ordered by branch starting at Yin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Chart'
+        '400':
+          description: >-
+            Invalid request; errors[0].field is one of body, birth, zone, gender, calendar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Unexpected error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tuvi/daily:
+    post:
+      operationId: castDaily
+      summary: Flow (yearly, monthly, daily) of a day for a natal chart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyRequest'
+      responses:
+        '200':
+          description: The flow layers of the requested day.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Daily'
+        '400':
+          description: >-
+            Invalid request; errors[0].field is one of body, birth, zone, gender, calendar,
+            date.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Unexpected error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    ChartRequest:
+      type: object
+      required: [birth, gender]
+      additionalProperties: false
+      description: Unknown fields are rejected (400 on `body`).
+      properties:
+        birth:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
+          description: >-
+            Local civil time in `zone`, YYYY-MM-DDTHH:MM with optional :SS and no offset. Hour
+            convention (R8): the hour branch is read in the birthplace's local standard time
+            (the zone's offset with daylight saving removed), and 23:00-23:59 in that time
+            (giờ Tý) counts as the next solar day. In a daylight-saving overlap the earlier
+            instant is taken; a time in a gap is rejected (400 on `birth`). The 1900-2100
+            range applies to the resulting local date, so 2100-12-31T23:30 is rejected.
+          examples: ['1994-03-12T08:30']
+        zone:
+          type: string
+          default: Asia/Ho_Chi_Minh
+          description: >-
+            IANA time zone of the birth place; defaults to Asia/Ho_Chi_Minh. Asia/Ho_Chi_Minh
+            and its alias Asia/Saigon are always normalised to UTC+7 (the 1960-1975 UTC+8
+            period gives the instant but does not shift the hour).
+        gender:
+          type: string
+          enum: [male, female]
+        calendar:
+          type: string
+          enum: [VN, CN]
+          default: VN
+          description: >-
+            Lunar calendar of the lunar dates (VN computed at UTC+7, CN at UTC+8). It changes
+            only the lunar date, never the hour branch.
+    DailyRequest:
+      type: object
+      required: [birth, gender, date]
+      additionalProperties: false
+      description: The ChartRequest fields plus `date`; unknown fields are rejected (400 on `body`).
+      properties:
+        birth:
+          $ref: '#/components/schemas/ChartRequest/properties/birth'
+        zone:
+          $ref: '#/components/schemas/ChartRequest/properties/zone'
+        gender:
+          $ref: '#/components/schemas/ChartRequest/properties/gender'
+        calendar:
+          $ref: '#/components/schemas/ChartRequest/properties/calendar'
+        date:
+          type: string
+          format: date
+          description: Solar day to cast, YYYY-MM-DD, years 1900-2100.
+          examples: ['2026-11-25']
+    Lunar:
+      type: object
+      required: [year, month, day, leap]
+      additionalProperties: false
+      properties:
+        year:
+          type: integer
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        day:
+          type: integer
+          minimum: 1
+          maximum: 30
+        leap:
+          type: boolean
+    CanChi:
+      type: object
+      required: [stem, branch, nameVi]
+      additionalProperties: false
+      properties:
+        stem:
+          $ref: '#/components/schemas/Stem'
+        branch:
+          $ref: '#/components/schemas/Branch'
+        nameVi:
+          type: string
+          minLength: 1
+    Stem:
+      type: string
+      enum: [Jia, Yi, Bing, Ding, Wu, Ji, Geng, Xin, Ren, Gui]
+    Branch:
+      type: string
+      enum: [Zi, Chou, Yin, Mao, Chen, Si, Wu, Wei, Shen, You, Xu, Hai]
+    PalaceKey:
+      type: string
+      enum: [Menh, PhuMau, PhucDuc, DienTrach, QuanLoc, NoBoc, ThienDi, TatAch, TaiBach, TuTuc, PhuThe, HuynhDe]
+    StarKey:
+      type: string
+      enum:
+        - TuVi
+        - ThienCo
+        - ThaiDuong
+        - VuKhuc
+        - ThienDong
+        - LiemTrinh
+        - ThienPhu
+        - ThaiAm
+        - ThamLang
+        - CuMon
+        - ThienTuong
+        - ThienLuong
+        - ThatSat
+        - PhaQuan
+        - TaPhu
+        - HuuBat
+        - VanXuong
+        - VanKhuc
+        - LocTon
+        - ThienMa
+        - KinhDuong
+        - DaLa
+        - HoaTinh
+        - LinhTinh
+        - DiaKhong
+        - DiaKiep
+        - ThienKhoi
+        - ThienViet
+    Mutagen:
+      type: string
+      enum: [Loc, Quyen, Khoa, Ky]
+    Brightness:
+      type: string
+      enum: [Mieu, Vuong, Dac, Binh, Ham]
+    Element:
+      type: string
+      enum: [Thuy, Moc, Kim, Tho, Hoa]
+    Star:
+      type: object
+      required: [key, nameVi, brightness, mutagen]
+      additionalProperties: false
+      properties:
+        key:
+          $ref: '#/components/schemas/StarKey'
+        nameVi:
+          type: string
+          minLength: 1
+        brightness:
+          description: Null for stars without a brightness.
+          oneOf:
+            - $ref: '#/components/schemas/Brightness'
+            - type: 'null'
+        mutagen:
+          description: Birth-year transformation (Tu Hoa) of the star, if any.
+          oneOf:
+            - $ref: '#/components/schemas/Mutagen'
+            - type: 'null'
+    Palace:
+      type: object
+      required: [key, nameVi, branch, stem, isBody, decade, major, minor]
+      additionalProperties: false
+      properties:
+        key:
+          $ref: '#/components/schemas/PalaceKey'
+        nameVi:
+          type: string
+          minLength: 1
+        branch:
+          $ref: '#/components/schemas/Branch'
+        stem:
+          $ref: '#/components/schemas/Stem'
+        isBody:
+          type: boolean
+          description: True for the palace that holds Than (the body); exactly one palace.
+        decade:
+          type: object
+          required: [from, to]
+          additionalProperties: false
+          description: Dai han, ages from..to inclusive.
+          properties:
+            from:
+              type: integer
+              minimum: 0
+            to:
+              type: integer
+              minimum: 0
+        major:
+          type: array
+          items:
+            $ref: '#/components/schemas/Star'
+        minor:
+          type: array
+          items:
+            $ref: '#/components/schemas/Star'
+    Chart:
+      type: object
+      required:
+        - school
+        - calendar
+        - lunar
+        - yearCanChi
+        - hourBranch
+        - cuc
+        - menhChu
+        - thanChu
+        - thanPalace
+        - palaces
+      additionalProperties: false
+      properties:
+        school:
+          type: string
+          enum:
+            - "iztro-default+vn-calendar;hour=local-standard;ty23=next-day"
+            - "iztro-default;hour=local-standard;ty23=next-day"
+          description: >-
+            Engine, calendar and hour convention: the first value for calendar VN, the
+            second for CN. `hour=local-standard` means the hour branch is read in the
+            birthplace's local standard time; `ty23=next-day` means 23:00-23:59 (giờ Tý)
+            counts as the next solar day.
+        calendar:
+          type: string
+          enum: [VN, CN]
+        lunar:
+          $ref: '#/components/schemas/Lunar'
+        yearCanChi:
+          $ref: '#/components/schemas/CanChi'
+        hourBranch:
+          $ref: '#/components/schemas/Branch'
+        cuc:
+          type: object
+          required: [element, number, nameVi]
+          additionalProperties: false
+          properties:
+            element:
+              $ref: '#/components/schemas/Element'
+            number:
+              type: integer
+              minimum: 2
+              maximum: 6
+            nameVi:
+              type: string
+              minLength: 1
+        menhChu:
+          $ref: '#/components/schemas/StarKey'
+        thanChu:
+          $ref: '#/components/schemas/StarKey'
+        thanPalace:
+          $ref: '#/components/schemas/PalaceKey'
+        palaces:
+          type: array
+          minItems: 12
+          maxItems: 12
+          description: Ordered by branch starting at Yin, the order the board is drawn in.
+          items:
+            $ref: '#/components/schemas/Palace'
+    FlowLayer:
+      type: object
+      required: [palaceKey, branch, stem, mutagens]
+      additionalProperties: false
+      properties:
+        palaceKey:
+          $ref: '#/components/schemas/PalaceKey'
+          description: Natal palace sitting on `branch` (where this layer's Mệnh falls).
+        branch:
+          $ref: '#/components/schemas/Branch'
+          description: Branch of the layer's Mệnh palace.
+        stem:
+          $ref: '#/components/schemas/Stem'
+          description: >-
+            Stem of the layer: the flow year's, month's or day's stem (for `daily`, the
+            real day's stem, equal to dayCanChi.stem).
+        mutagens:
+          type: array
+          minItems: 4
+          maxItems: 4
+          description: The stem's Tu Hoa in the order Loc, Quyen, Khoa, Ky.
+          items:
+            type: object
+            required: [star, mutagen]
+            additionalProperties: false
+            properties:
+              star:
+                $ref: '#/components/schemas/StarKey'
+              mutagen:
+                $ref: '#/components/schemas/Mutagen'
+    Daily:
+      type: object
+      required: [date, lunar, dayCanChi, yearly, monthly, daily]
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+          format: date
+        lunar:
+          $ref: '#/components/schemas/Lunar'
+          description: >-
+            Lunar date of `date` in the request's calendar (VN by default, else CN); the
+            monthly and daily layers follow this calendar.
+        dayCanChi:
+          $ref: '#/components/schemas/CanChi'
+          description: Can chi of the real solar day `date`.
+        yearly:
+          $ref: '#/components/schemas/FlowLayer'
+          description: Lưu niên (flow year).
+        monthly:
+          $ref: '#/components/schemas/FlowLayer'
+          description: Lưu nguyệt (flow month) of the lunar month in `lunar`.
+        daily:
+          $ref: '#/components/schemas/FlowLayer'
+          description: >-
+            Lưu nhật (flow day). Its `stem` is the real day's stem (dayCanChi.stem) and its
+            mutagens are that stem's Tứ Hóa.
+    Problem:
+      type: object
+      description: RFC 9457 problem details with platform extensions.
+      required: [type, title, status, trace_id]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string

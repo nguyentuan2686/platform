@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["libs/rust/platform-core", "services/notify-svc"]
+members = ["libs/rust/platform-core", "services/notify-svc", "services/chart-svc"]
 
 [workspace.package]
 edition = "2021"
@@ -41,6 +41,9 @@ testcontainers = "0.27.3"
 testcontainers-modules = { version = "0.15.0", features = ["postgres"] }
 jsonschema = { version = "0.63.1", default-features = false }
 yaml_serde = "0.10.7"
+# Embeds the tz database: the distroless runtime image has no /usr/share/zoneinfo.
+jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+x-iztro = { version = "0.9.0", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

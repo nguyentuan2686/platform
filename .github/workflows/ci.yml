@@ -23,6 +23,7 @@ jobs:
       root: ${{ steps.filter.outputs.root }}
       starter: ${{ steps.filter.outputs.starter }}
       notify: ${{ steps.filter.outputs.notify }}
+      chart: ${{ steps.filter.outputs.chart }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -44,6 +45,15 @@ jobs:
               - '.cargo/**'
               - 'deny.toml'
               - 'contracts/**'
+            chart:
+              - 'services/chart-svc/**'
+              - 'libs/rust/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'deny.toml'
+              - '.cargo/**'
+              - 'contracts/openapi/chart-svc.yaml'
             root:
               - 'pom.xml'
               - '.github/**'
@@ -74,10 +84,23 @@ jobs:
       dockerfile: services/notify-svc/Dockerfile
       publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+  chart-svc:
+    needs: changes
+    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_rust-service.yml
+    with:
+      package: chart-svc
+      image: chart-svc
+      dockerfile: services/chart-svc/Dockerfile
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc]
+    needs: [changes, order-svc, notify-svc, chart-svc]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled
