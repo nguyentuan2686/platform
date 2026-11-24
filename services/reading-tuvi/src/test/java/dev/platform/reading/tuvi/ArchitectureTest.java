@@ -7,7 +7,7 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
-// allowEmptyShould: domain/application/adapter packages are filled by later tasks.
+// allowEmptyShould remains on rules whose packages (application, adapter) are still empty.
 @AnalyzeClasses(
     packages = "dev.platform.reading.tuvi",
     importOptions = ImportOption.DoNotIncludeTests.class)
@@ -28,8 +28,7 @@ class ArchitectureTest {
               "tools.jackson..",
               "com.fasterxml..",
               "..adapter..",
-              "..application..")
-          .allowEmptyShould(true);
+              "..application..");
 
   @ArchTest
   static final ArchRule applicationDoesNotDependOnAdapters =

@@ -1,0 +1,33 @@
+{
+  "cuc": {"element": "Kim", "number": 4, "nameVi": "Kim tứ cục"},
+  "thanPalace": "QuanLoc",
+  "tuan": ["Shen", "You"],
+  "triet": ["Chen", "Si"],
+  "palaces": [
+    {"key": "Menh", "nameVi": "Mệnh", "branch": "Yin", "isBody": false, "tuan": false, "triet": false,
+     "major": [{"key": "TuVi", "nameVi": "Tử Vi", "brightness": "Mieu", "mutagen": null}],
+     "minor": [{"key": "VanXuong", "nameVi": "Văn Xương", "brightness": null, "mutagen": "Khoa"}]},
+    {"key": "HuynhDe", "nameVi": "Huynh Đệ", "branch": "Mao", "isBody": false, "tuan": false, "triet": false,
+     "major": [{"key": "LiemTrinh", "nameVi": "Liêm Trinh", "brightness": "Vuong", "mutagen": null}], "minor": []},
+    {"key": "PhuThe", "nameVi": "Phu Thê", "branch": "Chen", "isBody": false, "tuan": false, "triet": true,
+     "major": [{"key": "ThienCo", "nameVi": "Thiên Cơ", "brightness": null, "mutagen": "Ky"}], "minor": []},
+    {"key": "TuTuc", "nameVi": "Tử Tức", "branch": "Si", "isBody": false, "tuan": false, "triet": true,
+     "major": [{"key": "ThaiDuong", "nameVi": "Thái Dương", "brightness": "Dac", "mutagen": null}], "minor": []},
+    {"key": "TaiBach", "nameVi": "Tài Bạch", "branch": "Wu", "isBody": false, "tuan": false, "triet": false,
+     "major": [], "minor": []},
+    {"key": "TatAch", "nameVi": "Tật Ách", "branch": "Wei", "isBody": false, "tuan": false, "triet": false,
+     "major": [{"key": "ThienDong", "nameVi": "Thiên Đồng", "brightness": "Binh", "mutagen": null}], "minor": []},
+    {"key": "ThienDi", "nameVi": "Thiên Di", "branch": "Shen", "isBody": false, "tuan": true, "triet": false,
+     "major": [{"key": "VuKhuc", "nameVi": "Vũ Khúc", "brightness": "Dac", "mutagen": null}], "minor": []},
+    {"key": "NoBoc", "nameVi": "Nô Bộc", "branch": "You", "isBody": false, "tuan": true, "triet": false,
+     "major": [{"key": "ThienPhu", "nameVi": "Thiên Phủ", "brightness": "Mieu", "mutagen": null}], "minor": []},
+    {"key": "QuanLoc", "nameVi": "Quan Lộc", "branch": "Xu", "isBody": true, "tuan": false, "triet": false,
+     "major": [{"key": "ThamLang", "nameVi": "Tham Lang", "brightness": "Vuong", "mutagen": "Loc"}], "minor": []},
+    {"key": "DienTrach", "nameVi": "Điền Trạch", "branch": "Hai", "isBody": false, "tuan": false, "triet": false,
+     "major": [{"key": "CuMon", "nameVi": "Cự Môn", "brightness": "Ham", "mutagen": null}], "minor": []},
+    {"key": "PhucDuc", "nameVi": "Phúc Đức", "branch": "Zi", "isBody": false, "tuan": false, "triet": false,
+     "major": [{"key": "ThienTuong", "nameVi": "Thiên Tướng", "brightness": "Dac", "mutagen": null}], "minor": []},
+    {"key": "PhuMau", "nameVi": "Phụ Mẫu", "branch": "Chou", "isBody": false, "tuan": false, "triet": false,
+     "major": [{"key": "ThienLuong", "nameVi": "Thiên Lương", "brightness": "Mieu", "mutagen": null}], "minor": []}
+  ]
+}
