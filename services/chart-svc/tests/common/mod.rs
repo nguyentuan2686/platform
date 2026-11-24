@@ -23,9 +23,10 @@ pub fn assert_each_star_once(id: &str, chart: &Chart) {
             .flat_map(|p| &p.adjective)
             .filter(|a| **a == star)
             .count();
-        // A VN chart relabels Hàm Trì as Đào Hoa (same palace), so it has no Hàm Trì.
+        // A VN chart relabels Hàm Trì as Đào Hoa (same palace), so it has no Hàm Trì, and
+        // drops Niên Giải (iztro's 年解 is the Giải Thần rule, which VN already places).
         let want = if vn {
-            usize::from(star != AdjStarKey::HamTri)
+            usize::from(!matches!(star, AdjStarKey::HamTri | AdjStarKey::NienGiai))
         } else {
             usize::from(!star.is_vn_only())
         };

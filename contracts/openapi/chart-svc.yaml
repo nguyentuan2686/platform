@@ -211,7 +211,11 @@ components:
       enum: [Thuy, Moc, Kim, Tho, Hoa]
     AdjStarKey:
       type: string
-      description: Adjective star (tap dieu). Tuan/Triet-type stars are reported as palace pairs, not here.
+      description: >-
+        Adjective star (tap dieu). Tuan/Triet-type stars are reported as palace pairs, not here.
+        The 11 VN-only keys (DaoHoa, ThienGiai, DiaGiai, ThienY, QuocAn, DuongPhu, VanTinh,
+        LuuHa, DauQuan, ThienLa, DiaVong) appear only on VN charts. VN charts relabel HamTri as
+        DaoHoa (same palace) and omit NienGiai (same rule as GiaiThan).
       enum:
         - HongLoan
         - ThienHy
@@ -458,7 +462,9 @@ components:
             Engine, calendar and hour convention: the first value for calendar VN, the
             second for CN. `hour=local-standard` means the hour branch is read in the
             birthplace's local standard time; `ty23=next-day` means 23:00-23:59 (giờ Tý)
-            counts as the next solar day.
+            counts as the next solar day. `vn` means the Vietnamese-school tables (brightness,
+            Tu Hoa, Khoi/Viet, Hoa/Linh, Giai Than, Pha Toai and the VN-only stars) with calendar
+            VN; `leap=split15` means leap-month days 16-30 count as the next month.
         calendar:
           type: string
           enum: [VN, CN]

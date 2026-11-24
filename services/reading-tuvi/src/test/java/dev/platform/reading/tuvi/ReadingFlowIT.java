@@ -115,6 +115,28 @@ class ReadingFlowIT {
   }
 
   @Test
+  void vn_chart_school_reads_the_shared_iztro_default_corpus() throws Exception {
+    assertThat(ChartMapper.school(fixture("/chart-fixture.json"))).startsWith("vn+");
+
+    JsonNode json = JSON.readTree(post("/tuvi/readings/basic", BODY.formatted("")).body());
+
+    String missing =
+        jdbc.queryForObject(
+            "select content from knowledge where key = 'tuvi:frame=missing'"
+                + " and school = 'iztro-default' and lang = 'vi' and status = 'approved'",
+            String.class);
+    long found = 0;
+    for (JsonNode section : json.get("sections")) {
+      for (JsonNode line : section.get("lines")) {
+        if (!line.asString().equals(missing)) {
+          found++;
+        }
+      }
+    }
+    assertThat(found).isPositive();
+  }
+
+  @Test
   void today_reading_has_four_areas_from_the_seed() throws Exception {
     HttpResponse<String> res =
         post("/tuvi/readings/today", BODY.formatted(",\"date\":\"2026-11-24\""));

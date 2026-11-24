@@ -285,10 +285,11 @@ fn star_cell(key: &str, brightness: &str, mutagen: &str, mask: Option<VnMask>) -
     format!("{key}/{brightness}/{mutagen}")
 }
 
-/// Stars the Vietnamese school places elsewhere than iztro or adds (Khôi, Việt, Hỏa, Linh, Giải
+/// Stars the Vietnamese school places elsewhere than iztro, drops (Niên Giải) or adds (Khôi, Việt, Hỏa, Linh, Giải
 /// Thần, Phá Toái): left out of both sides' lists for VN charts (their placement is asserted
 /// against lasotuvi in `vn_crosscheck.rs`).
-const VN_MOVED: [&str; 18] = [
+const VN_MOVED: [&str; 19] = [
+    "NienGiai",
     "HamTri",
     "DaoHoa",
     "ThienGiai",

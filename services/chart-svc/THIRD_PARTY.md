@@ -5,10 +5,13 @@
 - Project: lasotuvi, <https://github.com/doanguyen/lasotuvi>
 - Commit: `ace8379a3ea033674e8a9096f5b98a9e2041eace`
 - Licence: MIT, Copyright (c) 2016 doanguyen
-- Used for: the Vietnamese-school star brightness table (`dacTinhSao` in `lasotuvi/DiaBan.py`)
-  and the natal Tứ Hóa table (the Tứ Hóa block in `lasotuvi/App.py`), transcribed as data into
-  `src/domain/vn_school.rs`. No lasotuvi code is copied or linked; the cross-check fixture
-  (`tests/fixtures/lasotuvi.json`) holds only its output.
+- Used for, transcribed as data and rules into `src/domain/vn_school.rs`: the star brightness
+  table (`dacTinhSao` in `lasotuvi/DiaBan.py`); the natal and flow Tứ Hóa table (the Tứ Hóa
+  block in `lasotuvi/App.py`); the Khôi/Việt table (`timThienKhoi`); the Hỏa/Linh start
+  palaces and direction (`timHoaLinh`); the Lưu Hà table (`maTranLuuHa`); and the placement
+  rules of Giải Thần, Phá Toái (`timPhaToai`), Thiên Giải, Địa Giải, Thiên Y, Quốc Ấn, Đường
+  Phù, Văn Tinh, Đẩu Quân, Thiên La and Địa Võng. No lasotuvi code is copied or linked; the
+  cross-check fixture (`tests/fixtures/lasotuvi.json`) holds only its output.
 
 ```
 MIT License

@@ -1,14 +1,22 @@
 //! Vietnamese school (phái Việt) rules applied to a `calendar=VN` chart.
 //!
-//! The brightness table (miếu, vượng, đắc, bình, hãm) and the natal Tứ Hóa table are
-//! transcribed from `lasotuvi` (<https://github.com/doanguyen/lasotuvi>, MIT, Copyright (c)
-//! 2016 doanguyen) at commit `ace8379a3ea033674e8a9096f5b98a9e2041eace`: `dacTinhSao` in
-//! `lasotuvi/DiaBan.py` and the "Tứ Hóa" block (the ten verses of "Số tử vi dưới mắt khoa
-//! học") in `lasotuvi/App.py`. Attribution and licence text: `THIRD_PARTY.md`.
+//! Data and placement rules transcribed from `lasotuvi` (<https://github.com/doanguyen/lasotuvi>,
+//! MIT, Copyright (c) 2016 doanguyen) at commit `ace8379a3ea033674e8a9096f5b98a9e2041eace`;
+//! attribution and licence text: `THIRD_PARTY.md`:
+//! - the brightness table (miếu, vượng, đắc, bình, hãm): `dacTinhSao` in `lasotuvi/DiaBan.py`;
+//! - the natal and flow Tứ Hóa table (the ten verses of "Số tử vi dưới mắt khoa học"): the
+//!   "Tứ Hóa" block in `lasotuvi/App.py`;
+//! - Thiên Khôi / Thiên Việt: `timThienKhoi`; Hỏa Tinh / Linh Tinh start palaces and
+//!   direction: `timHoaLinh`; the Lưu Hà table: `maTranLuuHa` (used by `timLuuTru`);
+//! - the placement rules of Giải Thần (with Phượng Các, `saoPhuongCac`), Phá Toái
+//!   (`timPhaToai`), Thiên Giải, Địa Giải, Thiên Y, Quốc Ấn, Đường Phù, Văn Tinh, Đẩu Quân and
+//!   the fixed Thiên La (Thìn) and Địa Võng (Tuất), all from the star-placement code of
+//!   `lasotuvi/DiaBan.py`.
 //!
-//! Only data is taken, nothing of lasotuvi's code. A star that has no row in lasotuvi's
-//! table (Thiên Phủ and the minor stars it does not rate) keeps the level derived from the
-//! engine.
+//! Only data and rules are taken, nothing of lasotuvi's code. A star that has no row in
+//! lasotuvi's brightness table (Thiên Phủ and the minor stars it does not rate) keeps the
+//! level derived from the engine. iztro's Niên Giải is dropped on VN charts (same rule as
+//! Giải Thần).
 
 use crate::domain::calendar::{Branch, CanChi, Stem};
 use crate::domain::chart::{AdjStarKey, Brightness, Chart, Flow, Gender, Mutagen, StarKey};
@@ -347,6 +355,11 @@ pub fn apply_vn_school(chart: &mut Chart) {
     // lasotuvi's Đào Hoa is iztro's Hàm Trì (same palace in all 50 cross-check charts; see
     // docs/tuvi/vn-school-diff.md), so the star is relabelled, not added.
     relabel_adjective(chart, AdjStarKey::HamTri, AdjStarKey::DaoHoa);
+    // iztro's Niên Giải (年解) follows the same rule as `vn_giai_than`, so on a VN chart it
+    // would duplicate Giải Thần in the same palace; lasotuvi has no Niên Giải. Dropped.
+    for palace in &mut chart.palaces {
+        palace.adjective.retain(|a| *a != AdjStarKey::NienGiai);
+    }
     add_vn_only_stars(chart);
     let tu_hoa = vn_tu_hoa(chart.year.stem);
     for palace in &mut chart.palaces {
