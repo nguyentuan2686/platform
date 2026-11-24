@@ -256,7 +256,7 @@ async fn daily(
         .ok_or_else(|| field_error("date", "is required"))?;
     let chart = state.service.chart(&req).map_err(engine_failure)?;
     let flow = state.service.daily(&req, date).map_err(engine_failure)?;
-    Ok(Json(DailyDto::new(&flow, &chart)))
+    Ok(Json(DailyDto::new(&flow, &chart)?))
 }
 
 // ---------------------------------------------------------------- response DTOs
@@ -428,14 +428,21 @@ struct LayerDto {
 }
 
 impl LayerDto {
-    /// `palace_key` is the natal palace that sits on the layer's branch.
-    fn new(l: &FlowLayer, chart: &Chart) -> Self {
+    /// `palace_key` is the natal palace that sits on the layer's branch; a chart without
+    /// one (impossible for a valid chart) is an internal error, never an empty key.
+    fn new(l: &FlowLayer, chart: &Chart) -> Result<Self, ApiError> {
         let palace_key = chart
             .palaces
             .iter()
             .find(|p| p.branch == l.palace_branch)
-            .map_or("", |p| p.key.key());
-        Self {
+            .map(|p| p.key.key())
+            .ok_or_else(|| {
+                ApiError::Internal(anyhow::anyhow!(
+                    "natal chart has no palace on flow branch {}",
+                    l.palace_branch.key()
+                ))
+            })?;
+        Ok(Self {
             palace_key,
             branch: l.palace_branch.key(),
             stem: l.stem.key(),
@@ -447,7 +454,7 @@ impl LayerDto {
                     mutagen: m.key(),
                 })
                 .collect(),
-        }
+        })
     }
 }
 
@@ -463,8 +470,8 @@ struct DailyDto {
 }
 
 impl DailyDto {
-    fn new(f: &Flow, chart: &Chart) -> Self {
-        Self {
+    fn new(f: &Flow, chart: &Chart) -> Result<Self, ApiError> {
+        Ok(Self {
             date: format!(
                 "{:04}-{:02}-{:02}",
                 f.date.year(),
@@ -473,10 +480,10 @@ impl DailyDto {
             ),
             lunar: f.lunar.into(),
             day_can_chi: f.day.into(),
-            yearly: LayerDto::new(&f.yearly, chart),
-            monthly: LayerDto::new(&f.monthly, chart),
-            daily: LayerDto::new(&f.daily, chart),
-        }
+            yearly: LayerDto::new(&f.yearly, chart)?,
+            monthly: LayerDto::new(&f.monthly, chart)?,
+            daily: LayerDto::new(&f.daily, chart)?,
+        })
     }
 }
 
@@ -533,6 +540,48 @@ mod tests {
         assert!(matches!(
             parse(&json!([1]), false),
             Err(ApiError::Validation(f)) if f[0].field == "body"
+        ));
+    }
+
+    fn chart_1994() -> Chart {
+        use crate::adapters::engine::IztroAdapter;
+        use crate::application::ports::ZiweiEngine as _;
+        let day = Date::from_calendar_date(1994, Month::March, 12).unwrap();
+        let birth = crate::application::birth::NormalizedBirth::from_parts(
+            day,
+            crate::domain::calendar::Branch::Chen,
+            CalendarKind::Vn,
+        );
+        IztroAdapter.chart(&birth, Gender::Male).unwrap()
+    }
+
+    #[test]
+    fn layer_names_the_natal_palace_on_its_branch() {
+        let chart = chart_1994();
+        let p = &chart.palaces[3];
+        let layer = FlowLayer {
+            palace_branch: p.branch,
+            stem: p.stem,
+            mutagens: [(crate::domain::chart::StarKey::TuVi, Mutagen::Loc); 4],
+        };
+        let dto = LayerDto::new(&layer, &chart).unwrap();
+        assert_eq!(dto.palace_key, p.key.key());
+        assert_eq!(dto.branch, p.branch.key());
+    }
+
+    #[test]
+    fn layer_on_a_branch_without_a_palace_is_an_internal_error() {
+        let mut chart = chart_1994();
+        let missing = chart.palaces[0].branch;
+        chart.palaces[0].branch = chart.palaces[1].branch;
+        let layer = FlowLayer {
+            palace_branch: missing,
+            stem: chart.palaces[0].stem,
+            mutagens: [(crate::domain::chart::StarKey::TuVi, Mutagen::Loc); 4],
+        };
+        assert!(matches!(
+            LayerDto::new(&layer, &chart),
+            Err(ApiError::Internal(_))
         ));
     }
 }

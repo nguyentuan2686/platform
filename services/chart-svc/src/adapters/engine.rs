@@ -216,6 +216,14 @@ fn map_chart(b: &NormalizedBirth, g: Gender, a: &iz::Astrolabe) -> anyhow::Resul
     let palaces: [Palace; 12] = palaces
         .try_into()
         .map_err(|_| anyhow!("engine returned other than 12 palaces"))?;
+    if !Branch::ALL
+        .iter()
+        .all(|b| palaces.iter().any(|p| p.branch == *b))
+    {
+        return Err(anyhow!(
+            "engine palace branches are not a permutation of the 12 branches"
+        ));
+    }
     let than = a
         .palaces
         .iter()
@@ -526,6 +534,20 @@ mod tests {
         assert!(failures.is_empty(), "{failures:?}");
     }
 
+    fn birth_1994() -> NormalizedBirth {
+        let day = Date::from_calendar_date(1994, Month::March, 12).unwrap();
+        NormalizedBirth::from_parts(day, Branch::Chen, CalendarKind::Vn)
+    }
+
+    #[test]
+    fn palace_branches_must_be_a_permutation_of_the_twelve() {
+        let b = birth_1994();
+        let mut a = astrolabe(&b, Gender::Male).unwrap();
+        assert!(map_chart(&b, Gender::Male, &a).is_ok());
+        a.palaces[1].earthly_branch = a.palaces[0].earthly_branch;
+        let err = map_chart(&b, Gender::Male, &a).unwrap_err();
+        assert!(format!("{err:#}").contains("branch"), "{err:#}");
+    }
     #[test]
     fn time_index_of_branches() {
         let got: Vec<u8> = Branch::ALL.iter().map(|&b| time_index(b)).collect();

@@ -85,12 +85,21 @@ components:
         birth:
           type: string
           pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?$'
-          description: Local civil time in `zone`, YYYY-MM-DDTHH:MM with optional :SS and no offset.
+          description: >-
+            Local civil time in `zone`, YYYY-MM-DDTHH:MM with optional :SS and no offset. Hour
+            convention (R8): the hour branch is read in the birthplace's local standard time
+            (the zone's offset with daylight saving removed), and 23:00-23:59 in that time
+            (giờ Tý) counts as the next solar day. In a daylight-saving overlap the earlier
+            instant is taken; a time in a gap is rejected (400 on `birth`). The 1900-2100
+            range applies to the resulting local date, so 2100-12-31T23:30 is rejected.
           examples: ['1994-03-12T08:30']
         zone:
           type: string
           default: Asia/Ho_Chi_Minh
-          description: IANA time zone of the birth place.
+          description: >-
+            IANA time zone of the birth place; defaults to Asia/Ho_Chi_Minh. Asia/Ho_Chi_Minh
+            and its alias Asia/Saigon are always normalised to UTC+7 (the 1960-1975 UTC+8
+            period gives the instant but does not shift the hour).
         gender:
           type: string
           enum: [male, female]
@@ -315,10 +324,15 @@ components:
       properties:
         palaceKey:
           $ref: '#/components/schemas/PalaceKey'
+          description: Natal palace sitting on `branch` (where this layer's Mệnh falls).
         branch:
           $ref: '#/components/schemas/Branch'
+          description: Branch of the layer's Mệnh palace.
         stem:
           $ref: '#/components/schemas/Stem'
+          description: >-
+            Stem of the layer: the flow year's, month's or day's stem (for `daily`, the
+            real day's stem, equal to dayCanChi.stem).
         mutagens:
           type: array
           minItems: 4
@@ -343,14 +357,23 @@ components:
           format: date
         lunar:
           $ref: '#/components/schemas/Lunar'
+          description: >-
+            Lunar date of `date` in the request's calendar (VN by default, else CN); the
+            monthly and daily layers follow this calendar.
         dayCanChi:
           $ref: '#/components/schemas/CanChi'
+          description: Can chi of the real solar day `date`.
         yearly:
           $ref: '#/components/schemas/FlowLayer'
+          description: Lưu niên (flow year).
         monthly:
           $ref: '#/components/schemas/FlowLayer'
+          description: Lưu nguyệt (flow month) of the lunar month in `lunar`.
         daily:
           $ref: '#/components/schemas/FlowLayer'
+          description: >-
+            Lưu nhật (flow day). Its `stem` is the real day's stem (dayCanChi.stem) and its
+            mutagens are that stem's Tứ Hóa.
     Problem:
       type: object
       description: RFC 9457 problem details with platform extensions.
