@@ -139,7 +139,7 @@ services:
       KNOWLEDGE_DIR: /app/knowledge/tuvi
       OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=60"
+      JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=50"
     ports:
       - "127.0.0.1:${READING_TUVI_PORT:-8083}:8083"
     mem_limit: 384m

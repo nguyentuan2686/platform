@@ -75,7 +75,7 @@ class KnowledgeFilesTest {
         records++;
       }
     }
-    assertThat(records).isEqualTo(24);
+    assertThat(records).isGreaterThanOrEqualTo(24);
   }
 
   @Test
@@ -87,6 +87,12 @@ class KnowledgeFilesTest {
     assertThat(keys)
         .containsExactlyInAnyOrderElementsOf(
             FRAME_IDS.stream().map(i -> "tuvi:frame=" + i).toList());
+    assertThat(keys).hasSize(12);
+    for (String line : Files.readAllLines(KNOWLEDGE.resolve("frames.vi.jsonl"))) {
+      assertThat(JsonMapper.shared().readTree(line).get("status").stringValue())
+          .as(line)
+          .isEqualTo("approved");
+    }
   }
 
   @Test

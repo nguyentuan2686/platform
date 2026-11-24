@@ -31,6 +31,7 @@ class ReadingServiceTest {
   final List<String> findCalls = new ArrayList<>();
   final Map<String, BasicReading> cache = new HashMap<>();
   int chartCalls;
+  boolean failCache;
   long version = 1;
   Chart chart;
 
@@ -66,13 +67,21 @@ class ReadingServiceTest {
   final ReadingCachePort cachePort =
       new ReadingCachePort() {
         @Override
-        public Optional<BasicReading> find(String chartHash, long knowledgeVersion) {
-          return Optional.ofNullable(cache.get(chartHash + "/" + knowledgeVersion));
+        public Optional<BasicReading> find(
+            String chartHash, long knowledgeVersion, int renderVersion) {
+          if (failCache) {
+            throw new IllegalStateException("boom");
+          }
+          return Optional.ofNullable(
+              cache.get(chartHash + "/" + knowledgeVersion + "/" + renderVersion));
         }
 
         @Override
-        public void put(BasicReading r) {
-          cache.put(r.chartHash() + "/" + r.knowledgeVersion(), r);
+        public void put(BasicReading r, int renderVersion) {
+          if (failCache) {
+            throw new IllegalStateException("boom");
+          }
+          cache.put(r.chartHash() + "/" + r.knowledgeVersion() + "/" + renderVersion, r);
         }
       };
 
@@ -92,7 +101,7 @@ class ReadingServiceTest {
 
     assertThat(r.sections()).hasSize(17);
     assertThat(r.sections().getLast().id()).isEqualTo("disclaimer");
-    assertThat(r.sections()).allSatisfy(s -> assertThat(s.lines()).containsOnly(MISSING));
+    assertThat(r.sections()).allSatisfy(s -> assertThat(s.lines()).containsExactly(MISSING));
     assertThat(r.character()).isEqualTo("LaoThienCo");
     assertThat(r.school()).isEqualTo("school-x");
     assertThat(r.chartHash()).isEqualTo("hash-1");
@@ -175,6 +184,35 @@ class ReadingServiceTest {
   }
 
   @Test
+  void a_different_render_version_misses_the_cache() {
+    service.basic(BIRTH);
+    int finds = findCalls.size();
+
+    new ReadingService(charts, knowledge, cachePort, ReadingService.RENDER_VERSION + 1)
+        .basic(BIRTH);
+
+    assertThat(findCalls.size()).isGreaterThan(finds);
+    assertThat(cache).hasSize(2);
+  }
+
+  @Test
+  void consecutive_missing_lines_collapse_into_one() {
+    BasicReading r = service.basic(BIRTH);
+
+    assertThat(section(r, "menh").lines()).containsExactly(MISSING);
+    assertThat(r.sections()).hasSize(17);
+  }
+
+  @Test
+  void a_failing_cache_is_best_effort_and_still_returns_the_reading() {
+    failCache = true;
+
+    BasicReading r = service.basic(BIRTH);
+
+    assertThat(r.sections()).hasSize(17);
+  }
+
+  @Test
   void today_lists_four_areas_in_enum_order_with_daily_lines_and_rendered_frames() {
     for (Area a : Area.values()) {
       for (Level l : Level.values()) {
@@ -217,7 +255,7 @@ class ReadingServiceTest {
 
     BasicReading r = service.basic(BIRTH);
 
-    assertThat(section(r, "menh").lines()).containsOnly("");
+    assertThat(section(r, "menh").lines()).containsExactly("");
   }
 
   private static BasicReading.RenderedSection section(BasicReading r, String id) {

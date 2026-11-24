@@ -12,11 +12,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Renders readings from the chart service's facts and the knowledge base (no LLM, no invention).
  */
 public class ReadingService implements BasicReadingUseCase, TodayUseCase {
+
+  /**
+   * Version of the rendered shape; part of the cache key. Bump it on ANY change to {@link
+   * ReadingPlan}, {@link TemplateRenderer} or the section/line shape, so stale cached readings are
+   * not served. 2: consecutive {@code missing} lines collapse into one.
+   */
+  public static final int RENDER_VERSION = 2;
+
+  private static final Logger LOG = LoggerFactory.getLogger(ReadingService.class);
 
   static final String CHARACTER = "LaoThienCo";
   static final String LANG = "vi";
@@ -32,24 +43,49 @@ public class ReadingService implements BasicReadingUseCase, TodayUseCase {
   private final ChartPort charts;
   private final KnowledgePort knowledge;
   private final ReadingCachePort cache;
+  private final int renderVersion;
 
   public ReadingService(ChartPort charts, KnowledgePort knowledge, ReadingCachePort cache) {
+    this(charts, knowledge, cache, RENDER_VERSION);
+  }
+
+  ReadingService(
+      ChartPort charts, KnowledgePort knowledge, ReadingCachePort cache, int renderVersion) {
     this.charts = charts;
     this.knowledge = knowledge;
     this.cache = cache;
+    this.renderVersion = renderVersion;
   }
 
   @Override
   public BasicReading basic(Birth birth) {
     ChartResult result = charts.chart(birth);
     long version = knowledge.version();
-    Optional<BasicReading> cached = cache.find(result.chartHash(), version);
+    Optional<BasicReading> cached = cacheFind(result.chartHash(), version);
     if (cached.isPresent()) {
       return cached.get();
     }
     BasicReading reading = renderBasic(result, version);
-    cache.put(reading);
+    cachePut(reading);
     return reading;
+  }
+
+  // The cache is best-effort: a failure is logged (exception type only) and never fails a reading.
+  private Optional<BasicReading> cacheFind(String chartHash, long version) {
+    try {
+      return cache.find(chartHash, version, renderVersion);
+    } catch (RuntimeException e) {
+      LOG.warn("Reading cache lookup failed: {}", e.getClass().getSimpleName());
+      return Optional.empty();
+    }
+  }
+
+  private void cachePut(BasicReading reading) {
+    try {
+      cache.put(reading, renderVersion);
+    } catch (RuntimeException e) {
+      LOG.warn("Reading cache store failed: {}", e.getClass().getSimpleName());
+    }
   }
 
   @Override
@@ -92,8 +128,14 @@ public class ReadingService implements BasicReadingUseCase, TodayUseCase {
               .map(t -> TemplateRenderer.render(t, s.vars()))
               .orElse(null);
       List<String> lines = new ArrayList<>();
+      boolean previousMissing = false;
       for (ReadingPlan.Line line : s.lines()) {
-        lines.add(renderFirst(line.lookupOrder(), line.vars()));
+        Rendered r = renderLine(line.lookupOrder(), line.vars());
+        if (r.missing() && previousMissing) {
+          continue;
+        }
+        previousMissing = r.missing();
+        lines.add(r.text());
       }
       sections.add(new BasicReading.RenderedSection(s.id(), title, lines));
     }
@@ -102,16 +144,24 @@ public class ReadingService implements BasicReadingUseCase, TodayUseCase {
 
   /** First key with a knowledge record wins; none found renders the {@code missing} frame. */
   private String renderFirst(List<KnowledgeKey> lookupOrder, Map<String, String> vars) {
+    return renderLine(lookupOrder, vars).text();
+  }
+
+  private Rendered renderLine(List<KnowledgeKey> lookupOrder, Map<String, String> vars) {
     for (KnowledgeKey key : lookupOrder) {
       Optional<String> text = find(key);
       if (text.isPresent()) {
-        return TemplateRenderer.render(text.get(), vars);
+        return new Rendered(TemplateRenderer.render(text.get(), vars), false);
       }
     }
-    return find(KnowledgeKey.frame("missing"))
-        .map(t -> TemplateRenderer.render(t, Map.of()))
-        .orElse("");
+    return new Rendered(
+        find(KnowledgeKey.frame("missing"))
+            .map(t -> TemplateRenderer.render(t, Map.of()))
+            .orElse(""),
+        true);
   }
+
+  private record Rendered(String text, boolean missing) {}
 
   private Optional<String> find(KnowledgeKey key) {
     return knowledge.find(key, LANG);

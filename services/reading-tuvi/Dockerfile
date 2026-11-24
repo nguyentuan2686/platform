@@ -24,7 +24,7 @@ COPY --from=build /tmp/extracted/application/ ./
 COPY --from=build /src/knowledge/tuvi/ /app/knowledge/tuvi/
 ENV PORT=8083 \
     KNOWLEDGE_DIR=/app/knowledge/tuvi \
-    JAVA_TOOL_OPTIONS="-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=70" \
+    JAVA_TOOL_OPTIONS="-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=50" \
     OTEL_SERVICE_NAME=reading-tuvi \
     OTEL_LOGS_EXPORTER=none \
     OTEL_METRICS_EXPORTER=otlp \
