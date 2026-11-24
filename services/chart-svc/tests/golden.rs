@@ -7,7 +7,9 @@ use chart_svc::application::service::{ChartRequest, ChartService};
 use chart_svc::domain::calendar::{
     day_can_chi, solar_to_lunar, Branch, CalendarKind, LunarDate, Stem,
 };
-use chart_svc::domain::chart::{Brightness, Chart, Flow, FlowLayer, Gender, Mutagen, StarKey};
+use chart_svc::domain::chart::{
+    AdjStarKey, Brightness, Chart, Flow, FlowLayer, Gender, Mutagen, StarKey,
+};
 use chart_svc::domain::vn_school::vn_rated;
 use serde_json::Value;
 use std::sync::OnceLock;
@@ -282,7 +284,23 @@ fn star_cell(key: &str, brightness: &str, mutagen: &str, mask: Option<VnMask>) -
     format!("{key}/{brightness}/{mutagen}")
 }
 
-/// The fields compared for a chart: cục,mệnh chủ, thân chủ, thân palace, year can chi,
+/// Stars the Vietnamese school places elsewhere than iztro (Khôi, Việt, Hỏa, Linh, Giải
+/// Thần, Phá Toái): left out of both sides' lists for VN charts (their placement is asserted
+/// against lasotuvi in `vn_crosscheck.rs`).
+const VN_MOVED: [&str; 6] = [
+    "ThienKhoi",
+    "ThienViet",
+    "HoaTinh",
+    "LinhTinh",
+    "GiaiThan",
+    "PhaToai",
+];
+
+fn kept(key: &str, mask: Option<VnMask>) -> bool {
+    mask.is_none() || !VN_MOVED.contains(&key)
+}
+
+/// The fields compared for a chart: cục, mệnh chủ, thân chủ, thân palace, year can chi,
 /// then per palace (from Dần) its key, branch, stem, decade, major and minor stars with
 /// brightness and mutagen.
 fn chart_lines(c: &Chart, mask: Option<VnMask>) -> Vec<String> {
@@ -296,6 +314,7 @@ fn chart_lines(c: &Chart, mask: Option<VnMask>) -> Vec<String> {
     for p in &c.palaces {
         let stars = |list: &[chart_svc::domain::chart::StarInPalace]| {
             list.iter()
+                .filter(|st| kept(st.key.key(), mask))
                 .map(|st| {
                     star_cell(
                         st.key.key(),
@@ -318,6 +337,7 @@ fn chart_lines(c: &Chart, mask: Option<VnMask>) -> Vec<String> {
             stars(&p.minor),
             p.adjective
                 .iter()
+                .filter(|a| kept(a.key(), mask))
                 .map(|a| a.key())
                 .collect::<Vec<_>>()
                 .join(","),
@@ -361,6 +381,7 @@ fn expected_chart_lines(e: &Value, mask: Option<VnMask>) -> Vec<String> {
             list.as_array()
                 .unwrap()
                 .iter()
+                .filter(|st| kept(star_key(s(&st[0])), mask))
                 .map(|st| {
                     star_cell(
                         star_key(s(&st[0])),
@@ -388,6 +409,7 @@ fn expected_chart_lines(e: &Value, mask: Option<VnMask>) -> Vec<String> {
                 .map(s)
                 .filter(|zh| !VOID_STARS.contains(zh))
                 .map(adjective_key)
+                .filter(|k| kept(k, mask))
                 .collect::<Vec<_>>()
                 .join(","),
             ring_key(s(&p["changsheng12"])),
@@ -410,7 +432,7 @@ fn expected_chart_lines(e: &Value, mask: Option<VnMask>) -> Vec<String> {
     out
 }
 
-fn layer_line(name: &str, l: &FlowLayer) -> String {
+fn layer_line(name: &str, l: &FlowLayer, vn: bool) -> String {
     let m: Vec<_> = l
         .mutagens
         .iter()
@@ -420,11 +442,15 @@ fn layer_line(name: &str, l: &FlowLayer) -> String {
         "{name} palace {} stem {} [{}]",
         l.palace_branch.key(),
         l.stem.key(),
-        m.join(",")
+        if vn && matches!(l.stem, Stem::Geng | Stem::Ren) {
+            "*".to_string()
+        } else {
+            m.join(",")
+        }
     )
 }
 
-fn expected_layer_line(name: &str, e: &Value) -> String {
+fn expected_layer_line(name: &str, e: &Value, vn: bool) -> String {
     let index = usize::try_from(e["index"].as_u64().unwrap()).unwrap();
     let m: Vec<_> = e["mutagens"]
         .as_array()
@@ -437,24 +463,28 @@ fn expected_layer_line(name: &str, e: &Value) -> String {
         "{name} palace {} stem {} [{}]",
         Branch::ALL[(index + 2) % 12].key(),
         stem_key(s(&e["stem"])),
-        m.join(",")
+        if vn && matches!(stem_key(s(&e["stem"])), "Geng" | "Ren") {
+            "*".to_string()
+        } else {
+            m.join(",")
+        }
     )
 }
 
-fn flow_lines(f: &Flow) -> Vec<String> {
+fn flow_lines(f: &Flow, vn: bool) -> Vec<String> {
     vec![
-        layer_line("yearly", &f.yearly),
-        layer_line("monthly", &f.monthly),
-        layer_line("daily", &f.daily),
+        layer_line("yearly", &f.yearly, vn),
+        layer_line("monthly", &f.monthly, vn),
+        layer_line("daily", &f.daily, vn),
         format!("day {} {}", f.day.stem.key(), f.day.branch.key()),
     ]
 }
 
-fn expected_flow_lines(e: &Value) -> Vec<String> {
+fn expected_flow_lines(e: &Value, vn: bool) -> Vec<String> {
     vec![
-        expected_layer_line("yearly", &e["yearly"]),
-        expected_layer_line("monthly", &e["monthly"]),
-        expected_layer_line("daily", &e["daily"]),
+        expected_layer_line("yearly", &e["yearly"], vn),
+        expected_layer_line("monthly", &e["monthly"], vn),
+        expected_layer_line("daily", &e["daily"], vn),
         // The daily layer's stem and branch are the day's can chi.
         format!(
             "day {} {}",
@@ -645,8 +675,8 @@ fn cn_flows_equal_iztro() {
                 }
                 diff(
                     id,
-                    &flow_lines(&flow),
-                    &expected_flow_lines(e),
+                    &flow_lines(&flow, false),
+                    &expected_flow_lines(e, false),
                     &mut mismatches,
                 );
             }
@@ -693,8 +723,8 @@ fn vn_charts_equal_iztro_by_lunar_input() {
         match svc.daily(&req, date(&e["flow"]["date"])) {
             Ok(flow) => diff(
                 id,
-                &flow_lines(&flow),
-                &expected_flow_lines(&e["flow"]),
+                &flow_lines(&flow, true),
+                &expected_flow_lines(&e["flow"], true),
                 &mut mismatches,
             ),
             Err(err) => mismatches.push(format!("{id}: {err:#}")),
@@ -798,8 +828,8 @@ fn stem_index(st: Stem) -> i64 {
     i64::try_from(Stem::ALL.iter().position(|&x| x == st).unwrap()).unwrap()
 }
 
-/// iztro's default Tứ Hóa (Lộc, Quyền, Khoa, Kỵ) per stem, written out independently of
-/// the engine.
+/// The Tứ Hóa of a VN flow layer (Lộc, Quyền, Khoa, Kỵ) per stem, written out independently of
+/// the engine: iztro's default, except Canh and Nhâm, which follow the Vietnamese school.
 fn tu_hoa(st: Stem) -> [&'static str; 4] {
     match st {
         Stem::Jia => ["LiemTrinh", "PhaQuan", "VuKhuc", "ThaiDuong"],
@@ -808,9 +838,9 @@ fn tu_hoa(st: Stem) -> [&'static str; 4] {
         Stem::Ding => ["ThaiAm", "ThienDong", "ThienCo", "CuMon"],
         Stem::Wu => ["ThamLang", "ThaiAm", "HuuBat", "ThienCo"],
         Stem::Ji => ["VuKhuc", "ThamLang", "ThienLuong", "VanKhuc"],
-        Stem::Geng => ["ThaiDuong", "VuKhuc", "ThaiAm", "ThienDong"],
+        Stem::Geng => ["ThaiDuong", "VuKhuc", "ThienDong", "ThaiAm"],
         Stem::Xin => ["CuMon", "ThaiDuong", "VanKhuc", "VanXuong"],
-        Stem::Ren => ["ThienLuong", "TuVi", "TaPhu", "VuKhuc"],
+        Stem::Ren => ["ThienLuong", "TuVi", "ThienPhu", "VuKhuc"],
         Stem::Gui => ["PhaQuan", "CuMon", "ThaiAm", "ThamLang"],
     }
 }
@@ -961,4 +991,37 @@ fn every_fixture_adjective_and_ring_star_has_a_key_and_label() {
         "adjective stars seen"
     );
     assert_eq!(rings.len(), RingStarKey::ALL.len(), "ring stars seen");
+}
+
+/// Every star key (major, minor, adjective) is on exactly one palace of the chart.
+fn assert_each_star_once(id: &str, chart: &Chart) {
+    for &star in StarKey::ALL {
+        let n = chart
+            .palaces
+            .iter()
+            .flat_map(|p| p.major.iter().chain(&p.minor))
+            .filter(|st| st.key == star)
+            .count();
+        assert_eq!(n, 1, "{id}: {star:?} appears {n} times");
+    }
+    for &star in AdjStarKey::ALL {
+        let n = chart
+            .palaces
+            .iter()
+            .flat_map(|p| &p.adjective)
+            .filter(|a| **a == star)
+            .count();
+        assert_eq!(n, 1, "{id}: {star:?} appears {n} times");
+    }
+}
+
+#[test]
+fn every_star_appears_exactly_once_in_vn_and_cn_golden_charts() {
+    let svc = service();
+    for (kind, cal) in [("vn", CalendarKind::Vn), ("cn", CalendarKind::Cn)] {
+        for c in cases(kind) {
+            let chart = svc.chart(&request(c, cal)).unwrap();
+            assert_each_star_once(s(&c["id"]), &chart);
+        }
+    }
 }

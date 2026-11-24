@@ -10,8 +10,8 @@
 //! table (Thiên Phủ and the minor stars it does not rate) keeps the level derived from the
 //! engine.
 
-use crate::domain::calendar::{Branch, Stem};
-use crate::domain::chart::{Brightness, Chart, Flow, Mutagen, StarKey};
+use crate::domain::calendar::{Branch, CanChi, Stem};
+use crate::domain::chart::{AdjStarKey, Brightness, Chart, Flow, Gender, Mutagen, StarKey};
 
 /// One brightness row of `dacTinhSao`, from Tý to Hợi: `M` miếu, `V` vượng, `D` đắc,
 /// `B` bình, `H` hãm, `-` no level. Stars without a row are not listed.
@@ -135,14 +135,117 @@ pub fn vn_tu_hoa(stem: Stem) -> [(StarKey, Mutagen); 4] {
     [0, 1, 2, 3].map(|i| (stars[i], Mutagen::ORDER[i]))
 }
 
-/// Applies the Vietnamese school to a chart cast by the engine: brightness from
-/// [`vn_brightness`] and the natal Tứ Hóa of the year stem. `flows` is the entry point for
-/// the flow layers (extended by later tasks); it is not touched yet.
-// The flow is consumed by the flow Tứ Hóa step of a later task; the signature is fixed now.
-#[allow(clippy::needless_pass_by_value)]
-pub fn apply_vn_school(chart: &mut Chart, flows: Option<&mut Flow>) {
-    // Flow Tứ Hóa is applied by a later step; the flow is accepted so the signature is stable.
-    let _ = flows;
+/// Branch for lasotuvi's 1-based palace number (Tý = 1 to Hợi = 12, any integer wraps).
+fn at(n: i32) -> Branch {
+    Branch::ALL[usize::try_from((n - 1).rem_euclid(12)).unwrap_or(0)]
+}
+
+/// Thiên Khôi by year stem (Giáp to Quý) as lasotuvi's palace numbers (`khoiViet` in
+/// `timThienKhoi`, Tý = 1).
+const KHOI: [i32; 10] = [2, 1, 12, 10, 8, 1, 8, 7, 6, 4];
+
+/// Thiên Khôi and Thiên Việt by year stem (`timThienKhoi`: Khôi from a table, Việt the
+/// mirror `dichCung(5, 5 - khôi)`).
+pub fn vn_khoi_viet(stem: Stem) -> (Branch, Branch) {
+    let khoi = KHOI[stem as usize];
+    (at(khoi), at(10 - khoi))
+}
+
+/// Hỏa Tinh and Linh Tinh by year can chi, hour branch and gender (`timHoaLinh`): the
+/// start palaces come from the year branch group, the direction from the polarity
+/// (gender sign times the year stem's yin/yang) and the hour counts the steps.
+pub fn vn_hoa_linh(year: CanChi, hour: Branch, gender: Gender) -> (Branch, Branch) {
+    // Start palaces of Hỏa and Linh by year branch (Tý to Hợi).
+    let (hoa, linh) = match year.branch {
+        Branch::Yin | Branch::Wu | Branch::Xu => (2, 4),
+        Branch::Zi | Branch::Chen | Branch::Shen => (3, 11),
+        Branch::Si | Branch::You | Branch::Chou => (11, 4),
+        Branch::Hai | Branch::Mao | Branch::Wei => (10, 11),
+    };
+    // Hour number 1 (Tý) to 12 (Hợi).
+    let hour = hour as i32 + 1;
+    let sign = if gender == Gender::Male { 1 } else { -1 };
+    // Yang stems (Giáp, Bính, ...) are the even indices.
+    let yang = if (year.stem as usize).is_multiple_of(2) {
+        1
+    } else {
+        -1
+    };
+    if sign * yang == -1 {
+        (at(hoa + 1 - hour), at(linh - 1 + hour))
+    } else {
+        (at(hoa - 1 + hour), at(linh + 1 - hour))
+    }
+}
+
+/// Giải Thần sits with Phượng Các, which `lasotuvi` places from the year branch.
+pub fn vn_giai_than(year_branch: Branch) -> Branch {
+    // Long Trì at Thìn + (n - 1); Phượng Các is its mirror about the Mão-Dậu axis.
+    at(-(year_branch as i32 + 1))
+}
+
+/// Phá Toái cycles Tỵ, Dậu, Sửu with the year branch number modulo 3 (`timPhaToai`).
+pub fn vn_pha_toai(year_branch: Branch) -> Branch {
+    match (year_branch as i32 + 1) % 3 {
+        0 => at(6),
+        1 => at(10),
+        _ => at(2),
+    }
+}
+
+/// Rewrites a flow's three layers with the Vietnamese Tứ Hóa of each layer's stem.
+pub fn apply_vn_flow(flow: &mut Flow) {
+    for layer in [&mut flow.yearly, &mut flow.monthly, &mut flow.daily] {
+        layer.mutagens = vn_tu_hoa(layer.stem);
+    }
+}
+
+/// Moves `star` to the palace at `branch` (minor stars, in the order the engine lists).
+fn move_minor(chart: &mut Chart, star: StarKey, branch: Branch) {
+    let mut moved = None;
+    for palace in &mut chart.palaces {
+        if let Some(i) = palace.minor.iter().position(|s| s.key == star) {
+            moved = Some(palace.minor.remove(i));
+        }
+    }
+    if let Some(star) = moved {
+        if let Some(p) = chart.palaces.iter_mut().find(|p| p.branch == branch) {
+            p.minor.push(star);
+        }
+    }
+}
+
+/// Moves an adjective star to the palace at `branch`.
+fn move_adjective(chart: &mut Chart, star: AdjStarKey, branch: Branch) {
+    let mut found = false;
+    for palace in &mut chart.palaces {
+        let before = palace.adjective.len();
+        palace.adjective.retain(|a| *a != star);
+        found |= palace.adjective.len() != before;
+    }
+    if found {
+        if let Some(p) = chart.palaces.iter_mut().find(|p| p.branch == branch) {
+            p.adjective.push(star);
+        }
+    }
+}
+
+/// Applies the Vietnamese school to a chart cast by the engine: the Vietnamese placement of
+/// Khôi/Việt, Hỏa/Linh, Giải Thần and Phá Toái, brightness from [`vn_brightness`] and the
+/// natal Tứ Hóa of the year stem. `flow`, when given, gets the Vietnamese Tứ Hóa on its
+/// layers.
+pub fn apply_vn_school(chart: &mut Chart, flow: Option<&mut Flow>) {
+    if let Some(flow) = flow {
+        apply_vn_flow(flow);
+    }
+    let (khoi, viet) = vn_khoi_viet(chart.year.stem);
+    let (hoa, linh) = vn_hoa_linh(chart.year, chart.hour_branch, chart.gender);
+    move_minor(chart, StarKey::ThienKhoi, khoi);
+    move_minor(chart, StarKey::ThienViet, viet);
+    move_minor(chart, StarKey::HoaTinh, hoa);
+    move_minor(chart, StarKey::LinhTinh, linh);
+    move_adjective(chart, AdjStarKey::GiaiThan, vn_giai_than(chart.year.branch));
+    move_adjective(chart, AdjStarKey::PhaToai, vn_pha_toai(chart.year.branch));
     let tu_hoa = vn_tu_hoa(chart.year.stem);
     for palace in &mut chart.palaces {
         let branch = palace.branch;
@@ -298,5 +401,51 @@ mod tests {
             assert_eq!(row.len(), 12, "{star:?}");
             assert!(row.bytes().all(|c| b"MVDBH-".contains(&c)), "{star:?}");
         }
+    }
+
+    #[test]
+    fn khoi_viet_of_all_ten_stems() {
+        use Branch::{Chou, Hai, Mao, Shen, Si, Wei, Wu, Yin, You, Zi};
+        let want = [
+            (Chou, Wei),
+            (Zi, Shen),
+            (Hai, You),
+            (You, Hai),
+            (Wei, Chou),
+            (Zi, Shen),
+            (Wei, Chou),
+            (Wu, Yin),
+            (Si, Mao),
+            (Mao, Si),
+        ];
+        for (stem, want) in Stem::ALL.iter().zip(want) {
+            assert_eq!(vn_khoi_viet(*stem), want, "{stem:?}");
+        }
+    }
+
+    #[test]
+    fn hoa_linh_follow_polarity_and_hour() {
+        use Branch::{Chou, Hai, Mao, Shen, Si, Wei, Yin, Zi};
+        let jia_zi = CanChi {
+            stem: Stem::Jia,
+            branch: Zi,
+        };
+        // Yang year, male: "+" polarity, Hỏa counts forward from Dần - 1, Linh backward.
+        assert_eq!(vn_hoa_linh(jia_zi, Zi, Gender::Male), (Yin, Branch::Xu));
+        assert_eq!(vn_hoa_linh(jia_zi, Mao, Gender::Male), (Si, Wei));
+        // Same chart, female: "-" polarity runs the other way.
+        assert_eq!(vn_hoa_linh(jia_zi, Mao, Gender::Female), (Hai, Chou));
+        let _ = Shen;
+    }
+
+    #[test]
+    fn giai_than_follows_phuong_cac_and_pha_toai_cycles() {
+        use Branch::{Chen, Chou, Si, Wu, Xu, Yin, You, Zi};
+        assert_eq!(vn_giai_than(Zi), Xu);
+        assert_eq!(vn_giai_than(Chou), You);
+        assert_eq!(vn_giai_than(Wu), Chen);
+        assert_eq!(vn_pha_toai(Zi), You);
+        assert_eq!(vn_pha_toai(Chou), Chou);
+        assert_eq!(vn_pha_toai(Yin), Si);
     }
 }

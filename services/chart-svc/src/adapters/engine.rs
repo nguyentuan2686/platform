@@ -43,7 +43,7 @@ use crate::domain::chart::{
     AdjStarKey, Brightness, Chart, Cuc, Element, Flow, FlowLayer, Gender, Mutagen, Palace,
     PalaceKey, RingStarKey, StarInPalace, StarKey,
 };
-use crate::domain::vn_school::apply_vn_school;
+use crate::domain::vn_school::{apply_vn_flow, apply_vn_school};
 use crate::domain::void;
 use anyhow::{anyhow, Context};
 use time::Date;
@@ -86,14 +86,18 @@ impl ZiweiEngine for IztroAdapter {
         let mut daily = map_layer(&horoscope.daily)?;
         daily.stem = day_can_chi.stem;
         daily.mutagens = mutagens_of(day_can_chi.stem)?;
-        Ok(Flow {
+        let mut flow = Flow {
             date: day,
             lunar,
             day: day_can_chi,
             yearly: map_layer(&horoscope.yearly.base)?,
             monthly: map_layer(&horoscope.monthly)?,
             daily,
-        })
+        };
+        if b.calendar == CalendarKind::Vn {
+            apply_vn_flow(&mut flow);
+        }
+        Ok(flow)
     }
 }
 
