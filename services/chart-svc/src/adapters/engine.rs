@@ -146,8 +146,11 @@ pub fn engine_lunar_date(l: LunarDate) -> anyhow::Result<EngineLunar> {
             l.day
         ));
     }
-    (0..=SHIFT_CYCLES)
-        .flat_map(|k| [year - 60 * k, year + 60 * k])
+    // A remapped leap month may fit in its own year; otherwise move by 60-year cycles.
+    let same_year = l.leap.then_some(year);
+    same_year
+        .into_iter()
+        .chain((1..=SHIFT_CYCLES).flat_map(|k| [year - 60 * k, year + 60 * k]))
         .find(|&y| engine_month_days(y, month, false).is_some_and(|n| day <= n))
         .map(|year| EngineLunar {
             year,
@@ -281,7 +284,10 @@ fn tu_hoa(stars: &[iz::StarKey]) -> anyhow::Result<[(StarKey, Mutagen); 4]> {
 
 /// The engine's (default) Tứ Hóa of a stem.
 fn mutagens_of(s: Stem) -> anyhow::Result<[(StarKey, Mutagen); 4]> {
-    let i = Stem::ALL.iter().position(|&x| x == s).unwrap_or_default();
+    let i = Stem::ALL
+        .iter()
+        .position(|&x| x == s)
+        .ok_or_else(|| anyhow!("stem {s:?} missing from Stem::ALL"))?;
     tu_hoa(&iz::Config::default().mutagens_of(iz::HeavenlyStem::from_index(i)))
 }
 

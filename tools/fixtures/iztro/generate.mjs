@@ -103,7 +103,8 @@ function cn(id, solar, timeIndex, gender, flowDate) {
 // iztro when the VN date cannot be fed verbatim (see README, "VN-only leap months").
 function vn(id, solar, lunar, timeIndex, gender, flowDate, engineLunar = lunar) {
   const a = byLunar(engineLunar, timeIndex, gender);
-  cases.push({ id, kind: 'vn', solar, lunar, timeIndex, gender, expect: { ...chartOf(a), flow: flowOf(a, flowDate) } });
+  const engine = engineLunar === lunar ? {} : { engineLunar };
+  cases.push({ id, kind: 'vn', solar, lunar, ...engine, timeIndex, gender, expect: { ...chartOf(a), flow: flowOf(a, flowDate) } });
 }
 
 // Late Zi (ruling R3): a 23:30 birth in `zone` equals the next day's index-0 chart.
@@ -150,6 +151,37 @@ vn('vn-south-1970-06-01-hai', '1970-06-01', [1970, 4, 28, false], 11, 'male', FL
 vn('vn-only-leap-1985-first-half', '1985-03-30', [1985, 2, 10, true], 3, 'male', FLOW, [1985, 2, 10, false]);
 vn('vn-only-leap-1985-second-half', '1985-04-10', [1985, 2, 21, true], 3, 'female', FLOW, [1985, 3, 21, false]);
 
+// VN day 30 where iztro's month has 29 days: chart-svc feeds the same month and day 60·k
+// years away (same year can chi). `engineDate` mirrors that search with iztro; the
+// 60-year self-check below shows the shift leaves the chart unchanged.
+const lunarExists = ([y, m, d, leap]) => {
+  try {
+    const l = byLunar([y, m, d, leap], 0, 'male').rawDates.lunarDate;
+    return l.lunarYear === y && l.lunarMonth === m && l.lunarDay === d && l.isLeap === leap;
+  } catch {
+    return false;
+  }
+};
+function engineDate([y, m, d, leap]) {
+  if (lunarExists([y, m, d, leap])) return [y, m, d, leap];
+  const month = leap && d > 15 ? m + 1 : m;
+  const years = leap ? [y] : [];
+  for (let k = 1; k <= 30; k++) years.push(y - 60 * k, y + 60 * k);
+  const year = years.find((yy) => lunarExists([yy, month, d, false]));
+  if (year === undefined) throw new Error(`no iztro date for ${y}-${m}-${d}`);
+  return [year, month, d, false];
+}
+const vnShift = (id, solar, lunar, timeIndex, gender) => {
+  const engine = engineDate(lunar);
+  if (engine[0] === lunar[0]) throw new Error(`${id}: expected a 60-year shift`);
+  vn(id, solar, lunar, timeIndex, gender, FLOW, engine);
+};
+vnShift('vn-day30-shift-1985-02-19', '1985-02-19', [1985, 1, 30, false], 8, 'male');
+vnShift('vn-day30-shift-1975-01-11', '1975-01-11', [1974, 11, 30, false], 2, 'female');
+vnShift('vn-day30-shift-1996-08-13', '1996-08-13', [1996, 6, 30, false], 10, 'female');
+// VN-only leap month and a missing day 30 together: leap 2, day 30 -> plain month 3, shifted.
+vnShift('vn-leap-day30-shift-1947-04-20', '1947-04-20', [1947, 2, 30, true], 5, 'male');
+
 // Late Zi (Review Focus 1), including month and lunar-year boundaries.
 lateZi('late-zi-cn-1994-03-12', '1994-03-12T23:30', 'Asia/Shanghai', 'CN', 'male', bySolar('1994-03-13', 0, 'male'));
 lateZi('late-zi-cn-month-end-2023-03-21', '2023-03-21T23:30', 'Asia/Shanghai', 'CN', 'female', bySolar('2023-03-22', 0, 'female'));
@@ -181,8 +213,33 @@ for (let y = 1900; y <= 2099; y++) {
   }
 }
 
+// ---- self-check for the 60-year shift ------------------------------------------------------
+// The same lunar month and day 60 years apart (same year can chi) give the same chart.
+// Sampled over 1700-2100 with day 30 included wherever both months have 30 days.
+const chartKey = (a) => {
+  const c = chartOf(a);
+  return JSON.stringify([c.palaces, c.five, c.soul, c.body, c.bodyBranch, c.year]);
+};
+let shiftChecks = 0;
+let shiftDay30Checks = 0;
+for (let i = 0; shiftChecks < 150 || shiftDay30Checks < 30; i++) {
+  if (i > 5000) throw new Error('60-year shift self-check could not find enough samples');
+  const y = randInt(1700, 2040);
+  const m = randInt(1, 12);
+  const d = i % 3 === 0 ? 30 : randInt(1, 30);
+  const ti = randInt(0, 11);
+  const g = rng() < 0.5 ? 'male' : 'female';
+  if (!lunarExists([y, m, d, false]) || !lunarExists([y + 60, m, d, false])) continue;
+  if (chartKey(byLunar([y, m, d, false], ti, g)) !== chartKey(byLunar([y + 60, m, d, false], ti, g))) {
+    throw new Error(`60-year shift changes the chart for ${y}-${m}-${d}`);
+  }
+  shiftChecks += 1;
+  if (d === 30) shiftDay30Checks += 1;
+}
+
+
 // One case per line keeps diffs of a regenerated fixture readable.
 const SOURCE = 'iztro@2.6.3 (MIT), zh-CN names, default config, fixLeap=true; tools/fixtures/iztro/generate.mjs';
-process.stdout.write(`{\n"source": ${JSON.stringify(SOURCE)},\n"leapEquivalenceChecks": ${leapChecks},\n"cases": [\n`);
+process.stdout.write(`{\n"source": ${JSON.stringify(SOURCE)},\n"leapEquivalenceChecks": ${leapChecks},\n"shiftEquivalenceChecks": ${shiftChecks},\n"shiftDay30Checks": ${shiftDay30Checks},\n"cases": [\n`);
 process.stdout.write(cases.map((c) => JSON.stringify(c)).join(',\n'));
 process.stdout.write('\n]\n}\n');

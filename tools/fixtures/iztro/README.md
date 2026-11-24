@@ -52,15 +52,22 @@ daily flow layers).
   month given to iztro.
 - **Day 30 missing in the engine's month.** When a VN (or CN mismatch) month has 30 days
   but the engine's month has 29, chart-svc feeds the same month and day of a year 60·k
-  years away (same year can chi, so the same chart). `engine::tests` proves every VN and
-  CN day 1900-2100 gets an engine date.
+  years away (same year can chi, so the same chart). The generator checks this on a
+  random sample (`shiftEquivalenceChecks`, at least 100, of which `shiftDay30Checks` are
+  day 30 where both months have 30 days): `byLunar(y, m, d)` must equal
+  `byLunar(y + 60, m, d)`, or generation fails. Four VN cases need the shift
+  (VN 1985-1-30, 1974-11-30, 1996-6-30 and leap 1947-2-30) and carry the shifted
+  `engineLunar`; `golden.rs` asserts chart-svc picks that same date. `engine::tests`
+  proves every VN and CN day 1900-2100 gets an engine date.
 - **Flows on the VN calendar.** The flow day is also fed to the engine as the date whose
   engine lunar date equals the day's VN lunar date (same mappings as above), and the
   daily stem and its Tứ Hóa are set from the real day's can chi. iztro has no VN
-  calendar, so `golden.rs` checks VN flows against iztro's flow arithmetic over
-  2029-12..2030-03 (Tết 2030 differs between the calendars) instead of a fixture.
-- **Month can chi** is not compared (iztro may use solar terms); the chart fields above
-  do not depend on it.
+  calendar, so `golden.rs` checks VN flows against iztro's flow arithmetic (palaces,
+  five-tiger month stem, each layer's Tứ Hóa) over 1985-02..04 (VN Tết a month early,
+  the VN-only leap 2nd month, a shifted day 30) and 2029-12..2030-03 (Tết 2030 differs).
+- **Month pillar.** The monthly flow layer's stem is compared: iztro's default config
+  derives it from the lunar month by the five-tiger rule (五虎遁), not from solar terms.
+  Only the chart's own month pillar is not compared, because `Chart` does not expose it.
 
 ## Why 2.6.3, not 2.5.8
 
