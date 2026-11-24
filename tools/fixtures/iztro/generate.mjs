@@ -55,6 +55,12 @@ function chartOf(a) {
       major: p.majorStars.map(star),
       minor: p.minorStars.map(star),
       decade: p.decadal.range,
+      adjective: p.adjectiveStars.map((s) => s.name),
+      changsheng12: p.changsheng12,
+      boshi12: p.boshi12,
+      suiqian12: p.suiqian12,
+      jiangqian12: p.jiangqian12,
+      ages: p.ages,
     })),
   };
 }

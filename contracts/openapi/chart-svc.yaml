@@ -209,6 +209,114 @@ components:
     Element:
       type: string
       enum: [Thuy, Moc, Kim, Tho, Hoa]
+    AdjStarKey:
+      type: string
+      description: Adjective star (tap dieu). Tuan/Triet-type stars are reported as palace pairs, not here.
+      enum:
+        - HongLoan
+        - ThienHy
+        - ThienRieu
+        - HamTri
+        - GiaiThan
+        - TamThai
+        - BatToa
+        - AnQuang
+        - ThienQuy
+        - LongTri
+        - PhuongCac
+        - ThienTai
+        - ThienTho
+        - ThaiPhu
+        - PhongCao
+        - ThienVu
+        - HoaCai
+        - ThienQuan
+        - ThienPhuc
+        - ThienTru
+        - ThienNguyet
+        - ThienDuc
+        - NguyetDuc
+        - ThienKhong
+        - CoThan
+        - QuaTu
+        - PhiLiem
+        - PhaToai
+        - ThienHinh
+        - AmSat
+        - ThienKhoc
+        - ThienHu
+        - ThienSu
+        - ThienThuong
+        - NienGiai
+    RingStarKey:
+      type: string
+      description: Member of one of the four rings of twelve gods (Trang Sinh, Bac Si, Thai Tue, Tuong Tien).
+      enum:
+        - TrangSinh
+        - MocDuc
+        - QuanDoi
+        - LamQuan
+        - DeVuong
+        - Suy
+        - Benh
+        - Tu
+        - Mo
+        - Tuyet
+        - Thai
+        - Duong
+        - BacSi
+        - LucSi
+        - ThanhLong
+        - TieuHao
+        - TuongQuan
+        - TauThu
+        - PhiLiem
+        - HyThan
+        - BenhPhu
+        - DaiHao
+        - PhucBinh
+        - QuanPhu
+        - TueKien
+        - HoiKhi
+        - TangMon
+        - QuanTac
+        - QuanPhuTue
+        - LongDuc
+        - BachHo
+        - ThienDuc
+        - DieuKhach
+        - TuongTinh
+        - PhanAn
+        - TueDich
+        - TucThan
+        - HoaCai
+        - KiepSat
+        - TaiSat
+        - ThienSat
+        - ChiBoi
+        - HamTri
+        - NguyetSat
+        - VongThan
+    AdjStar:
+      type: object
+      required: [key, nameVi]
+      additionalProperties: false
+      properties:
+        key:
+          $ref: '#/components/schemas/AdjStarKey'
+        nameVi:
+          type: string
+          minLength: 1
+    RingStar:
+      type: object
+      required: [key, nameVi]
+      additionalProperties: false
+      properties:
+        key:
+          $ref: '#/components/schemas/RingStarKey'
+        nameVi:
+          type: string
+          minLength: 1
     Star:
       type: object
       required: [key, nameVi, brightness, mutagen]
@@ -231,7 +339,20 @@ components:
             - type: 'null'
     Palace:
       type: object
-      required: [key, nameVi, branch, stem, isBody, decade, major, minor]
+      required:
+        - key
+        - nameVi
+        - branch
+        - stem
+        - isBody
+        - decade
+        - major
+        - minor
+        - adjective
+        - rings
+        - smallLimitAges
+        - tuan
+        - triet
       additionalProperties: false
       properties:
         key:
@@ -266,6 +387,40 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Star'
+        adjective:
+          type: array
+          description: >-
+            Adjective stars in the order the engine places them. Tuan/Triet-type stars are
+            excluded (see `tuan` and `triet`).
+          items:
+            $ref: '#/components/schemas/AdjStar'
+        rings:
+          type: object
+          required: [changsheng, boshi, suiqian, jiangqian]
+          additionalProperties: false
+          description: The palace's god in each of the four rings of twelve gods.
+          properties:
+            changsheng:
+              $ref: '#/components/schemas/RingStar'
+            boshi:
+              $ref: '#/components/schemas/RingStar'
+            suiqian:
+              $ref: '#/components/schemas/RingStar'
+            jiangqian:
+              $ref: '#/components/schemas/RingStar'
+        smallLimitAges:
+          type: array
+          description: Nominal ages (tieu han) that fall on this palace, ascending.
+          items:
+            type: integer
+            minimum: 1
+            maximum: 120
+        tuan:
+          type: boolean
+          description: True when the palace lies in the chart's Tuan pair.
+        triet:
+          type: boolean
+          description: True when the palace lies in the chart's Triet pair.
     Chart:
       type: object
       required:
@@ -279,6 +434,8 @@ components:
         - thanChu
         - thanPalace
         - palaces
+        - tuan
+        - triet
       additionalProperties: false
       properties:
         school:
@@ -327,6 +484,20 @@ components:
           description: Ordered by branch starting at Yin, the order the board is drawn in.
           items:
             $ref: '#/components/schemas/Palace'
+        tuan:
+          type: array
+          minItems: 2
+          maxItems: 2
+          description: The two branches Tuan covers (derived from the year can chi).
+          items:
+            $ref: '#/components/schemas/Branch'
+        triet:
+          type: array
+          minItems: 2
+          maxItems: 2
+          description: The two branches Triet covers (derived from the year stem).
+          items:
+            $ref: '#/components/schemas/Branch'
     FlowLayer:
       type: object
       required: [palaceKey, branch, stem, mutagens]

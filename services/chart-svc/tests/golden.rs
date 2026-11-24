@@ -69,6 +69,103 @@ fn star_key(zh: &str) -> &'static str {
     }
 }
 
+/// Tuần/Triệt-type adjective stars: chart-svc reports them as palace pairs, so they are
+/// filtered out of the adjective list on both sides.
+const VOID_STARS: [&str; 5] = ["旬空", "旬中", "截空", "截路", "空亡"];
+
+fn adjective_key(zh: &str) -> &'static str {
+    match zh {
+        "红鸾" => "HongLoan",
+        "天喜" => "ThienHy",
+        "天姚" => "ThienRieu",
+        "咸池" => "HamTri",
+        "解神" => "GiaiThan",
+        "三台" => "TamThai",
+        "八座" => "BatToa",
+        "恩光" => "AnQuang",
+        "天贵" => "ThienQuy",
+        "龙池" => "LongTri",
+        "凤阁" => "PhuongCac",
+        "天才" => "ThienTai",
+        "天寿" => "ThienTho",
+        "台辅" => "ThaiPhu",
+        "封诰" => "PhongCao",
+        "天巫" => "ThienVu",
+        "华盖" => "HoaCai",
+        "天官" => "ThienQuan",
+        "天福" => "ThienPhuc",
+        "天厨" => "ThienTru",
+        "天月" => "ThienNguyet",
+        "天德" => "ThienDuc",
+        "月德" => "NguyetDuc",
+        "天空" => "ThienKhong",
+        "孤辰" => "CoThan",
+        "寡宿" => "QuaTu",
+        "蜚廉" => "PhiLiem",
+        "破碎" => "PhaToai",
+        "天刑" => "ThienHinh",
+        "阴煞" => "AmSat",
+        "天哭" => "ThienKhoc",
+        "天虚" => "ThienHu",
+        "天使" => "ThienSu",
+        "天伤" => "ThienThuong",
+        "年解" => "NienGiai",
+        other => panic!("fixture adjective star {other} has no key"),
+    }
+}
+
+/// Members of the four rings of twelve gods (all four lists share one enum).
+fn ring_key(zh: &str) -> &'static str {
+    match zh {
+        "长生" => "TrangSinh",
+        "沐浴" => "MocDuc",
+        "冠带" => "QuanDoi",
+        "临官" => "LamQuan",
+        "帝旺" => "DeVuong",
+        "衰" => "Suy",
+        "病" => "Benh",
+        "死" => "Tu",
+        "墓" => "Mo",
+        "绝" => "Tuyet",
+        "胎" => "Thai",
+        "养" => "Duong",
+        "博士" => "BacSi",
+        "力士" => "LucSi",
+        "青龙" => "ThanhLong",
+        "小耗" => "TieuHao",
+        "将军" => "TuongQuan",
+        "奏书" => "TauThu",
+        "飞廉" => "PhiLiem",
+        "喜神" => "HyThan",
+        "病符" => "BenhPhu",
+        "大耗" => "DaiHao",
+        "伏兵" => "PhucBinh",
+        "官府" => "QuanPhu",
+        "岁建" => "TueKien",
+        "晦气" => "HoiKhi",
+        "丧门" => "TangMon",
+        "贯索" => "QuanTac",
+        "官符" => "QuanPhuTue",
+        "龙德" => "LongDuc",
+        "白虎" => "BachHo",
+        "天德" => "ThienDuc",
+        "吊客" => "DieuKhach",
+        "将星" => "TuongTinh",
+        "攀鞍" => "PhanAn",
+        "岁驿" => "TueDich",
+        "息神" => "TucThan",
+        "华盖" => "HoaCai",
+        "劫煞" => "KiepSat",
+        "灾煞" => "TaiSat",
+        "天煞" => "ThienSat",
+        "指背" => "ChiBoi",
+        "咸池" => "HamTri",
+        "月煞" => "NguyetSat",
+        "亡神" => "VongThan",
+        other => panic!("fixture ring star {other} has no key"),
+    }
+}
+
 fn palace_key(zh: &str) -> &'static str {
     match zh {
         "命宫" => "Menh",
@@ -139,6 +236,10 @@ fn branch_key(zh: &str) -> &'static str {
 
 // ---- both sides rendered to comparable text lines ----------------------------------------
 
+fn join_ages(ages: impl Iterator<Item = String>) -> String {
+    ages.collect::<Vec<_>>().join(",")
+}
+
 fn s(v: &Value) -> &str {
     v.as_str().expect("string")
 }
@@ -173,14 +274,24 @@ fn chart_lines(c: &Chart) -> Vec<String> {
                 .join(",")
         };
         out.push(format!(
-            "palace {} {} {} {}-{} major[{}] minor[{}]",
+            "palace {} {} {} {}-{} major[{}] minor[{}] adj[{}] rings[{}/{}/{}/{}] ages[{}]",
             p.branch.key(),
             p.key.key(),
             p.stem.key(),
             p.decade.0,
             p.decade.1,
             stars(&p.major),
-            stars(&p.minor)
+            stars(&p.minor),
+            p.adjective
+                .iter()
+                .map(|a| a.key())
+                .collect::<Vec<_>>()
+                .join(","),
+            p.changsheng.key(),
+            p.boshi.key(),
+            p.suiqian.key(),
+            p.jiangqian.key(),
+            join_ages(p.small_limit_ages.iter().map(ToString::to_string))
         ));
     }
     out
@@ -228,14 +339,34 @@ fn expected_chart_lines(e: &Value) -> Vec<String> {
                 .join(",")
         };
         out.push(format!(
-            "palace {} {} {} {}-{} major[{}] minor[{}]",
+            "palace {} {} {} {}-{} major[{}] minor[{}] adj[{}] rings[{}/{}/{}/{}] ages[{}]",
             branch_key(s(&p["branch"])),
             palace_key(s(&p["name"])),
             stem_key(s(&p["stem"])),
             p["decade"][0],
             p["decade"][1],
             stars(&p["major"]),
-            stars(&p["minor"])
+            stars(&p["minor"]),
+            p["adjective"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(s)
+                .filter(|zh| !VOID_STARS.contains(zh))
+                .map(adjective_key)
+                .collect::<Vec<_>>()
+                .join(","),
+            ring_key(s(&p["changsheng12"])),
+            ring_key(s(&p["boshi12"])),
+            ring_key(s(&p["suiqian12"])),
+            ring_key(s(&p["jiangqian12"])),
+            join_ages(
+                p["ages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(ToString::to_string)
+            )
         ));
     }
     assert_eq!(
@@ -334,6 +465,38 @@ fn request(c: &Value, cal: CalendarKind) -> ChartRequest {
     }
 }
 
+/// Branch of the fixture palace holding the adjective star `zh`.
+fn branch_of_star(e: &Value, zh: &str) -> &'static str {
+    let p = e["palaces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| {
+            p["adjective"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|a| s(a) == zh)
+        })
+        .unwrap_or_else(|| panic!("no palace holds {zh}"));
+    branch_key(s(&p["branch"]))
+}
+
+/// Chart equality plus the Tuần/Triệt check: iztro places 旬空 on one palace of Tuần and
+/// 截路 on one palace of Triệt, so each must lie inside chart-svc's pair.
+fn check_chart(id: &str, chart: &Chart, e: &Value, out: &mut Vec<String>) {
+    diff(id, &chart_lines(chart), &expected_chart_lines(e), out);
+    for (zh, name, pair) in [("旬空", "tuan", chart.tuan), ("截路", "triet", chart.triet)] {
+        let at = branch_of_star(e, zh);
+        if !pair.iter().any(|b| b.key() == at) {
+            out.push(format!(
+                "{id}: {zh} at {at} outside {name} {:?}",
+                pair.map(Branch::key)
+            ));
+        }
+    }
+}
+
 /// Compares and records differences as `id: field: got != want`.
 fn diff(id: &str, got: &[String], want: &[String], out: &mut Vec<String>) {
     if got.len() != want.len() {
@@ -413,12 +576,7 @@ fn cn_charts_equal_iztro() {
                     "iztro-default;hour=local-standard;ty23=next-day"
                 );
                 assert_eq!(chart.lunar, req.birth.lunar);
-                diff(
-                    id,
-                    &chart_lines(&chart),
-                    &expected_chart_lines(e),
-                    &mut mismatches,
-                );
+                check_chart(id, &chart, e, &mut mismatches);
             }
             Err(err) => mismatches.push(format!("{id}: {err:#}")),
         }
@@ -488,12 +646,7 @@ fn vn_charts_equal_iztro_by_lunar_input() {
                     "iztro-default+vn-calendar;hour=local-standard;ty23=next-day"
                 );
                 assert_eq!(chart.lunar, lunar(&c["lunar"]));
-                diff(
-                    id,
-                    &chart_lines(&chart),
-                    &expected_chart_lines(e),
-                    &mut mismatches,
-                );
+                check_chart(id, &chart, e, &mut mismatches);
             }
             Err(err) => mismatches.push(format!("{id}: {err:#}")),
         }
@@ -574,12 +727,7 @@ fn late_zi_births_equal_the_next_day_index_0_chart() {
                 gender: gender(&c["gender"]),
             })
             .unwrap();
-        diff(
-            id,
-            &chart_lines(&chart),
-            &expected_chart_lines(&c["expect"]),
-            &mut mismatches,
-        );
+        check_chart(id, &chart, &c["expect"], &mut mismatches);
     }
     assert_no_mismatches("late Zi", late.len(), &mismatches);
 }
@@ -739,4 +887,38 @@ fn vn_flow_follows_the_vn_calendar() {
         shifted > 0,
         "windows must include a VN day 30 that needs the shift"
     );
+}
+
+#[test]
+fn every_fixture_adjective_and_ring_star_has_a_key_and_label() {
+    use chart_svc::domain::chart::{AdjStarKey, RingStarKey};
+    let mut adjective = std::collections::HashSet::new();
+    let mut rings = std::collections::HashSet::new();
+    for c in fixture()["cases"].as_array().unwrap() {
+        for p in c["expect"]["palaces"].as_array().unwrap() {
+            for zh in p["adjective"].as_array().unwrap().iter().map(s) {
+                if !VOID_STARS.contains(&zh) {
+                    adjective.insert(adjective_key(zh));
+                }
+            }
+            for list in ["changsheng12", "boshi12", "suiqian12", "jiangqian12"] {
+                rings.insert(ring_key(s(&p[list])));
+            }
+        }
+    }
+    for key in &adjective {
+        let star = AdjStarKey::ALL.iter().find(|k| k.key() == *key).unwrap();
+        assert_ne!(star.name_vi(), "");
+    }
+    for key in &rings {
+        let star = RingStarKey::ALL.iter().find(|k| k.key() == *key).unwrap();
+        assert_ne!(star.name_vi(), "");
+    }
+    // The fixture exercises every star the domain knows, and nothing else.
+    assert_eq!(
+        adjective.len(),
+        AdjStarKey::ALL.len(),
+        "adjective stars seen"
+    );
+    assert_eq!(rings.len(), RingStarKey::ALL.len(), "ring stars seen");
 }

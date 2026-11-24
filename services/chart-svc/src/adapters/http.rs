@@ -18,9 +18,10 @@ use time::{Date, Month, PrimitiveDateTime, Time};
 use crate::app::AppState;
 use crate::application::birth::{normalize, BirthError};
 use crate::application::service::{ChartError, ChartRequest};
-use crate::domain::calendar::{CalendarKind, CanChi, LunarDate};
+use crate::domain::calendar::{Branch, CalendarKind, CanChi, LunarDate};
 use crate::domain::chart::{
-    Brightness, Chart, Flow, FlowLayer, Gender, Mutagen, Palace, PalaceKey, StarInPalace,
+    AdjStarKey, Brightness, Chart, Flow, FlowLayer, Gender, Mutagen, Palace, RingStarKey,
+    StarInPalace,
 };
 
 /// Zone used when the request has none.
@@ -398,6 +399,39 @@ impl From<&StarInPalace> for StarDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct NamedDto {
+    key: &'static str,
+    name_vi: &'static str,
+}
+
+impl From<AdjStarKey> for NamedDto {
+    fn from(k: AdjStarKey) -> Self {
+        Self {
+            key: k.key(),
+            name_vi: k.name_vi(),
+        }
+    }
+}
+
+impl From<RingStarKey> for NamedDto {
+    fn from(k: RingStarKey) -> Self {
+        Self {
+            key: k.key(),
+            name_vi: k.name_vi(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct RingsDto {
+    changsheng: NamedDto,
+    boshi: NamedDto,
+    suiqian: NamedDto,
+    jiangqian: NamedDto,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PalaceDto {
     key: &'static str,
     name_vi: &'static str,
@@ -407,22 +441,37 @@ struct PalaceDto {
     decade: DecadeDto,
     major: Vec<StarDto>,
     minor: Vec<StarDto>,
+    adjective: Vec<NamedDto>,
+    rings: RingsDto,
+    small_limit_ages: Vec<u8>,
+    tuan: bool,
+    triet: bool,
 }
 
 impl PalaceDto {
-    fn new(p: &Palace, body: PalaceKey) -> Self {
+    fn new(p: &Palace, c: &Chart) -> Self {
         Self {
             key: p.key.key(),
             name_vi: p.key.name_vi(),
             branch: p.branch.key(),
             stem: p.stem.key(),
-            is_body: p.key == body,
+            is_body: p.key == c.than_palace,
             decade: DecadeDto {
                 from: p.decade.0,
                 to: p.decade.1,
             },
             major: p.major.iter().map(StarDto::from).collect(),
             minor: p.minor.iter().map(StarDto::from).collect(),
+            adjective: p.adjective.iter().map(|&a| NamedDto::from(a)).collect(),
+            rings: RingsDto {
+                changsheng: p.changsheng.into(),
+                boshi: p.boshi.into(),
+                suiqian: p.suiqian.into(),
+                jiangqian: p.jiangqian.into(),
+            },
+            small_limit_ages: p.small_limit_ages.clone(),
+            tuan: c.tuan.contains(&p.branch),
+            triet: c.triet.contains(&p.branch),
         }
     }
 }
@@ -440,6 +489,8 @@ struct ChartDto {
     than_chu: &'static str,
     than_palace: &'static str,
     palaces: Vec<PalaceDto>,
+    tuan: [&'static str; 2],
+    triet: [&'static str; 2],
 }
 
 fn calendar_name(c: CalendarKind) -> &'static str {
@@ -465,11 +516,9 @@ impl ChartDto {
             menh_chu: c.menh_chu.key(),
             than_chu: c.than_chu.key(),
             than_palace: c.than_palace.key(),
-            palaces: c
-                .palaces
-                .iter()
-                .map(|p| PalaceDto::new(p, c.than_palace))
-                .collect(),
+            palaces: c.palaces.iter().map(|p| PalaceDto::new(p, c)).collect(),
+            tuan: c.tuan.map(Branch::key),
+            triet: c.triet.map(Branch::key),
         }
     }
 }

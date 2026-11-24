@@ -488,3 +488,50 @@ async fn engine_failure_is_a_500_that_leaks_nothing() {
         assert!(!String::from_utf8_lossy(&r.bytes).contains("secret"));
     }
 }
+
+#[tokio::test]
+async fn chart_reports_tuan_triet_adjectives_rings_and_small_limit_ages() {
+    // 1994 is Giáp Tuất: Tuần covers Thân-Dậu, Triệt (stem Giáp) also Thân-Dậu.
+    let c = chart_of(&base()).await;
+    assert_eq!(c["tuan"], serde_json::json!(["Shen", "You"]));
+    assert_eq!(c["triet"], serde_json::json!(["Shen", "You"]));
+    let palaces = c["palaces"].as_array().unwrap();
+    for flag in ["tuan", "triet"] {
+        let on: Vec<_> = palaces
+            .iter()
+            .filter(|p| p[flag] == true)
+            .map(|p| p["branch"].as_str().unwrap())
+            .collect();
+        assert_eq!(on, ["Shen", "You"], "{flag}");
+    }
+    let mut ages: Vec<u64> = palaces
+        .iter()
+        .flat_map(|p| p["smallLimitAges"].as_array().unwrap())
+        .map(|a| a.as_u64().unwrap())
+        .collect();
+    ages.sort_unstable();
+    assert_eq!(
+        ages,
+        (1..=120).collect::<Vec<u64>>(),
+        "every age on one palace"
+    );
+    for p in palaces {
+        assert_eq!(p["smallLimitAges"].as_array().unwrap().len(), 10);
+        for ring in ["changsheng", "boshi", "suiqian", "jiangqian"] {
+            assert_ne!(p["rings"][ring]["key"].as_str().unwrap(), "");
+            assert_ne!(p["rings"][ring]["nameVi"].as_str().unwrap(), "");
+        }
+    }
+    let adjective: Vec<&str> = palaces
+        .iter()
+        .flat_map(|p| p["adjective"].as_array().unwrap())
+        .map(|a| a["key"].as_str().unwrap())
+        .collect();
+    assert!(adjective.contains(&"HongLoan"));
+    assert!(
+        !adjective
+            .iter()
+            .any(|k| k.starts_with("Tuan") || k.starts_with("Triet")),
+        "Tuần/Triệt-type stars are palace pairs, not adjective stars"
+    );
+}

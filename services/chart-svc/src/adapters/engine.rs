@@ -40,9 +40,10 @@ use crate::domain::calendar::{
     day_can_chi, solar_to_lunar, year_can_chi, Branch, CalendarKind, LunarDate, Stem,
 };
 use crate::domain::chart::{
-    Brightness, Chart, Cuc, Element, Flow, FlowLayer, Gender, Mutagen, Palace, PalaceKey,
-    StarInPalace, StarKey,
+    AdjStarKey, Brightness, Chart, Cuc, Element, Flow, FlowLayer, Gender, Mutagen, Palace,
+    PalaceKey, RingStarKey, StarInPalace, StarKey,
 };
+use crate::domain::void;
 use anyhow::{anyhow, Context};
 use time::Date;
 use x_iztro as iz;
@@ -230,6 +231,8 @@ fn map_chart(b: &NormalizedBirth, g: Gender, a: &iz::Astrolabe) -> anyhow::Resul
         menh_chu: star(a.soul)?,
         than_chu: star(a.body)?,
         than_palace: palace_key(than.name),
+        tuan: void::tuan(year_can_chi(b.lunar.year)),
+        triet: void::triet(year_can_chi(b.lunar.year).stem),
         palaces,
         school: match b.calendar {
             CalendarKind::Vn => SCHOOL_VN,
@@ -258,6 +261,21 @@ fn map_palace(p: &iz::PalaceData) -> anyhow::Result<Palace> {
         major: stars(&p.major_stars)?,
         minor: stars(&p.minor_stars)?,
         decade: (age(p.decadal.range.0)?, age(p.decadal.range.1)?),
+        adjective: p
+            .adjective_stars
+            .iter()
+            .filter(|s| !is_void_star(s.key))
+            .map(|s| adjective_star(s.key))
+            .collect::<anyhow::Result<_>>()?,
+        changsheng: ring_star(p.changsheng12)?,
+        boshi: ring_star(p.boshi12)?,
+        suiqian: ring_star(p.suiqian12)?,
+        jiangqian: ring_star(p.jiangqian12)?,
+        small_limit_ages: p
+            .ages
+            .iter()
+            .map(|&n| u8::try_from(n).context("tiểu hạn age out of range"))
+            .collect::<anyhow::Result<_>>()?,
     })
 }
 
@@ -289,6 +307,114 @@ fn mutagens_of(s: Stem) -> anyhow::Result<[(StarKey, Mutagen); 4]> {
         .position(|&x| x == s)
         .ok_or_else(|| anyhow!("stem {s:?} missing from Stem::ALL"))?;
     tu_hoa(&iz::Config::default().mutagens_of(iz::HeavenlyStem::from_index(i)))
+}
+
+/// The Tuần/Triệt-type adjective stars of iztro's default algorithm. They are left out of
+/// `Palace::adjective`: the chart reports Tuần and Triệt as palace pairs (`Chart::tuan`,
+/// `Chart::triet`) instead.
+fn is_void_star(k: iz::StarKey) -> bool {
+    use iz::StarKey as S;
+    matches!(
+        k,
+        S::Xunkong | S::Xunzhong | S::Jiekong | S::Jielu | S::Kongwang
+    )
+}
+
+/// Maps an engine adjective star. A star the default algorithm does not place is an error
+/// (a golden test covers every star the engine places).
+pub fn adjective_star(k: iz::StarKey) -> anyhow::Result<AdjStarKey> {
+    use iz::StarKey as S;
+    Ok(match k {
+        S::Hongluan => AdjStarKey::HongLoan,
+        S::Tianxi => AdjStarKey::ThienHy,
+        S::Tianyao => AdjStarKey::ThienRieu,
+        S::Xianchi => AdjStarKey::HamTri,
+        S::Jieshen => AdjStarKey::GiaiThan,
+        S::Santai => AdjStarKey::TamThai,
+        S::Bazuo => AdjStarKey::BatToa,
+        S::Engguang => AdjStarKey::AnQuang,
+        S::Tiangui => AdjStarKey::ThienQuy,
+        S::Longchi => AdjStarKey::LongTri,
+        S::Fengge => AdjStarKey::PhuongCac,
+        S::Tiancai => AdjStarKey::ThienTai,
+        S::Tianshou => AdjStarKey::ThienTho,
+        S::Taifu => AdjStarKey::ThaiPhu,
+        S::Fenggao => AdjStarKey::PhongCao,
+        S::Tianwu => AdjStarKey::ThienVu,
+        S::Huagai => AdjStarKey::HoaCai,
+        S::Tianguan => AdjStarKey::ThienQuan,
+        S::Tianfu => AdjStarKey::ThienPhuc,
+        S::Tianchu => AdjStarKey::ThienTru,
+        S::Tianyue2 => AdjStarKey::ThienNguyet,
+        S::Tiande => AdjStarKey::ThienDuc,
+        S::Yuede => AdjStarKey::NguyetDuc,
+        S::Tiankong => AdjStarKey::ThienKhong,
+        S::Guchen => AdjStarKey::CoThan,
+        S::Guasu => AdjStarKey::QuaTu,
+        S::Feilian => AdjStarKey::PhiLiem,
+        S::Posui => AdjStarKey::PhaToai,
+        S::Tianxing => AdjStarKey::ThienHinh,
+        S::Yinsha => AdjStarKey::AmSat,
+        S::Tianku => AdjStarKey::ThienKhoc,
+        S::Tianxu => AdjStarKey::ThienHu,
+        S::Tianshi => AdjStarKey::ThienSu,
+        S::Tianshang => AdjStarKey::ThienThuong,
+        S::Nianjie => AdjStarKey::NienGiai,
+        other => return Err(anyhow!("unmapped engine adjective star {other:?}")),
+    })
+}
+
+/// Maps a member of one of the four rings of twelve gods. Any other key is an error.
+pub fn ring_star(k: iz::StarKey) -> anyhow::Result<RingStarKey> {
+    use iz::StarKey as S;
+    Ok(match k {
+        S::Changsheng => RingStarKey::TrangSinh,
+        S::Muyu => RingStarKey::MocDuc,
+        S::Guandai => RingStarKey::QuanDoi,
+        S::Linguan => RingStarKey::LamQuan,
+        S::Diwang => RingStarKey::DeVuong,
+        S::Shuai => RingStarKey::Suy,
+        S::Bing => RingStarKey::Benh,
+        S::Si => RingStarKey::Tu,
+        S::Mu => RingStarKey::Mo,
+        S::Jue => RingStarKey::Tuyet,
+        S::Tai => RingStarKey::Thai,
+        S::Yang => RingStarKey::Duong,
+        S::Boshi => RingStarKey::BacSi,
+        S::Lishi => RingStarKey::LucSi,
+        S::Qinglong => RingStarKey::ThanhLong,
+        S::Xiaohao => RingStarKey::TieuHao,
+        S::Jiangjun => RingStarKey::TuongQuan,
+        S::Zhoushu => RingStarKey::TauThu,
+        S::Faylian => RingStarKey::PhiLiem,
+        S::Xishen => RingStarKey::HyThan,
+        S::Bingfu => RingStarKey::BenhPhu,
+        S::Dahao => RingStarKey::DaiHao,
+        S::Fubing => RingStarKey::PhucBinh,
+        S::Guanfu => RingStarKey::QuanPhu,
+        S::Suijian => RingStarKey::TueKien,
+        S::Huiqi => RingStarKey::HoiKhi,
+        S::Sangmen => RingStarKey::TangMon,
+        S::Guansuo => RingStarKey::QuanTac,
+        S::Gwanfu => RingStarKey::QuanPhuTue,
+        S::Longde => RingStarKey::LongDuc,
+        S::Baihu => RingStarKey::BachHo,
+        S::Tiande => RingStarKey::ThienDuc,
+        S::Diaoke => RingStarKey::DieuKhach,
+        S::Jiangxing => RingStarKey::TuongTinh,
+        S::Panan => RingStarKey::PhanAn,
+        S::Suiyi => RingStarKey::TueDich,
+        S::Xiishen => RingStarKey::TucThan,
+        S::Huagai => RingStarKey::HoaCai,
+        S::Jiesha => RingStarKey::KiepSat,
+        S::Zhaisha => RingStarKey::TaiSat,
+        S::Tiansha => RingStarKey::ThienSat,
+        S::Zhibei => RingStarKey::ChiBoi,
+        S::Xianchi => RingStarKey::HamTri,
+        S::Yuesha => RingStarKey::NguyetSat,
+        S::Wangshen => RingStarKey::VongThan,
+        other => return Err(anyhow!("unmapped engine ring star {other:?}")),
+    })
 }
 
 /// Maps an engine star. Only the 14 major and 14 minor stars appear in a chart; any other
