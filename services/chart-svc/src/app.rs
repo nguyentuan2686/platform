@@ -10,13 +10,17 @@ use platform_core::http::ReadinessCheck;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
+use crate::adapters::engine::IztroAdapter;
 use crate::adapters::http;
+use crate::application::ports::ZiweiEngine;
+use crate::application::service::{ChartService, ChartUseCases};
 use crate::config::Config;
 
 /// Shared handler state.
 #[derive(Clone)]
 pub struct AppState {
     pub readiness: Arc<dyn ReadinessCheck>,
+    pub service: Arc<dyn ChartUseCases>,
 }
 
 impl AppState {
@@ -24,6 +28,17 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             readiness: Arc::new(AlwaysReady),
+            service: Arc::new(ChartService::new(IztroAdapter)),
+        }
+    }
+}
+
+impl AppState {
+    /// State over a custom engine (tests inject failing ones).
+    pub fn with_engine<E: ZiweiEngine + Send + Sync + 'static>(engine: E) -> Self {
+        Self {
+            readiness: Arc::new(AlwaysReady),
+            service: Arc::new(ChartService::new(engine)),
         }
     }
 }

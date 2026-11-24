@@ -1,0 +1,368 @@
+{
+  "school": "iztro-default+vn-calendar",
+  "calendar": "VN",
+  "lunar": {
+    "year": 1994,
+    "month": 2,
+    "day": 1,
+    "leap": false
+  },
+  "yearCanChi": {
+    "stem": "Jia",
+    "branch": "Xu",
+    "nameVi": "Giáp Tuất"
+  },
+  "hourBranch": "Chen",
+  "cuc": {
+    "element": "Hoa",
+    "number": 6,
+    "nameVi": "Hỏa lục cục"
+  },
+  "menhChu": "CuMon",
+  "thanChu": "VanXuong",
+  "thanPalace": "TaiBach",
+  "palaces": [
+    {
+      "key": "DienTrach",
+      "nameVi": "Điền Trạch",
+      "branch": "Yin",
+      "stem": "Bing",
+      "isBody": false,
+      "decade": {
+        "from": 36,
+        "to": 45
+      },
+      "major": [],
+      "minor": [
+        {
+          "key": "LocTon",
+          "nameVi": "Lộc Tồn",
+          "brightness": null,
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "QuanLoc",
+      "nameVi": "Quan Lộc",
+      "branch": "Mao",
+      "stem": "Ding",
+      "isBody": false,
+      "decade": {
+        "from": 46,
+        "to": 55
+      },
+      "major": [],
+      "minor": [
+        {
+          "key": "DiaKiep",
+          "nameVi": "Địa Kiếp",
+          "brightness": null,
+          "mutagen": null
+        },
+        {
+          "key": "KinhDuong",
+          "nameVi": "Kình Dương",
+          "brightness": "Ham",
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "NoBoc",
+      "nameVi": "Nô Bộc",
+      "branch": "Chen",
+      "stem": "Wu",
+      "isBody": false,
+      "decade": {
+        "from": 56,
+        "to": 65
+      },
+      "major": [
+        {
+          "key": "ThienDong",
+          "nameVi": "Thiên Đồng",
+          "brightness": "Binh",
+          "mutagen": null
+        }
+      ],
+      "minor": []
+    },
+    {
+      "key": "ThienDi",
+      "nameVi": "Thiên Di",
+      "branch": "Si",
+      "stem": "Ji",
+      "isBody": false,
+      "decade": {
+        "from": 66,
+        "to": 75
+      },
+      "major": [
+        {
+          "key": "VuKhuc",
+          "nameVi": "Vũ Khúc",
+          "brightness": "Binh",
+          "mutagen": "Khoa"
+        },
+        {
+          "key": "PhaQuan",
+          "nameVi": "Phá Quân",
+          "brightness": "Binh",
+          "mutagen": "Quyen"
+        }
+      ],
+      "minor": [
+        {
+          "key": "TaPhu",
+          "nameVi": "Tả Phù",
+          "brightness": null,
+          "mutagen": null
+        },
+        {
+          "key": "HoaTinh",
+          "nameVi": "Hỏa Tinh",
+          "brightness": "Dac",
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "TatAch",
+      "nameVi": "Tật Ách",
+      "branch": "Wu",
+      "stem": "Geng",
+      "isBody": false,
+      "decade": {
+        "from": 76,
+        "to": 85
+      },
+      "major": [
+        {
+          "key": "ThaiDuong",
+          "nameVi": "Thái Dương",
+          "brightness": "Vuong",
+          "mutagen": "Ky"
+        }
+      ],
+      "minor": [
+        {
+          "key": "VanXuong",
+          "nameVi": "Văn Xương",
+          "brightness": "Ham",
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "TaiBach",
+      "nameVi": "Tài Bạch",
+      "branch": "Wei",
+      "stem": "Xin",
+      "isBody": true,
+      "decade": {
+        "from": 86,
+        "to": 95
+      },
+      "major": [
+        {
+          "key": "ThienPhu",
+          "nameVi": "Thiên Phủ",
+          "brightness": "Mieu",
+          "mutagen": null
+        }
+      ],
+      "minor": [
+        {
+          "key": "ThienViet",
+          "nameVi": "Thiên Việt",
+          "brightness": null,
+          "mutagen": null
+        },
+        {
+          "key": "DiaKhong",
+          "nameVi": "Địa Không",
+          "brightness": null,
+          "mutagen": null
+        },
+        {
+          "key": "LinhTinh",
+          "nameVi": "Linh Tinh",
+          "brightness": "Dac",
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "TuTuc",
+      "nameVi": "Tử Tức",
+      "branch": "Shen",
+      "stem": "Ren",
+      "isBody": false,
+      "decade": {
+        "from": 96,
+        "to": 105
+      },
+      "major": [
+        {
+          "key": "ThienCo",
+          "nameVi": "Thiên Cơ",
+          "brightness": "Dac",
+          "mutagen": null
+        },
+        {
+          "key": "ThaiAm",
+          "nameVi": "Thái Âm",
+          "brightness": "Dac",
+          "mutagen": null
+        }
+      ],
+      "minor": [
+        {
+          "key": "VanKhuc",
+          "nameVi": "Văn Khúc",
+          "brightness": "Dac",
+          "mutagen": null
+        },
+        {
+          "key": "ThienMa",
+          "nameVi": "Thiên Mã",
+          "brightness": null,
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "PhuThe",
+      "nameVi": "Phu Thê",
+      "branch": "You",
+      "stem": "Gui",
+      "isBody": false,
+      "decade": {
+        "from": 106,
+        "to": 115
+      },
+      "major": [
+        {
+          "key": "TuVi",
+          "nameVi": "Tử Vi",
+          "brightness": "Vuong",
+          "mutagen": null
+        },
+        {
+          "key": "ThamLang",
+          "nameVi": "Tham Lang",
+          "brightness": "Dac",
+          "mutagen": null
+        }
+      ],
+      "minor": [
+        {
+          "key": "HuuBat",
+          "nameVi": "Hữu Bật",
+          "brightness": null,
+          "mutagen": null
+        }
+      ]
+    },
+    {
+      "key": "HuynhDe",
+      "nameVi": "Huynh Đệ",
+      "branch": "Xu",
+      "stem": "Jia",
+      "isBody": false,
+      "decade": {
+        "from": 116,
+        "to": 125
+      },
+      "major": [
+        {
+          "key": "CuMon",
+          "nameVi": "Cự Môn",
+          "brightness": "Ham",
+          "mutagen": null
+        }
+      ],
+      "minor": []
+    },
+    {
+      "key": "Menh",
+      "nameVi": "Mệnh",
+      "branch": "Hai",
+      "stem": "Yi",
+      "isBody": false,
+      "decade": {
+        "from": 6,
+        "to": 15
+      },
+      "major": [
+        {
+          "key": "ThienTuong",
+          "nameVi": "Thiên Tướng",
+          "brightness": "Dac",
+          "mutagen": null
+        }
+      ],
+      "minor": []
+    },
+    {
+      "key": "PhuMau",
+      "nameVi": "Phụ Mẫu",
+      "branch": "Zi",
+      "stem": "Bing",
+      "isBody": false,
+      "decade": {
+        "from": 16,
+        "to": 25
+      },
+      "major": [
+        {
+          "key": "ThienLuong",
+          "nameVi": "Thiên Lương",
+          "brightness": "Mieu",
+          "mutagen": null
+        }
+      ],
+      "minor": []
+    },
+    {
+      "key": "PhucDuc",
+      "nameVi": "Phúc Đức",
+      "branch": "Chou",
+      "stem": "Ding",
+      "isBody": false,
+      "decade": {
+        "from": 26,
+        "to": 35
+      },
+      "major": [
+        {
+          "key": "LiemTrinh",
+          "nameVi": "Liêm Trinh",
+          "brightness": "Dac",
+          "mutagen": "Loc"
+        },
+        {
+          "key": "ThatSat",
+          "nameVi": "Thất Sát",
+          "brightness": "Mieu",
+          "mutagen": null
+        }
+      ],
+      "minor": [
+        {
+          "key": "ThienKhoi",
+          "nameVi": "Thiên Khôi",
+          "brightness": null,
+          "mutagen": null
+        },
+        {
+          "key": "DaLa",
+          "nameVi": "Đà La",
+          "brightness": "Mieu",
+          "mutagen": null
+        }
+      ]
+    }
+  ]
+}

@@ -360,7 +360,9 @@ dependencies = [
  "axum",
  "http-body-util",
  "jiff 0.2.46",
+ "jsonschema",
  "platform-core",
+ "serde",
  "serde_json",
  "thiserror",
  "time",
@@ -368,6 +370,7 @@ dependencies = [
  "tower",
  "tracing",
  "x-iztro",
+ "yaml_serde",
 ]
 
 [[package]]

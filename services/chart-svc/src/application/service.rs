@@ -19,6 +19,15 @@ pub enum ChartError {
     Engine(#[source] anyhow::Error),
 }
 
+/// What the HTTP adapter needs from the chart use cases (object safe, so tests can inject a
+/// failing engine).
+pub trait ChartUseCases: Send + Sync {
+    /// The natal chart.
+    fn chart(&self, req: &ChartRequest) -> Result<Chart, ChartError>;
+    /// The flow of `date` for the natal chart.
+    fn daily(&self, req: &ChartRequest, date: Date) -> Result<Flow, ChartError>;
+}
+
 /// Casts charts and daily flows through a [`ZiweiEngine`].
 pub struct ChartService<E: ZiweiEngine> {
     engine: E,
@@ -41,6 +50,16 @@ impl<E: ZiweiEngine> ChartService<E> {
         self.engine
             .flow(&req.birth, req.gender, date)
             .map_err(ChartError::Engine)
+    }
+}
+
+impl<E: ZiweiEngine + Send + Sync> ChartUseCases for ChartService<E> {
+    fn chart(&self, req: &ChartRequest) -> Result<Chart, ChartError> {
+        ChartService::chart(self, req)
+    }
+
+    fn daily(&self, req: &ChartRequest, date: Date) -> Result<Flow, ChartError> {
+        ChartService::daily(self, req, date)
     }
 }
 
