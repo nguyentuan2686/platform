@@ -43,6 +43,7 @@ jsonschema = { version = "0.63.1", default-features = false }
 yaml_serde = "0.10.7"
 # Embeds the tz database: the distroless runtime image has no /usr/share/zoneinfo.
 jiff = { version = "0.2", default-features = false, features = ["std", "tzdb-bundle-always"] }
+x-iztro = { version = "0.9.0", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

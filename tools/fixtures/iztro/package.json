@@ -1,0 +1,10 @@
+{
+  "name": "iztro-golden-fixtures",
+  "private": true,
+  "description": "Generates chart-svc golden fixtures from JS iztro",
+  "type": "module",
+  "license": "MIT",
+  "dependencies": {
+    "iztro": "2.5.8"
+  }
+}

@@ -16,12 +16,13 @@ jiff.workspace = true
 tokio = { workspace = true, features = ["net", "signal"] }
 thiserror.workspace = true
 time.workspace = true
+x-iztro.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
 serde_json.workspace = true
-time = { workspace = true, features = ["parsing"] }
+time = { workspace = true, features = ["parsing", "macros"] }
 tower.workspace = true
 
 [lints]
