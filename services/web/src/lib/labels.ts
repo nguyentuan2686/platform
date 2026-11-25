@@ -44,3 +44,33 @@ export const ZONES: { value: string; label: string }[] = [
   { value: "America/Chicago", label: "Mỹ (Chicago)" },
   { value: "America/Los_Angeles", label: "Mỹ (Los Angeles)" },
 ];
+
+const STEMS: Record<string, string> = {
+  Jia: "Giáp",
+  Yi: "Ất",
+  Bing: "Bính",
+  Ding: "Đinh",
+  Wu: "Mậu",
+  Ji: "Kỷ",
+  Geng: "Canh",
+  Xin: "Tân",
+  Ren: "Nhâm",
+  Gui: "Quý",
+};
+export function stemLabel(s: string): string {
+  return STEMS[s] ?? s;
+}
+/** "Kỷ Tỵ" for a palace's stem + branch. */
+export function canChi(stem: string, branch: Branch): string {
+  return `${stemLabel(stem)} ${BRANCHES[branch]}`;
+}
+
+const BRIGHTNESS: Record<string, string> = { Mieu: "M", Vuong: "V", Dac: "Đ", Binh: "B", Ham: "H" };
+export function brightnessLetter(b: string): string {
+  return BRIGHTNESS[b] ?? "";
+}
+
+const MUTAGENS: Record<string, string> = { Loc: "Lộc", Quyen: "Quyền", Khoa: "Khoa", Ky: "Kỵ" };
+export function mutagenLabel(m: string): string {
+  return MUTAGENS[m] ?? m;
+}

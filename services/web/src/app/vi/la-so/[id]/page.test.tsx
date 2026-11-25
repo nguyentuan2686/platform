@@ -7,11 +7,12 @@ const notFound = vi.hoisted(() =>
 );
 vi.mock("next/navigation", () => ({ notFound }));
 vi.mock("@/lib/upstream", () => ({
-  getChart: vi.fn(async () => ({ hourBranch: "Chen", yearCanChi: { nameVi: "Giáp Tuất" } })),
+  getChart: vi.fn(async () => (await import("@/test/chart-fixture.json")).default),
   getBasicReading: vi.fn(async () => ({ sections: [{ id: "greeting", lines: ["Chào con"] }] })),
   getToday: vi.fn(async () => ({ lunar: "15/10", opening: "o", areas: [], closing: "c" })),
 }));
 
+import { render } from "@testing-library/react";
 import Page from "@/app/vi/la-so/[id]/page";
 import { todayInVietnam } from "@/lib/today";
 import { birthStore } from "@/lib/birthStore";
@@ -32,5 +33,13 @@ describe("result page", () => {
     expect(upstream.getChart).toHaveBeenCalledTimes(1);
     expect(upstream.getBasicReading).toHaveBeenCalledTimes(1);
     expect(upstream.getToday).toHaveBeenCalledWith(expect.anything(), todayInVietnam());
+  });
+});
+
+describe("result page board", () => {
+  it("renders the 12-palace board", async () => {
+    const id = birthStore.put({ birth: "1994-03-12T08:30", zone: "Asia/Ho_Chi_Minh", gender: "male", calendar: "VN" });
+    const { container } = render(await Page({ params: Promise.resolve({ id }) }));
+    expect(container.querySelectorAll("a.cell")).toHaveLength(12);
   });
 });

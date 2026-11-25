@@ -3,6 +3,7 @@ import { birthStore } from "@/lib/birthStore";
 import { getBasicReading, getChart, getToday } from "@/lib/upstream";
 import { GENDER_LABELS, hourLabel } from "@/lib/labels";
 import { todayInVietnam } from "@/lib/today";
+import Board from "@/components/Board";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
       <p>
         {GENDER_LABELS[birth.gender]} · {hourLabel(chart.hourBranch)} · năm {chart.yearCanChi.nameVi}
       </p>
+      <Board chart={chart} />
       <section>
         <h2>Hôm nay ({today.lunar})</h2>
         <p>{today.opening}</p>
