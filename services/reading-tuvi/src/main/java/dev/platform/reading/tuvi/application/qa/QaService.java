@@ -502,9 +502,13 @@ public class QaService {
 
   private void refundRefused(UUID id) {
     try {
-      if (identity.refund(id) == RefundOutcome.REFUNDED
-          && !repo.recordRefund(id, clock.instant())) {
-        skipped(id, "refunded_at");
+      RefundOutcome outcome = identity.refund(id);
+      boolean recorded =
+          outcome == RefundOutcome.REFUNDED
+              ? repo.recordRefund(id, clock.instant())
+              : repo.recordNotCharged(id);
+      if (!recorded) {
+        skipped(id, outcome == RefundOutcome.REFUNDED ? "refunded_at" : "not_charged");
       }
     } catch (RuntimeException e) {
       if (repo.markRefundPending(id, "refund_unavailable")) {

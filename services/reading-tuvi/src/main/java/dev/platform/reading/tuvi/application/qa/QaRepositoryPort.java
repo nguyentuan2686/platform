@@ -57,6 +57,13 @@ public interface QaRepositoryPort {
   /** Sets {@code refunded_at} once on a {@code REFUSED} reading (its status stays). */
   boolean recordRefund(UUID id, Instant at);
 
+  /**
+   * identity-svc reports it never charged this {@code REFUSED} reading (refund 404): clears {@code
+   * credit_source} and sets {@code last_error = refund:not_charged}, so the reading is settled (no
+   * longer {@link QaReading#owed()}) without claiming a refund happened.
+   */
+  boolean recordNotCharged(UUID id);
+
   boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError);
 

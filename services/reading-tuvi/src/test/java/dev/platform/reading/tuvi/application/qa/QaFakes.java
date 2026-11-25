@@ -389,6 +389,16 @@ final class QaFakes {
     }
 
     @Override
+    public synchronized boolean recordNotCharged(UUID id) {
+      QaReading r = readings.get(id);
+      if (r == null || r.status() != QaStatus.REFUSED || r.refundedAt() != null) {
+        return false;
+      }
+      readings.put(id, r.withCreditSource(null).withLastError("refund:not_charged"));
+      return true;
+    }
+
+    @Override
     public boolean markRetrying(
         UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError) {
       return transition(

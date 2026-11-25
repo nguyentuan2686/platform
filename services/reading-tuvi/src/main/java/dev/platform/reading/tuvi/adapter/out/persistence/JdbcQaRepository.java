@@ -191,6 +191,15 @@ public class JdbcQaRepository implements QaRepositoryPort {
   }
 
   @Override
+  public boolean recordNotCharged(UUID id) {
+    return jdbc.update(
+            "update qa_reading set credit_source = null, last_error = 'refund:not_charged'"
+                + " where id = ? and status = 'REFUSED' and refunded_at is null",
+            id)
+        == 1;
+  }
+
+  @Override
   public boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError) {
     return jdbc.update(

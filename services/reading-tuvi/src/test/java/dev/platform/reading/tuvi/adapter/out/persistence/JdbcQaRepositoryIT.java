@@ -180,6 +180,24 @@ class JdbcQaRepositoryIT {
   }
 
   @Test
+  void not_charged_refusal_is_settled_without_claiming_a_refund() {
+    UUID id = insert(QaStatus.PENDING);
+    repo.markCharged(id, "CREDIT");
+    repo.markRefused(id, RefusalReason.OFF_TOPIC);
+    assertThat(repo.anyInProgress(subject.id())).isTrue();
+
+    assertThat(repo.recordNotCharged(id)).isTrue();
+
+    QaReading r = repo.find(id).orElseThrow();
+    assertThat(r.creditSource()).isNull();
+    assertThat(r.refundedAt()).isNull();
+    assertThat(r.lastError()).isEqualTo("refund:not_charged");
+    assertThat(repo.anyInProgress(subject.id())).isFalse();
+    assertThat(repo.recordNotCharged(insert(QaStatus.ANSWERED))).isFalse();
+    assertThat(repo.deleteSettledBySubject(subject.id())).isEqualTo(2);
+  }
+
+  @Test
   void a_message_is_answered_once_and_an_answered_follow_up_is_never_deleted() {
     UUID id = insert(QaStatus.ANSWERED);
     repo.insertMessage(id, new NewMessage(1, UUID.randomUUID(), new byte[] {3}, null), NOW);

@@ -699,6 +699,24 @@ class QaServiceTest {
   }
 
   @Test
+  void not_charged_refusal_is_settled_and_deletable() {
+    provider.then("NGOAI_PHAM_VI");
+    identity.refund = () -> RefundOutcome.NOT_CHARGED;
+    UUID id = UUID.randomUUID();
+
+    assertThat(paid(id)).isInstanceOf(Refused.class);
+
+    QaReading r = repo.reading(id);
+    assertThat(r.status()).isEqualTo(QaStatus.REFUSED);
+    assertThat(r.creditSource()).isNull();
+    assertThat(r.refundedAt()).isNull(); // no refund is claimed
+    assertThat(r.lastError()).isEqualTo("refund:not_charged");
+    assertThat(r.owed()).isFalse();
+    qa.deleteAll("acc");
+    assertThat(repo.reading(id)).isNull();
+  }
+
+  @Test
   void guard_refused_paid_reading_was_never_charged_and_is_deletable() {
     UUID id = UUID.randomUUID();
     ask("acc", id, QaKind.PAID, "Tôi nên uống thuốc gì cho khỏe");
