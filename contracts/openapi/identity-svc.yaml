@@ -1,16 +1,20 @@
 openapi: 3.1.0
 info:
   title: identity-svc
-  version: 0.1.0
+  version: 0.2.0
   description: >-
-    Identity service (guests, accounts, sessions, magic link, Google OIDC). Skeleton: health
-    probes only; the API arrives in later F1.3 tasks. Every path except /health/** requires the
-    X-Internal-Token header when INTERNAL_API_TOKEN is set.
+    Identity service (guests, accounts, sessions, magic link, Google OIDC). Sessions are opaque
+    bearer tokens (`Authorization: Bearer <session_token>`); only their SHA-256 is stored. Every
+    path except /health/** requires the X-Internal-Token header when INTERNAL_API_TOKEN is set.
+    Google OIDC arrives in a later F1.3 task.
+security:
+  - internalToken: []
 paths:
   /health/live:
     get:
       operationId: healthLive
       summary: Liveness probe
+      security: []
       responses:
         '200':
           description: The process is up.
@@ -18,16 +22,168 @@ paths:
     get:
       operationId: healthReady
       summary: Readiness probe
+      security: []
       responses:
         '200':
           description: The service can take traffic (database reachable).
+  /guests:
+    post:
+      operationId: createGuest
+      summary: Start an anonymous guest session (180 days).
+      responses:
+        '201':
+          description: Guest created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuestSession'}
+  /auth/magic-links:
+    post:
+      operationId: requestMagicLink
+      summary: Email a one-time login link (valid 15 minutes, max 3 per email per 15 minutes).
+      description: >-
+        Always answers 202 with the same body, whether the email is known, unknown or rate
+        limited. With a guest bearer, the guest is merged into the account at verification.
+      security:
+        - internalToken: []
+        - internalToken: []
+          guestBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MagicLinkRequest'}
+      responses:
+        '202':
+          description: Accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MagicLinkAccepted'}
+        '400':
+          description: Invalid email or language (`errors[].field` is `email` or `lang`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /auth/magic-links/verify:
+    post:
+      operationId: verifyMagicLink
+      summary: Redeem a login link and open a 30-day account session.
+      description: POST only (a GET would let mail scanners burn the one-time link).
+      security:
+        - internalToken: []
+        - internalToken: []
+          guestBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VerifyRequest'}
+      responses:
+        '200':
+          description: Logged in; `created` is true when the account is new.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginSession'}
+        '400':
+          description: Missing token.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '401':
+          description: The link is invalid, used or expired.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /me:
+    get:
+      operationId: me
+      summary: Who the bearer token belongs to.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: The current subject.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Me'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /sessions/current:
+    delete:
+      operationId: logout
+      summary: Revoke the session the bearer token belongs to.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '204':
+          description: Revoked.
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
 components:
   securitySchemes:
     internalToken:
       type: apiKey
       in: header
       name: X-Internal-Token
+    sessionBearer:
+      type: http
+      scheme: bearer
+    guestBearer:
+      type: http
+      scheme: bearer
+      description: Optional guest session whose data is merged on login.
   schemas:
+    GuestSession:
+      type: object
+      required: [session_token, guest_id, expires_at]
+      properties:
+        session_token: {type: string, minLength: 43, maxLength: 43}
+        guest_id: {type: string, format: uuid}
+        expires_at: {type: string, format: date-time}
+    MagicLinkRequest:
+      type: object
+      required: [email]
+      properties:
+        email: {type: string, maxLength: 254}
+        lang: {type: string, pattern: '^[a-z]{2}$', default: vi}
+    MagicLinkAccepted:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [sent_if_allowed]}
+    VerifyRequest:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string}
+    LoginSession:
+      type: object
+      required: [session_token, account_id, expires_at, created]
+      properties:
+        session_token: {type: string, minLength: 43, maxLength: 43}
+        account_id: {type: string, format: uuid}
+        expires_at: {type: string, format: date-time}
+        created: {type: boolean}
+    Me:
+      type: object
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [guest, account]}
+        guest_id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+        email_masked: {type: string, example: 't***@g***.com'}
+      oneOf:
+        - required: [guest_id]
+          properties: {kind: {const: guest}}
+        - required: [account_id]
+          properties: {kind: {const: account}}
     Problem:
       type: object
       required: [type, title, status, trace_id]
@@ -37,3 +193,11 @@ components:
         status: {type: integer}
         detail: {type: string}
         trace_id: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: {type: string}
+              message: {type: string}

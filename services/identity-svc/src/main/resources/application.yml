@@ -24,3 +24,8 @@ platform:
   internal-token: ${INTERNAL_API_TOKEN:}
 
 # OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
+
+identity:
+  web-base-url: ${WEB_BASE_URL:http://localhost:3001}
+  mail:
+    from: ${MAIL_FROM:no-reply@localhost}
