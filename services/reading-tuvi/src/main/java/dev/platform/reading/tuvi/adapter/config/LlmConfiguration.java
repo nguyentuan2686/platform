@@ -53,7 +53,7 @@ class LlmConfiguration {
         String mode = env.getProperty("LLM_FAKE_MODE", "ok").strip().toUpperCase(Locale.ROOT);
         providers.add(new FakeLlmProvider(FakeMode.valueOf(mode)));
       } else if (KEY_VARS.containsKey(id)) {
-        String key = env.getProperty(KEY_VARS.get(id), "");
+        String key = env.getProperty(KEY_VARS.get(id), "").strip();
         if (key.isBlank()) {
           LOG.warn("llm provider {} disabled: no api key", id);
         } else {

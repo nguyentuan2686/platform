@@ -227,4 +227,42 @@ class OpenAiCompatibleLlmAdapterTest {
 
     assertThat(s.toString()).doesNotContain(KEY).contains("groq");
   }
+
+  @Test
+  void key_with_trailing_newline_is_stripped() throws Exception {
+    stub.body = fixture("completion-ok.json");
+    var a =
+        new OpenAiCompatibleLlmAdapter(
+            new OpenAiCompatibleSettings(
+                "groq", stub.baseUrl(), KEY + "\n", "m", 1, false, Duration.ofSeconds(5)),
+            RestClient.builder());
+
+    a.complete(REQ);
+
+    assertThat(stub.requests().get(0).headers().get("authorization")).isEqualTo("Bearer " + KEY);
+  }
+
+  @Test
+  void unexpected_runtime_exception_is_unavailable_without_leaking_key() {
+    var builder = org.mockito.Mockito.mock(RestClient.Builder.class);
+    var client = org.mockito.Mockito.mock(RestClient.class);
+    org.mockito.Mockito.when(
+            builder.requestFactory(
+                org.mockito.ArgumentMatchers.any(
+                    org.springframework.http.client.ClientHttpRequestFactory.class)))
+        .thenReturn(builder);
+    org.mockito.Mockito.when(builder.build()).thenReturn(client);
+    org.mockito.Mockito.when(client.post()).thenThrow(new IllegalStateException("boom " + KEY));
+    var a =
+        new OpenAiCompatibleLlmAdapter(
+            new OpenAiCompatibleSettings(
+                "groq", stub.baseUrl(), KEY, "m", 1, false, Duration.ofSeconds(1)),
+            builder);
+
+    assertThatThrownBy(() -> a.complete(REQ))
+        .isInstanceOf(LlmUnavailableException.class)
+        .hasNoCause()
+        .message()
+        .doesNotContain(KEY);
+  }
 }

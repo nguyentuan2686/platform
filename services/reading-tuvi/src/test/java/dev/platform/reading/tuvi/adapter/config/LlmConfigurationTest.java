@@ -94,4 +94,14 @@ class LlmConfigurationTest {
   void gateway_bean_is_built() {
     runner.run(ctx -> assertThat(ctx).hasSingleBean(LlmGateway.class));
   }
+
+  @Test
+  void whitespace_only_key_counts_as_missing() {
+    runner
+        .withPropertyValues("LLM_PROVIDERS=groq,fake", "GROQ_API_KEY= \n")
+        .run(
+            ctx ->
+                assertThat(ids(ctx.getBean(LlmConfiguration.ConfiguredProviders.class)))
+                    .containsExactly("fake"));
+  }
 }

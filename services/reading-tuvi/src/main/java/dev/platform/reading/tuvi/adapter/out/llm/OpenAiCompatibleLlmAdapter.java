@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -74,7 +73,7 @@ public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
           client
               .post()
               .uri(url)
-              .header("Authorization", "Bearer " + settings.apiKey())
+              .header("Authorization", "Bearer " + settings.apiKey().strip())
               .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
               .body(JSON.writeValueAsString(payload(request)))
               .exchange(
@@ -86,7 +85,7 @@ public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
                               res.getBody().readAllBytes(),
                               java.nio.charset.StandardCharsets.UTF_8)),
                   true);
-    } catch (RestClientException | JacksonException e) {
+    } catch (RuntimeException e) {
       // Do not attach the cause: request details could carry the Authorization header.
       throw new LlmUnavailableException(
           "llm provider " + id() + " unreachable: " + e.getClass().getSimpleName());
