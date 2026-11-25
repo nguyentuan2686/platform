@@ -35,6 +35,10 @@ qa:
   retry-window: ${QA_RETRY_WINDOW:PT24H}
   workers: ${QA_WORKERS:2}
   stream-timeout: ${QA_STREAM_TIMEOUT:PT90S}
+  # retry/refund/recovery every job-interval and free-chat retention every 6 h (one thread).
+  jobs-enabled: ${QA_JOBS_ENABLED:true}
+  job-interval: ${QA_JOB_INTERVAL:PT1M}
+  free-retention: ${QA_FREE_RETENTION:P90D}
 
 # OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
 

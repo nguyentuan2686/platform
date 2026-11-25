@@ -209,4 +209,155 @@ class JdbcQaRepositoryIT {
     assertThat(repo.messages(id)).hasSize(2);
     assertThat(repo.messages(id).get(1).answerEnc()).containsExactly(4);
   }
+
+  // ---- jobs (Task 6) ----
+
+  UUID insertAt(QaKind kind, QaStatus status, Instant created) {
+    UUID id = UUID.randomUUID();
+    repo.insert(
+        QaReading.create(
+            id, subject, kind, QaTopic.TaiLoc, "vi", "h", QaStatus.PENDING, null, created),
+        new NewMessage(0, id, new byte[] {1}, new byte[] {2}));
+    jdbc.update("update qa_reading set status = ? where id = ?", status.name(), id);
+    return id;
+  }
+
+  byte[] prompt(UUID id) {
+    return jdbc.queryForObject(
+        "select prompt_enc from qa_message where reading_id = ? and seq = 0", byte[].class, id);
+  }
+
+  @Test
+  void claim_due_leases_each_row_once() {
+    UUID due = insert(QaStatus.PENDING);
+    repo.markRetrying(due, 1, NOW, NOW.plusSeconds(86_400), "x");
+    UUID later = insert(QaStatus.PENDING);
+    repo.markRetrying(later, 1, NOW.plusSeconds(60), NOW.plusSeconds(86_400), "x");
+    Instant lease = NOW.plusSeconds(600);
+
+    List<QaReading> first = repo.claimDue(NOW, lease, 10);
+    List<QaReading> second = repo.claimDue(NOW, lease, 10);
+
+    assertThat(first).extracting(QaReading::id).containsExactly(due);
+    assertThat(first.getFirst().nextAttemptAt()).isEqualTo(lease);
+    assertThat(first.getFirst().attempts()).isEqualTo(1);
+    assertThat(second).isEmpty();
+    assertThat(repo.claimDue(lease, lease.plusSeconds(600), 10)).hasSize(2);
+  }
+
+  @Test
+  void claim_refunds_takes_pending_refunds_and_honours_the_lease() {
+    UUID a = insert(QaStatus.PENDING);
+    assertThat(repo.markRefundPending(a, "consume_unavailable")).isTrue();
+    insert(QaStatus.RETRYING);
+
+    List<QaReading> claimed = repo.claimRefunds(NOW, NOW.plusSeconds(60), 10);
+
+    assertThat(claimed).extracting(QaReading::id).containsExactly(a);
+    assertThat(repo.claimRefunds(NOW.plusSeconds(30), NOW.plusSeconds(90), 10)).isEmpty();
+    assertThat(repo.claimRefunds(NOW.plusSeconds(60), NOW.plusSeconds(120), 10)).hasSize(1);
+  }
+
+  @Test
+  void mark_refund_pending_clears_a_retry_lease() {
+    UUID id = insert(QaStatus.PENDING);
+    repo.markRetrying(id, 3, NOW.plusSeconds(600), NOW, "x");
+
+    assertThat(repo.markRefundPending(id, "retry_window_elapsed")).isTrue();
+
+    assertThat(repo.find(id).orElseThrow().nextAttemptAt()).isNull();
+    assertThat(repo.claimRefunds(NOW, NOW.plusSeconds(60), 10)).hasSize(1);
+  }
+
+  @Test
+  void refunded_and_failed_drop_the_prompt() {
+    UUID refunded = insert(QaStatus.REFUND_PENDING);
+    UUID failed = insert(QaStatus.REFUND_PENDING);
+
+    assertThat(repo.markRefunded(refunded, NOW)).isTrue();
+    assertThat(repo.markRefunded(refunded, NOW)).isFalse();
+    assertThat(repo.markFailed(failed, "refund:not_charged")).isTrue();
+
+    QaReading r = repo.find(refunded).orElseThrow();
+    assertThat(r.status()).isEqualTo(QaStatus.REFUNDED);
+    assertThat(r.refundedAt()).isEqualTo(NOW);
+    assertThat(prompt(refunded)).isNull();
+    assertThat(prompt(failed)).isNull();
+    assertThat(repo.markRefunded(insert(QaStatus.RETRYING), NOW)).isFalse();
+  }
+
+  @Test
+  void requeue_only_charged_stale_pending() {
+    Instant old = NOW.minusSeconds(660);
+    UUID charged = insertAt(QaKind.PAID, QaStatus.PENDING, old);
+    repo.markCharged(charged, "CREDIT");
+    UUID uncharged = insertAt(QaKind.PAID, QaStatus.PENDING, old);
+    UUID fresh = insertAt(QaKind.PAID, QaStatus.PENDING, NOW);
+    repo.markCharged(fresh, "CREDIT");
+
+    int n = repo.requeueStalePending(NOW.minusSeconds(600), NOW, java.time.Duration.ofHours(24));
+
+    assertThat(n).isEqualTo(1);
+    QaReading r = repo.find(charged).orElseThrow();
+    assertThat(r.status()).isEqualTo(QaStatus.RETRYING);
+    assertThat(r.nextAttemptAt()).isEqualTo(NOW);
+    assertThat(r.retryUntil()).isEqualTo(old.plusSeconds(86_400));
+    assertThat(r.attempts()).isEqualTo(1);
+    assertThat(r.lastError()).isEqualTo("stale_pending");
+    assertThat(status(uncharged)).isEqualTo(QaStatus.PENDING);
+    assertThat(status(fresh)).isEqualTo(QaStatus.PENDING);
+    assertThat(repo.staleUncharged(NOW.minusSeconds(600), 10))
+        .extracting(QaReading::id)
+        .containsExactly(uncharged);
+  }
+
+  @Test
+  void unrefunded_refusals_finds_only_owed_old_refusals() {
+    Instant old = NOW.minusSeconds(660);
+    UUID owed = insertAt(QaKind.PAID, QaStatus.PENDING, old);
+    repo.markCharged(owed, "CREDIT");
+    repo.markRefused(owed, RefusalReason.OFF_TOPIC);
+    UUID refunded = insertAt(QaKind.PAID, QaStatus.PENDING, old);
+    repo.markCharged(refunded, "CREDIT");
+    repo.markRefused(refunded, RefusalReason.OFF_TOPIC);
+    repo.recordRefund(refunded, NOW);
+    insertAt(QaKind.PAID, QaStatus.REFUSED, old); // guard refusal, never charged
+    UUID fresh = insert(QaStatus.PENDING);
+    repo.markCharged(fresh, "CREDIT");
+    repo.markRefused(fresh, RefusalReason.OFF_TOPIC);
+
+    assertThat(repo.unrefundedRefusals(NOW.minusSeconds(600), 10)).containsExactly(owed);
+  }
+
+  @Test
+  void purge_free_keeps_paid_recent_and_owed() {
+    jdbc.update("delete from qa_answer_cache");
+    Instant old = NOW.minusSeconds(91L * 86_400);
+    UUID oldFree = insertAt(QaKind.FREE, QaStatus.ANSWERED, old);
+    UUID oldPending = insertAt(QaKind.FREE, QaStatus.PENDING, old);
+    UUID recentFree = insertAt(QaKind.FREE, QaStatus.ANSWERED, NOW.minusSeconds(89L * 86_400));
+    UUID oldPaid = insertAt(QaKind.PAID, QaStatus.ANSWERED, NOW.minusSeconds(400L * 86_400));
+    jdbc.update(
+        "insert into qa_answer_cache (cache_key, answer_enc, created_at) values"
+            + " ('old', ?, ?), ('new', ?, ?)",
+        new byte[] {1},
+        java.sql.Timestamp.from(old),
+        new byte[] {1},
+        java.sql.Timestamp.from(NOW));
+
+    Instant before = NOW.minusSeconds(90L * 86_400);
+    assertThat(repo.purgeFree(before)).isEqualTo(1);
+    assertThat(repo.purgeCache(before)).isEqualTo(1);
+
+    assertThat(repo.find(oldFree)).isEmpty();
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from qa_message where reading_id = ?", Integer.class, oldFree))
+        .isZero();
+    assertThat(repo.find(oldPending)).isPresent();
+    assertThat(repo.find(recentFree)).isPresent();
+    assertThat(repo.find(oldPaid)).isPresent();
+    assertThat(jdbc.queryForList("select cache_key from qa_answer_cache", String.class))
+        .containsExactly("new");
+  }
 }

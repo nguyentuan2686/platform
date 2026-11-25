@@ -364,7 +364,7 @@ final class QaFakes {
       return transition(
           id,
           QaStatus.REFUND_PENDING,
-          r -> r.withStatus(QaStatus.REFUND_PENDING).withLastError(lastError));
+          r -> withNext(r.withStatus(QaStatus.REFUND_PENDING).withLastError(lastError), null));
     }
 
     @Override
@@ -407,8 +407,13 @@ final class QaFakes {
 
     @Override
     public boolean markFailed(UUID id, String lastError) {
-      return transition(
-          id, QaStatus.FAILED, r -> r.withStatus(QaStatus.FAILED).withLastError(lastError));
+      boolean ok =
+          transition(
+              id, QaStatus.FAILED, r -> r.withStatus(QaStatus.FAILED).withLastError(lastError));
+      if (ok) {
+        clearPrompt(id, 0);
+      }
+      return ok;
     }
 
     @Override
@@ -567,6 +572,146 @@ final class QaFakes {
               .toList();
       ids.forEach(this::remove);
       return ids.size();
+    }
+
+    // ---- jobs (Task 6) ----
+
+    Instant purgedCacheBefore;
+
+    private QaReading withNext(QaReading r, Instant next) {
+      return new QaReading(
+          r.id(),
+          r.subjectKind(),
+          r.subjectId(),
+          r.kind(),
+          r.topic(),
+          r.lang(),
+          r.chartHash(),
+          r.status(),
+          r.refusalReason(),
+          r.creditSource(),
+          r.attempts(),
+          next,
+          r.retryUntil(),
+          r.lastError(),
+          r.createdAt(),
+          r.answeredAt(),
+          r.refundedAt());
+    }
+
+    private synchronized List<QaReading> claim(
+        java.util.function.Predicate<QaReading> due, Instant leaseUntil, int limit) {
+      List<QaReading> claimed =
+          readings.values().stream()
+              .filter(due)
+              .sorted(Comparator.comparing(QaReading::createdAt))
+              .limit(limit)
+              .map(r -> withNext(r, leaseUntil))
+              .toList();
+      claimed.forEach(r -> readings.put(r.id(), r));
+      return claimed;
+    }
+
+    @Override
+    public List<QaReading> claimDue(Instant now, Instant leaseUntil, int limit) {
+      return claim(
+          r ->
+              r.status() == QaStatus.RETRYING
+                  && r.nextAttemptAt() != null
+                  && !r.nextAttemptAt().isAfter(now),
+          leaseUntil,
+          limit);
+    }
+
+    @Override
+    public List<QaReading> claimRefunds(Instant now, Instant leaseUntil, int limit) {
+      return claim(
+          r ->
+              r.status() == QaStatus.REFUND_PENDING
+                  && (r.nextAttemptAt() == null || !r.nextAttemptAt().isAfter(now)),
+          leaseUntil,
+          limit);
+    }
+
+    @Override
+    public synchronized int requeueStalePending(
+        Instant olderThan, Instant now, java.time.Duration retryWindow) {
+      List<QaReading> stale =
+          readings.values().stream()
+              .filter(
+                  r ->
+                      r.kind() == QaKind.PAID
+                          && r.status() == QaStatus.PENDING
+                          && r.creditSource() != null
+                          && r.createdAt().isBefore(olderThan))
+              .toList();
+      for (QaReading r : stale) {
+        readings.put(
+            r.id(),
+            r.withRetry(
+                Math.max(r.attempts(), 1),
+                now,
+                r.retryUntil() != null ? r.retryUntil() : r.createdAt().plus(retryWindow),
+                "stale_pending"));
+      }
+      return stale.size();
+    }
+
+    @Override
+    public List<UUID> unrefundedRefusals(Instant olderThan, int limit) {
+      return readings.values().stream()
+          .filter(
+              r ->
+                  r.kind() == QaKind.PAID
+                      && r.status() == QaStatus.REFUSED
+                      && r.creditSource() != null
+                      && r.refundedAt() == null
+                      && r.createdAt().isBefore(olderThan))
+          .limit(limit)
+          .map(QaReading::id)
+          .toList();
+    }
+
+    @Override
+    public List<QaReading> staleUncharged(Instant olderThan, int limit) {
+      return readings.values().stream()
+          .filter(
+              r ->
+                  r.status() == QaStatus.PENDING
+                      && r.creditSource() == null
+                      && r.createdAt().isBefore(olderThan))
+          .limit(limit)
+          .toList();
+    }
+
+    @Override
+    public boolean markRefunded(UUID id, Instant at) {
+      boolean ok =
+          transition(
+              id,
+              QaStatus.REFUNDED,
+              r -> withNext(r.withStatus(QaStatus.REFUNDED).withRefundedAt(at), null));
+      if (ok) {
+        clearPrompt(id, 0);
+      }
+      return ok;
+    }
+
+    @Override
+    public synchronized int purgeFree(Instant before) {
+      List<UUID> ids =
+          readings.values().stream()
+              .filter(r -> r.kind() == QaKind.FREE && r.createdAt().isBefore(before) && !r.owed())
+              .map(QaReading::id)
+              .toList();
+      ids.forEach(this::remove);
+      return ids.size();
+    }
+
+    @Override
+    public int purgeCache(Instant before) {
+      purgedCacheBefore = before;
+      return 0;
     }
   }
 }

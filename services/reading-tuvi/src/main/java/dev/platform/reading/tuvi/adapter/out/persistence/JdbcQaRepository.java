@@ -9,6 +9,7 @@ import dev.platform.reading.tuvi.domain.qa.RefusalReason;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -156,7 +157,8 @@ public class JdbcQaRepository implements QaRepositoryPort {
   @Override
   public boolean markRefundPending(UUID id, String lastError) {
     return jdbc.update(
-            "update qa_reading set status = 'REFUND_PENDING', last_error = ? where id = ?"
+            "update qa_reading set status = 'REFUND_PENDING', last_error = ?,"
+                + " next_attempt_at = null where id = ?"
                 + from(QaStatus.REFUND_PENDING)
                 // a refusal whose refund is already recorded never goes back to pending
                 + " and (status <> 'REFUSED' or refunded_at is null)",
@@ -371,6 +373,115 @@ public class JdbcQaRepository implements QaRepositoryPort {
   @Override
   public int deleteSettledBySubject(UUID subjectId) {
     return jdbc.update("delete from qa_reading where subject_id = ? and not " + OWED, subjectId);
+  }
+
+  // ---------------------------------------------------------------- jobs
+
+  @Override
+  public List<QaReading> claimDue(Instant now, Instant leaseUntil, int limit) {
+    return claim(
+        QaStatus.RETRYING, "next_attempt_at <= ?", "next_attempt_at", now, leaseUntil, limit);
+  }
+
+  @Override
+  public List<QaReading> claimRefunds(Instant now, Instant leaseUntil, int limit) {
+    return claim(
+        QaStatus.REFUND_PENDING,
+        "(next_attempt_at is null or next_attempt_at <= ?)",
+        "created_at",
+        now,
+        leaseUntil,
+        limit);
+  }
+
+  /**
+   * One statement: lock the due rows other replicas have not locked ({@code SKIP LOCKED}), move
+   * their {@code next_attempt_at} to the lease end and return them. A concurrent claimer either
+   * skips the locked rows or, once this commits, no longer finds them due.
+   */
+  private List<QaReading> claim(
+      QaStatus status, String due, String order, Instant now, Instant leaseUntil, int limit) {
+    String inStatus = "status = '" + status.name() + "'";
+    return jdbc.query(
+        "update qa_reading set next_attempt_at = ? where id in (select id from qa_reading where "
+            + inStatus
+            + " and "
+            + due
+            + " order by "
+            + order
+            + " limit ? for update skip locked) and "
+            + inStatus
+            + " returning "
+            + READING_COLUMNS,
+        READING,
+        ts(leaseUntil),
+        ts(now),
+        limit);
+  }
+
+  @Override
+  public int requeueStalePending(Instant olderThan, Instant now, Duration retryWindow) {
+    return jdbc.update(
+        "update qa_reading set status = 'RETRYING', attempts = greatest(attempts, 1),"
+            + " next_attempt_at = ?,"
+            + " retry_until = coalesce(retry_until, created_at + ? * interval '1 second'),"
+            + " last_error = 'stale_pending'"
+            + " where kind = 'PAID' and credit_source is not null and created_at < ?"
+            + " and status = 'PENDING'",
+        ts(now),
+        retryWindow.toSeconds(),
+        ts(olderThan));
+  }
+
+  @Override
+  public List<UUID> unrefundedRefusals(Instant olderThan, int limit) {
+    return jdbc.query(
+        "select id from qa_reading where kind = 'PAID' and status = 'REFUSED'"
+            + " and credit_source is not null and refunded_at is null and created_at < ?"
+            + " order by created_at limit ?",
+        (rs, n) -> rs.getObject("id", UUID.class),
+        ts(olderThan),
+        limit);
+  }
+
+  @Override
+  public List<QaReading> staleUncharged(Instant olderThan, int limit) {
+    return jdbc.query(
+        "select "
+            + READING_COLUMNS
+            + " from qa_reading where status = 'PENDING' and credit_source is null"
+            + " and created_at < ? order by created_at limit ?",
+        READING,
+        ts(olderThan),
+        limit);
+  }
+
+  @Override
+  public boolean markRefunded(UUID id, Instant at) {
+    boolean changed =
+        jdbc.update(
+                "update qa_reading set status = 'REFUNDED', refunded_at = ?,"
+                    + " next_attempt_at = null where id = ?"
+                    + from(QaStatus.REFUNDED),
+                ts(at),
+                id)
+            == 1;
+    if (changed) {
+      jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+    }
+    return changed;
+  }
+
+  @Override
+  public int purgeFree(Instant before) {
+    return jdbc.update(
+        "delete from qa_reading where kind = 'FREE' and created_at < ? and not " + OWED,
+        ts(before));
+  }
+
+  @Override
+  public int purgeCache(Instant before) {
+    return jdbc.update("delete from qa_answer_cache where created_at < ?", ts(before));
   }
 
   private static Timestamp ts(Instant i) {

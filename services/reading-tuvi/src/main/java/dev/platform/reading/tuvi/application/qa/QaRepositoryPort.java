@@ -1,6 +1,7 @@
 package dev.platform.reading.tuvi.application.qa;
 
 import dev.platform.reading.tuvi.domain.qa.RefusalReason;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -49,6 +50,7 @@ public interface QaRepositoryPort {
   /** Records the credit source on a {@code PENDING} reading. */
   boolean markCharged(UUID id, String creditSource);
 
+  /** Status {@code REFUND_PENDING}; clears any retry lease so the refund is due at once. */
   boolean markRefundPending(UUID id, String lastError);
 
   /** Status {@code REFUSED} with the reason; the stored prompt is dropped. */
@@ -67,6 +69,7 @@ public interface QaRepositoryPort {
   boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError);
 
+  /** Status {@code FAILED}; the stored prompt is dropped. */
   boolean markFailed(UUID id, String lastError);
 
   boolean markAnswered(UUID id, Instant at);
@@ -116,4 +119,40 @@ public interface QaRepositoryPort {
    * question charged concurrently is never deleted. Returns the number deleted.
    */
   int deleteSettledBySubject(UUID subjectId);
+
+  // Jobs (retry, refund, recovery, retention). Safe with several replicas: a claim is one
+  // statement (FOR UPDATE SKIP LOCKED) that leases the rows by moving next_attempt_at to
+  // leaseUntil, so the outbound call runs after the commit and no other replica takes the row
+  // until the lease ends.
+
+  /** Claims up to {@code limit} {@code RETRYING} readings due at {@code now}, oldest first. */
+  List<QaReading> claimDue(Instant now, Instant leaseUntil, int limit);
+
+  /** Claims up to {@code limit} {@code REFUND_PENDING} readings not leased at {@code now}. */
+  List<QaReading> claimRefunds(Instant now, Instant leaseUntil, int limit);
+
+  /**
+   * Charged PAID {@code PENDING} readings created before {@code olderThan} (the process died
+   * mid-generation) move to {@code RETRYING}, due at {@code now}, within their retry window.
+   * Returns the number moved.
+   */
+  int requeueStalePending(Instant olderThan, Instant now, Duration retryWindow);
+
+  /**
+   * Charged PAID {@code REFUSED} readings created before {@code olderThan} whose refund was never
+   * recorded (the process died between the refusal and the refund call).
+   */
+  List<UUID> unrefundedRefusals(Instant olderThan, int limit);
+
+  /** Uncharged {@code PENDING} readings created before {@code olderThan} (abandoned). */
+  List<QaReading> staleUncharged(Instant olderThan, int limit);
+
+  /** {@code REFUND_PENDING} to {@code REFUNDED} with {@code refunded_at}; drops the prompt. */
+  boolean markRefunded(UUID id, Instant at);
+
+  /** Deletes FREE readings created before {@code before} that are not owed; cascades. */
+  int purgeFree(Instant before);
+
+  /** Deletes answer-cache entries created before {@code before}. */
+  int purgeCache(Instant before);
 }

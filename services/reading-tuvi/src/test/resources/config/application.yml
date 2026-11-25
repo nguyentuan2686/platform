@@ -5,3 +5,5 @@ platform:
 qa:
   # base64 of the 32-byte test phrase "local-test-qa-enc-key-0123456789" (AES-256 test key)
   enc-key: bG9jYWwtdGVzdC1xYS1lbmMta2V5LTAxMjM0NTY3ODk=
+  # the ITs run the jobs themselves (QaRetryIT), never on a background schedule
+  jobs-enabled: false

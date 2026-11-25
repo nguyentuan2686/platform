@@ -68,7 +68,7 @@ public class QaService {
   static final int MAX_SNIPPETS = 12;
   static final int MAX_SNIPPET_CHARS = 3500;
   static final double TEMPERATURE = 0.6;
-  static final Duration FIRST_RETRY = Duration.ofMinutes(5);
+  static final Duration FIRST_RETRY = RetryBackoff.next(1);
   static final int HISTORY_LIMIT = 50;
 
   private final IdentityPort identity;
@@ -416,6 +416,24 @@ public class QaService {
     if (cached.isPresent()) {
       return answered(job, cached.get(), "cache", List.of(), false);
     }
+    return switch (attempt(job)) {
+      case Attempt.Text text -> answered(job, text.text(), text.provider(), job.usedKeys(), true);
+      case Attempt.Declined declined -> sentinelRefusal(job, declined.reason());
+      case Attempt.Failed failed -> failure(job, failed.code());
+    };
+  }
+
+  /** Result of one model attempt (with its one regeneration on a filter reject). */
+  private sealed interface Attempt {
+    record Text(String text, String provider) implements Attempt {}
+
+    record Declined(RefusalReason reason) implements Attempt {}
+
+    record Failed(String code) implements Attempt {}
+  }
+
+  /** The model, sentinels and the answer filter; never writes to the database. */
+  private Attempt attempt(Prepared.Job job) {
     LlmRequest request = request(job);
     String rule = null;
     for (int attempt = 0; attempt < 2; attempt++) {
@@ -423,15 +441,15 @@ public class QaService {
       try {
         completion = gateway.complete(request);
       } catch (AllProvidersExhaustedException e) {
-        return failure(job, "all_providers_exhausted");
+        return new Attempt.Failed("all_providers_exhausted");
       }
       Optional<RefusalReason> sentinel = Sentinel.detect(completion.text());
       if (sentinel.isPresent()) {
-        return sentinelRefusal(job, sentinel.get());
+        return new Attempt.Declined(sentinel.get());
       }
       FilterResult filtered = AnswerFilter.check(completion.text(), limits(job));
       if (filtered instanceof FilterResult.Pass pass) {
-        return answered(job, pass.cleaned(), completion.provider(), job.usedKeys(), true);
+        return new Attempt.Text(pass.cleaned(), completion.provider());
       }
       rule = ((FilterResult.Reject) filtered).rule();
       LOG.info(
@@ -440,7 +458,68 @@ public class QaService {
           completion.provider(),
           rule);
     }
-    return failure(job, "filter:" + rule);
+    return new Attempt.Failed("filter:" + rule);
+  }
+
+  // ---------------------------------------------------------------- retry job
+
+  /** What one retry-job attempt did; the retry use case does the status bookkeeping. */
+  sealed interface Regeneration {
+
+    /** Answered and stored ({@code RETRYING -> ANSWERED}). */
+    record Answered(String provider) implements Regeneration {}
+
+    /** The model declined: the credit is refunded. */
+    record Declined(RefusalReason reason) implements Regeneration {}
+
+    /** The model failed again; {@code code} is the error code. */
+    record Failed(String code) implements Regeneration {}
+
+    /** No stored prompt: the question can never be retried, so it is refunded. */
+    record NoPrompt() implements Regeneration {}
+
+    /** The reading is gone or no longer {@code RETRYING}: nothing to do. */
+    record Settled() implements Regeneration {}
+  }
+
+  /**
+   * One more model attempt for a {@code RETRYING} reading, from its stored encrypted prompt (no
+   * bearer, birth data or chart call needed). Never charges or refunds.
+   */
+  Regeneration regenerate(UUID readingId) {
+    Optional<QaReading> found = repo.find(readingId).filter(r -> r.status() == QaStatus.RETRYING);
+    if (found.isEmpty()) {
+      return new Regeneration.Settled();
+    }
+    QaReading r = found.get();
+    Optional<StoredMessage> first =
+        repo.messages(readingId).stream().filter(m -> m.seq() == 0).findFirst();
+    if (first.isEmpty() || first.get().promptEnc() == null) {
+      return new Regeneration.NoPrompt();
+    }
+    Prompt prompt =
+        PromptCodec.decode(cipher.decrypt(promptAad(readingId, 0), first.get().promptEnc()));
+    int followUps = r.kind() == QaKind.PAID ? MAX_FOLLOW_UPS : 0;
+    Prepared.Job job =
+        new Prepared.Job(
+            readingId, r.kind(), r.topic(), followUps, 0, r.createdAt(), prompt, List.of(), null);
+    return switch (attempt(job)) {
+      case Attempt.Text text -> {
+        if (!store.answer(
+            readingId,
+            0,
+            cipher.encrypt(aad(readingId, 0), text.text()),
+            text.provider(),
+            List.of(),
+            clock.instant())) {
+          skipped(readingId, "ANSWERED");
+          yield new Regeneration.Settled();
+        }
+        yield new Regeneration.Answered(text.provider());
+      }
+      case Attempt.Declined declined -> new Regeneration.Declined(declined.reason());
+      case Attempt.Failed failed -> new Regeneration.Failed(failed.code());
+    };
   }
 
   private Optional<String> cached(Prepared.Job job) {

@@ -1,5 +1,6 @@
 package dev.platform.reading.tuvi.adapter.config;
 
+import dev.platform.reading.tuvi.adapter.in.schedule.QaJobs;
 import dev.platform.reading.tuvi.adapter.out.crypto.AesGcmQaCipherAdapter;
 import dev.platform.reading.tuvi.adapter.out.identity.IdentitySvcClient;
 import dev.platform.reading.tuvi.application.ChartPort;
@@ -9,6 +10,8 @@ import dev.platform.reading.tuvi.application.qa.IdentityPort;
 import dev.platform.reading.tuvi.application.qa.QaAnswerCachePort;
 import dev.platform.reading.tuvi.application.qa.QaFrames;
 import dev.platform.reading.tuvi.application.qa.QaRepositoryPort;
+import dev.platform.reading.tuvi.application.qa.QaRetentionUseCase;
+import dev.platform.reading.tuvi.application.qa.QaRetryUseCase;
 import dev.platform.reading.tuvi.application.qa.QaService;
 import dev.platform.reading.tuvi.application.qa.QaSettings;
 import dev.platform.reading.tuvi.application.qa.QaStore;
@@ -17,6 +20,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -73,6 +77,29 @@ class QaConfiguration {
       QaSettings settings) {
     return new QaService(
         identity, charts, knowledge, gateway, repo, store, cache, cipher, frames, clock, settings);
+  }
+
+  @Bean
+  QaRetryUseCase qaRetryUseCase(
+      QaRepositoryPort repo, QaService qa, IdentityPort identity, QaSettings settings) {
+    return new QaRetryUseCase(repo, qa, identity, settings);
+  }
+
+  @Bean
+  QaRetentionUseCase qaRetentionUseCase(
+      QaRepositoryPort repo, @Value("${qa.free-retention:P90D}") Duration retention) {
+    return new QaRetentionUseCase(repo, retention);
+  }
+
+  /** Retry/refund/recovery every {@code QA_JOB_INTERVAL}, retention every 6 h. */
+  @Bean
+  @ConditionalOnProperty(name = "qa.jobs-enabled", havingValue = "true", matchIfMissing = true)
+  QaJobs qaJobs(
+      QaRetryUseCase retry,
+      QaRetentionUseCase retention,
+      Clock clock,
+      @Value("${qa.job-interval:PT1M}") Duration interval) {
+    return new QaJobs(retry, retention, clock, interval);
   }
 
   /** {@code QA_WORKERS} threads, queue of 20; a full queue rejects (handled as a failure). */
