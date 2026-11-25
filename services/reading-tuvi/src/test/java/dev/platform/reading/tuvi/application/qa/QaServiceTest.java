@@ -482,6 +482,62 @@ class QaServiceTest {
   }
 
   @Test
+  void free_model_declined_chats_count_toward_the_daily_quota() {
+    // final review I-1: a declined chat still cost a provider call
+    for (int i = 0; i < 3; i++) {
+      provider.then(i % 2 == 0 ? "NGOAI_PHAM_VI" : "KHONG_DU_TU_LIEU");
+      assertThat(ask("guest", UUID.randomUUID(), QaKind.FREE, Q + " " + i))
+          .isInstanceOf(Refused.class);
+    }
+
+    assertThatThrownBy(() -> ask("guest", UUID.randomUUID(), QaKind.FREE, Q))
+        .satisfies(t -> assertThat(reason(t)).isEqualTo("free_quota"));
+    assertThat(qa.freeQuota("guest")).isEqualTo(new FreeQuota(3, 3, 0));
+    // the per-chart cap counts them too
+    assertThatThrownBy(() -> ask("guest2", UUID.randomUUID(), QaKind.FREE, Q))
+        .satisfies(t -> assertThat(reason(t)).isEqualTo("free_quota"));
+    assertThat(provider.requests).hasSize(3);
+  }
+
+  @Test
+  void free_guard_refusals_never_reach_the_model_and_are_not_counted() {
+    for (int i = 0; i < 3; i++) {
+      assertThat(ask("guest", UUID.randomUUID(), QaKind.FREE, "Tôi nên uống thuốc gì " + i))
+          .isInstanceOf(Refused.class);
+    }
+
+    assertThat(qa.freeQuota("guest")).isEqualTo(new FreeQuota(3, 0, 3));
+    assertThat(provider.requests).isEmpty();
+  }
+
+  @Test
+  void free_declined_and_failed_chats_count_toward_the_global_cap() {
+    qa =
+        new QaService(
+            identity,
+            charts,
+            knowledge,
+            new LlmGateway(
+                List.of(provider),
+                new MemoryUsage(),
+                new PaidPricing(BigDecimal.ONE, BigDecimal.ONE, BigDecimal.TEN),
+                clock),
+            repo,
+            new QaStore(repo),
+            cache,
+            cipher,
+            new QaFrames(knowledge),
+            clock,
+            new QaSettings(3, 2, Duration.ofHours(24)));
+    provider.then("NGOAI_PHAM_VI");
+    ask("guest", UUID.randomUUID(), QaKind.FREE, Q);
+    provider.thenFail();
+    ask("guest", UUID.randomUUID(), QaKind.FREE, Q + " hai");
+
+    assertThat(ask("guest2", UUID.randomUUID(), QaKind.FREE, Q + " ba")).isInstanceOf(Busy.class);
+  }
+
+  @Test
   void free_sentinel_is_refused_without_refund() {
     provider.then("NGOAI_PHAM_VI");
     UUID id = UUID.randomUUID();
@@ -714,6 +770,33 @@ class QaServiceTest {
     assertThat(r.owed()).isFalse();
     qa.deleteAll("acc");
     assertThat(repo.reading(id)).isNull();
+  }
+
+  @Test
+  void deleted_paid_reading_id_cannot_be_reused() {
+    // final review C-1: identity answers a repeated reading id with 200 and no new debit
+    UUID id = UUID.randomUUID();
+    paid(id);
+    qa.deleteAll("acc");
+    assertThat(repo.reading(id)).isNull();
+
+    for (QaKind kind : QaKind.values()) {
+      assertThatThrownBy(() -> ask("acc", id, kind, "Năm nay sự nghiệp của tôi thế nào"))
+          .isInstanceOf(QaConflictException.class)
+          .satisfies(t -> assertThat(reason(t)).isEqualTo("reading_conflict"));
+    }
+    assertThat(identity.consumed).hasSize(1);
+    assertThat(provider.requests).hasSize(1);
+    assertThat(repo.reading(id)).isNull();
+  }
+
+  @Test
+  void deleted_free_reading_leaves_no_tombstone() {
+    UUID id = UUID.randomUUID();
+    ask("guest", id, QaKind.FREE, Q);
+    qa.deleteAll("guest");
+
+    assertThat(repo.tombstones).isEmpty();
   }
 
   @Test

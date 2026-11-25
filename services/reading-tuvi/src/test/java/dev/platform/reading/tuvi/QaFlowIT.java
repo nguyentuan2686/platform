@@ -171,6 +171,32 @@ class QaFlowIT extends QaItSupport {
   }
 
   @Test
+  void deleted_paid_reading_id_reused_is_409_without_a_second_consume() throws Exception {
+    UUID id = UUID.randomUUID();
+    paid(id);
+    assertThat(send("DELETE", "/tuvi/qa/readings", null, ACCOUNT_BEARER).statusCode())
+        .isEqualTo(204);
+
+    HttpResponse<String> res =
+        send(
+            "POST",
+            "/tuvi/qa/readings",
+            ask(id, "PAID", "SuNghiep", "Công việc năm nay của tôi ra sao"),
+            ACCOUNT_BEARER);
+
+    assertThat(res.statusCode()).as(res.body()).isEqualTo(409);
+    assertThat(JSON.readTree(res.body()).get("reason").asString()).isEqualTo("reading_conflict");
+    verify(identity, times(1)).consume(any(), any(), any());
+    assertThat(
+            jdbc.queryForObject("select count(*) from qa_reading where id = ?", Integer.class, id))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from qa_deleted_reading where id = ?", Integer.class, id))
+        .isEqualTo(1);
+  }
+
+  @Test
   void qa_requires_the_internal_token() throws Exception {
     var res =
         java.net.http.HttpClient.newHttpClient()

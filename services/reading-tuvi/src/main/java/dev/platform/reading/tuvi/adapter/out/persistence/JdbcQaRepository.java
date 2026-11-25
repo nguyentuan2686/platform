@@ -37,8 +37,18 @@ public class JdbcQaRepository implements QaRepositoryPort {
           + " or (kind = 'PAID' and status = 'REFUSED' and credit_source is not null"
           + " and refunded_at is null))";
 
+  /**
+   * FREE chats that reached (or will reach) the model: pending, answered, or declined by the model
+   * (REFUSED with a chart hash; a guard refusal has chart_hash '' and never reaches the model).
+   */
   private static final String COUNTED_FREE =
-      " kind = 'FREE' and status in ('PENDING', 'ANSWERED') and created_at >= ?";
+      " kind = 'FREE' and (status in ('PENDING', 'ANSWERED')"
+          + " or (status = 'REFUSED' and chart_hash <> '')) and created_at >= ?";
+
+  /** The global cap also counts failed chats, so provider spend stays bounded. */
+  private static final String COUNTED_FREE_GLOBAL =
+      " kind = 'FREE' and (status in ('PENDING', 'ANSWERED', 'FAILED')"
+          + " or (status = 'REFUSED' and chart_hash <> '')) and created_at >= ?";
 
   private static final RowMapper<QaReading> READING =
       (rs, n) ->
@@ -400,7 +410,7 @@ public class JdbcQaRepository implements QaRepositoryPort {
 
   @Override
   public int countFreeGlobal(Instant since) {
-    return count(COUNTED_FREE, ts(since));
+    return count(COUNTED_FREE_GLOBAL, ts(since));
   }
 
   private int count(String where, Object... args) {
@@ -449,7 +459,27 @@ public class JdbcQaRepository implements QaRepositoryPort {
 
   @Override
   public int deleteSettledBySubject(UUID subjectId) {
-    return jdbc.update("delete from qa_reading where subject_id = ? and not " + OWED, subjectId);
+    // one statement: the tombstones commit with the delete, so a deleted PAID id is never both
+    // gone from qa_reading and missing from qa_deleted_reading
+    Integer n =
+        jdbc.queryForObject(
+            "with gone as (delete from qa_reading where subject_id = ? and not "
+                + OWED
+                + " returning id, subject_id, kind),"
+                + " tomb as (insert into qa_deleted_reading (id, subject_id)"
+                + " select id, subject_id from gone where kind = 'PAID'"
+                + " on conflict (id) do nothing returning 1)"
+                + " select count(*) from gone",
+            Integer.class,
+            subjectId);
+    return n == null ? 0 : n;
+  }
+
+  @Override
+  public boolean deletedPaid(UUID id) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "select exists (select 1 from qa_deleted_reading where id = ?)", Boolean.class, id));
   }
 
   // ---------------------------------------------------------------- jobs

@@ -147,6 +147,55 @@ class JdbcQaRepositoryIT {
     assertThat(repo.find(refused)).isEmpty();
   }
 
+  UUID insertFree(String chartHash, QaStatus status) {
+    UUID id = UUID.randomUUID();
+    repo.insert(
+        QaReading.create(
+            id, subject, QaKind.FREE, QaTopic.TaiLoc, "vi", chartHash, status, null, NOW),
+        new NewMessage(0, id, new byte[] {1}, null));
+    return id;
+  }
+
+  @Test
+  void history_delete_tombstones_paid_ids_only_and_atomically() {
+    UUID answered = insert(QaStatus.ANSWERED);
+    UUID retrying = insert(QaStatus.RETRYING);
+    UUID free = insertFree("h", QaStatus.ANSWERED);
+
+    assertThat(repo.deleteSettledBySubject(subject.id())).isEqualTo(2);
+
+    assertThat(repo.deletedPaid(answered)).isTrue();
+    assertThat(repo.deletedPaid(retrying)).isFalse(); // owed: kept, not deleted
+    assertThat(repo.deletedPaid(free)).isFalse();
+    assertThat(repo.deletedPaid(UUID.randomUUID())).isFalse();
+    // only the id, the subject and the time are kept
+    assertThat(
+            jdbc.queryForList(
+                "select column_name from information_schema.columns"
+                    + " where table_name = 'qa_deleted_reading' order by ordinal_position",
+                String.class))
+        .containsExactly("id", "subject_id", "deleted_at");
+    assertThat(
+            jdbc.queryForObject(
+                "select subject_id from qa_deleted_reading where id = ?", UUID.class, answered))
+        .isEqualTo(subject.id());
+  }
+
+  @Test
+  void free_counts_include_model_refusals_but_not_guard_refusals() {
+    Instant since = NOW.minusSeconds(60);
+    insertFree("c", QaStatus.ANSWERED);
+    insertFree("c", QaStatus.PENDING);
+    insertFree("c", QaStatus.REFUSED); // declined by the model: has a chart hash
+    insertFree("", QaStatus.REFUSED); // guard refusal: never reached the model
+    insertFree("c", QaStatus.FAILED);
+
+    assertThat(repo.countFreeBySubject(subject.id(), since)).isEqualTo(3);
+    assertThat(repo.countFreeByChart("c", since)).isEqualTo(3);
+    assertThat(repo.countFreeGlobal(since)).isEqualTo(4);
+    assertThat(repo.countFreeBySubject(subject.id(), NOW.plusSeconds(1))).isZero();
+  }
+
   @Test
   void delete_during_pending_refund_of_paid_refusal_keeps_row_then_refund_pending() {
     UUID id = insert(QaStatus.PENDING);

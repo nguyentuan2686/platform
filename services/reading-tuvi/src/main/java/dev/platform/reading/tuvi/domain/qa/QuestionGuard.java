@@ -96,6 +96,11 @@ public final class QuestionGuard {
     List<String> unaccented = new ArrayList<>(anyFolded);
     unaccented.addAll(
         List.of(
+            // a pronoun right before "tu sat", or a sentence particle after it, is a first-person
+            // statement; star talk reads "co tu sat" / "gap tu sat". Unaccented words only, so
+            // accented "tôi tứ sát" is untouched.
+            "(?:toi|tao|minh|em|anh|chi|con|chau) tu sat",
+            "tu sat (?:day|thoi|luon|mat)",
             "(?:muon|dinh|nghi den) tu tu",
             "tu tu (?:di|cho xong|chet)",
             "song lam gi",

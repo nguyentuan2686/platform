@@ -14,7 +14,14 @@ public final class QuestionNormalizer {
 
   private static final Pattern CRLF = Pattern.compile("\\r\\n?");
   private static final Pattern SPACE_LIKE = Pattern.compile("[\\p{Z}\\t\\f\\x0B]");
-  private static final Pattern DELIMITERS = Pattern.compile("<<<|>>>|`");
+
+  /**
+   * Every angle bracket and backtick, not only {@code <<<}/{@code >>>} runs: removing whole runs
+   * once can rebuild them ({@code ">><<<>"} becomes {@code ">>>"}); removing every single character
+   * cannot. A tử vi question has no use for them.
+   */
+  private static final Pattern DELIMITERS = Pattern.compile("[<>`]");
+
   private static final Pattern SPACES = Pattern.compile(" {2,}");
   private static final Pattern WHITESPACE = Pattern.compile("[\\s\\p{Z}]+");
   private static final Pattern TRAILING = Pattern.compile("[\\s?.!…]+$");
@@ -26,7 +33,7 @@ public final class QuestionNormalizer {
   /**
    * The text sent to the model: NFKC (folds full-width forms), Cyrillic/Greek look-alikes mapped to
    * Latin, invisible characters dropped, every Unicode space or tab turned into one space, newlines
-   * kept, and the prompt delimiters {@code <<<}, {@code >>>} and backticks removed.
+   * kept, and every {@code <}, {@code >} and backtick removed ({@link #stripDelimiters}).
    */
   public static String clean(String text) {
     if (text == null) {
@@ -37,9 +44,17 @@ public final class QuestionNormalizer {
     s = CRLF.matcher(s).replaceAll("\n");
     s = SPACE_LIKE.matcher(s).replaceAll(" ");
     s = SafetyLexicon.stripInvisible(s);
-    s = DELIMITERS.matcher(s).replaceAll("");
+    s = stripDelimiters(s);
     s = SPACES.matcher(s).replaceAll(" ");
     return s.strip();
+  }
+
+  /**
+   * {@code text} without any {@code <}, {@code >} or backtick, so it can neither contain nor
+   * rebuild the prompt delimiters {@code <<<} and {@code >>>}; idempotent.
+   */
+  public static String stripDelimiters(String text) {
+    return DELIMITERS.matcher(text).replaceAll("");
   }
 
   /**

@@ -131,6 +131,13 @@ public class QaService {
     if (existing.isPresent()) {
       return replay(existing.get(), subject);
     }
+    if (repo.deletedPaid(cmd.readingId())) {
+      // identity's consume is idempotent per reading id: reusing a deleted PAID id would get a
+      // new paid answer without a new charge. The tombstone commits with the delete, so a
+      // reading missing from find() above is already visible here.
+      LOG.info("qa deleted reading id reused reading_id={}", cmd.readingId());
+      throw new QaConflictException("reading_conflict");
+    }
     String question = QuestionNormalizer.clean(cmd.question());
     if (guard instanceof GuardResult.Refused refused) {
       return refuse(cmd, subject, question, refused.reason());

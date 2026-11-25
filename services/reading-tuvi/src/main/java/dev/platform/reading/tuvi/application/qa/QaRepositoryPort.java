@@ -123,13 +123,16 @@ public interface QaRepositoryPort {
   /** Deletes a follow-up that has no answer yet (an answered one is kept). */
   boolean deleteUnansweredMessage(UUID readingId, int seq);
 
-  /** FREE readings that are {@code PENDING} or {@code ANSWERED}, created at or after since. */
+  /**
+   * FREE readings created at or after since that reached the model: {@code PENDING}, {@code
+   * ANSWERED}, or {@code REFUSED} by the model (non-empty chart hash; guard refusals have none).
+   */
   int countFreeBySubject(UUID subjectId, Instant since);
 
   /** As {@link #countFreeBySubject}, per chart. */
   int countFreeByChart(String chartHash, Instant since);
 
-  /** As {@link #countFreeBySubject}, for everyone. */
+  /** As {@link #countFreeBySubject}, for everyone, and also counting {@code FAILED} chats. */
   int countFreeGlobal(Instant since);
 
   /** Transaction-scoped advisory lock on the chart hash. */
@@ -145,9 +148,16 @@ public interface QaRepositoryPort {
 
   /**
    * Deletes the subject's readings except those {@link QaReading#owed()}, in one statement, so a
-   * question charged concurrently is never deleted. Returns the number deleted.
+   * question charged concurrently is never deleted, and in the same statement keeps a tombstone
+   * (id, subject, time; no text) of every deleted PAID reading. Returns the number deleted.
    */
   int deleteSettledBySubject(UUID subjectId);
+
+  /**
+   * True when {@code id} was a PAID reading deleted from history: identity-svc would accept its
+   * consume again without a charge, so the id may never be reused.
+   */
+  boolean deletedPaid(UUID id);
 
   // Jobs (retry, refund, recovery, retention). Safe with several replicas: a claim is one
   // statement (FOR UPDATE SKIP LOCKED) that takes one row, moves next_attempt_at to leaseUntil and

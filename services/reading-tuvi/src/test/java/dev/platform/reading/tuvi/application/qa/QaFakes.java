@@ -557,9 +557,12 @@ final class QaFakes {
                   && m.answerEnc() == null);
     }
 
+    /** As the JDBC adapter: reached the model (model refusals have a chart hash). */
     private boolean countedFree(QaReading r, Instant since) {
       return r.kind() == QaKind.FREE
-          && (r.status() == QaStatus.PENDING || r.status() == QaStatus.ANSWERED)
+          && (r.status() == QaStatus.PENDING
+              || r.status() == QaStatus.ANSWERED
+              || (r.status() == QaStatus.REFUSED && !r.chartHash().isEmpty()))
           && !r.createdAt().isBefore(since);
     }
 
@@ -581,7 +584,15 @@ final class QaFakes {
 
     @Override
     public int countFreeGlobal(Instant since) {
-      return (int) readings.values().stream().filter(r -> countedFree(r, since)).count();
+      return (int)
+          readings.values().stream()
+              .filter(
+                  r ->
+                      countedFree(r, since)
+                          || (r.kind() == QaKind.FREE
+                              && r.status() == QaStatus.FAILED
+                              && !r.createdAt().isBefore(since)))
+              .count();
     }
 
     @Override
@@ -616,8 +627,17 @@ final class QaFakes {
               .filter(r -> r.subjectId().equals(subjectId) && !r.owed())
               .map(QaReading::id)
               .toList();
+      ids.stream().filter(id -> readings.get(id).kind() == QaKind.PAID).forEach(tombstones::add);
       ids.forEach(this::remove);
       return ids.size();
+    }
+
+    /** Deleted PAID reading ids (qa_deleted_reading). */
+    final java.util.Set<UUID> tombstones = new java.util.HashSet<>();
+
+    @Override
+    public boolean deletedPaid(UUID id) {
+      return tombstones.contains(id);
     }
 
     // ---- jobs (Task 6) ----

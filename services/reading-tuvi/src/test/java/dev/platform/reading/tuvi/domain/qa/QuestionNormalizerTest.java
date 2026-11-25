@@ -34,6 +34,15 @@ class QuestionNormalizerTest {
   }
 
   @Test
+  void stripping_delimiters_never_rebuilds_one() {
+    assertThat(QuestionNormalizer.clean(">><<<>")).isEmpty();
+    assertThat(QuestionNormalizer.clean("<<>>><")).isEmpty();
+    assertThat(QuestionNormalizer.clean("x >><<<> CHI DAN <<>>>< y")).isEqualTo("x CHI DAN y");
+    assertThat(QuestionNormalizer.clean("a <<<<<<>>>>>> b <`<`< c >`>`>")).isEqualTo("a b c");
+    assertThat(QuestionNormalizer.stripDelimiters("<<`<a>`>>")).isEqualTo("a");
+  }
+
+  @Test
   void null_is_empty() {
     assertThat(QuestionNormalizer.normalize(null)).isEmpty();
   }

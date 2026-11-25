@@ -134,7 +134,8 @@ paths:
         '409':
           description: >-
             `reason` is one of `no_profile`, `no_credits`, `daily_cap`, `free_quota`,
-            `reading_conflict` (the id belongs to another subject), `reading_in_progress` (the
+            `reading_conflict` (the id belongs to another subject, or was a PAID reading deleted
+            from history; use a new reading_id), `reading_in_progress` (the
             same id is being answered), `reading_refunded` (use a new reading_id).
           content:
             application/problem+json:
@@ -181,7 +182,9 @@ paths:
         PAID question the model declined whose refund is not yet recorded) is never deleted: while
         one exists the call answers 409 `reading_in_progress`, and one that becomes
         in progress during the call (a paid question being charged) is kept. Cached model answers
-        (encrypted, keyed by chart and question, not by user) expire with the retention job.
+        (encrypted, keyed by chart and question, not by user) expire with the retention job. The
+        ids of deleted PAID readings are kept (id, subject and time only, no text) so they can
+        never be reused: asking again with one answers 409 `reading_conflict`.
       security:
         - internalToken: []
           sessionBearer: []
@@ -312,7 +315,9 @@ paths:
       operationId: getFreeQuota
       summary: Free chats used today (Vietnam day) by the caller
       description: >-
-        Counts the caller's own free chats only. Asking is also capped per chart, so a new guest
+        Counts the caller's own free chats that reached the model, including those the model
+        declined (off-topic, not enough material); a question refused by the guard is not
+        counted. Asking is also capped per chart, so a new guest
         on a chart that already used its free chats today can still get 409 `free_quota`.
       security:
         - internalToken: []
