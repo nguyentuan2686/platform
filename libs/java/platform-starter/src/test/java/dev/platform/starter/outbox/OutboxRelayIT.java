@@ -230,10 +230,17 @@ class OutboxRelayIT {
             pool.submit(
                 () -> {
                   start.await();
+                  // A send that fails on a loaded machine (fresh topic, 2 s timeouts) publishes 0
+                  // and
+                  // must not end the loop: keep going until nothing is pending or the deadline.
+                  long deadline = System.nanoTime() + Duration.ofSeconds(50).toNanos();
                   int total = 0;
-                  int n;
-                  while ((n = r.publishPending()) > 0) {
+                  while (pendingRows() > 0 && System.nanoTime() < deadline) {
+                    int n = r.publishPending();
                     total += n;
+                    if (n == 0) {
+                      Thread.sleep(200);
+                    }
                   }
                   return total;
                 }));
@@ -310,6 +317,11 @@ class OutboxRelayIT {
 
   private static String topic() {
     return "outbox-it-" + UUID.randomUUID();
+  }
+
+  private int pendingRows() {
+    return jdbc.queryForObject(
+        "select count(*) from outbox_event where published_at is null", Integer.class);
   }
 
   private Instant publishedAt(UUID eventId) {
