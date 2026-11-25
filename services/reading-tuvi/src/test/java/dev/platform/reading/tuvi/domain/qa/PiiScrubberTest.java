@@ -22,7 +22,9 @@ class PiiScrubberTest {
         "1994031208",
         "ngày 12 tháng 3 năm 1994",
         "8h30",
-        "8 giờ 30"
+        "8 giờ 30",
+        "1234 5678 9012",
+        "0123.456.789.012"
       })
   void each_pii_form_is_replaced(String pii) {
     String out = PiiScrubber.scrub("Của con là " + pii + " đấy");

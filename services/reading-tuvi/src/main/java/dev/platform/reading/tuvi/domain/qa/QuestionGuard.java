@@ -5,7 +5,6 @@ import static dev.platform.reading.tuvi.domain.SafetyLexicon.word;
 import dev.platform.reading.tuvi.domain.qa.GuardResult.Invalid;
 import dev.platform.reading.tuvi.domain.qa.GuardResult.Ok;
 import dev.platform.reading.tuvi.domain.qa.GuardResult.Refused;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -13,23 +12,35 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Decides whether a user question may go to the model (spec §15). Matching runs on the normalized
- * text with word boundaries, so {@code vấn đề} is never gambling. Questions typed without
- * diacritics are also checked against a folded list of unambiguous phrases (single folded words
- * such as {@code thuoc} or {@code vay} would hit {@code thuộc} or {@code vậy}). {@link
- * RefusalReason#SELF_HARM} is evaluated first, then the other reasons in enum order.
+ * Decides whether a user question may go to the model (spec §15).
+ *
+ * <p>The question first goes through {@link QuestionNormalizer#clean} and {@link PiiScrubber}; that
+ * text is both what is matched and what is sent ({@code Ok.sanitized}), so nothing stripped later
+ * can rebuild a blocked phrase. Matching uses {@link QuestionNormalizer#matchForm} with word
+ * boundaries, so {@code vấn đề} is never gambling. Four lists per reason:
+ *
+ * <ul>
+ *   <li><b>accented</b>: Vietnamese with diacritics, and English; always applied;
+ *   <li><b>accented typing</b>: ASCII-looking Vietnamese terms ({@code vay}) that collide with an
+ *       unaccented common word ({@code vậy}); applied only when most words carry diacritics;
+ *   <li><b>unaccented</b>: folded phrases matched only against the words typed without diacritics
+ *       (accented words are blanked), so {@code vậy tiền} never reads as {@code vay tien} while
+ *       {@code toi muon chet nhé} still matches;
+ *   <li><b>any</b>: folded phrases that stay unambiguous after folding (self-harm and injection),
+ *       matched against the fully folded text, so a half-accented phrase cannot slip through.
+ * </ul>
+ *
+ * {@link RefusalReason#SELF_HARM} is evaluated first, then the other reasons in enum order.
  */
 public final class QuestionGuard {
 
   static final int MIN_LENGTH = 5;
   static final int MAX_LENGTH = 500;
 
-  /** Control characters except newline, and invisible format characters (zero-width etc.). */
-  private static final Pattern INVISIBLE = Pattern.compile("[\\p{Cc}\\p{Cf}&&[^\\n]]");
-
-  private static final Pattern DELIMITERS = Pattern.compile("<<<|>>>|`");
   private static final Pattern VI_DIACRITIC =
       Pattern.compile("[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]");
+  private static final Pattern HAS_LETTER = Pattern.compile("\\p{L}");
+  private static final String BLANK = "·";
 
   /** Professions a user may ask about as a career ("có hợp làm bác sĩ không"). */
   private static final String CAREER = "(?<!(?:làm|nghề|thành|học) )";
@@ -38,12 +49,56 @@ public final class QuestionGuard {
 
   private static final Map<RefusalReason, List<Pattern>> ACCENTED =
       new EnumMap<>(RefusalReason.class);
-  private static final Map<RefusalReason, List<Pattern>> FOLDED =
+  private static final Map<RefusalReason, List<Pattern>> ACCENTED_TYPING =
+      new EnumMap<>(RefusalReason.class);
+  private static final Map<RefusalReason, List<Pattern>> UNACCENTED =
+      new EnumMap<>(RefusalReason.class);
+  private static final Map<RefusalReason, List<Pattern>> ANY_FOLDED =
       new EnumMap<>(RefusalReason.class);
 
   private static final List<RefusalReason> ORDER;
 
   static {
+    selfHarm();
+    medical();
+    legal();
+    finance();
+    gambling();
+    death();
+    injection();
+    List<RefusalReason> order = new ArrayList<>();
+    order.add(RefusalReason.SELF_HARM);
+    for (RefusalReason r : RefusalReason.values()) {
+      if (r != RefusalReason.SELF_HARM && ACCENTED.containsKey(r)) {
+        order.add(r);
+      }
+    }
+    ORDER = List.copyOf(order);
+  }
+
+  private static void selfHarm() {
+    List<String> anyFolded =
+        List.of(
+            "tu sat",
+            "muon chet",
+            "ket lieu",
+            "khong muon song",
+            "chan song",
+            "chet di cho xong",
+            "chet cho (?:roi|xong)",
+            "khong thiet song",
+            "thuoc ngu(?! hanh)",
+            "nhay cau",
+            "rach tay",
+            "muon bien mat");
+    List<String> unaccented = new ArrayList<>(anyFolded);
+    unaccented.addAll(
+        List.of(
+            "(?:muon|dinh|nghi den) tu tu",
+            "tu tu (?:di|cho xong|chet)",
+            "song lam gi",
+            "treo co",
+            "cat tay"));
     add(
         RefusalReason.SELF_HARM,
         List.of(
@@ -55,16 +110,26 @@ public final class QuestionGuard {
             "tự làm hại",
             "không muốn sống",
             "chán sống",
+            "chết đi cho xong",
+            "chết cho (?:rồi|xong)",
+            "không thiết sống",
+            "sống làm gì",
+            "thuốc ngủ",
+            "nhảy cầu",
+            "treo cổ",
+            "rạch tay",
+            "cắt tay",
+            "muốn biến mất",
             "kill myself",
+            "end my life",
+            "want to die",
             "suicide"),
-        List.of(
-            "(?:muon|dinh|nghi den|se|co nen|nen) tu tu",
-            "tu sat",
-            "muon chet",
-            "ket lieu",
-            "tu hai",
-            "khong muon song",
-            "chan song"));
+        List.of(),
+        unaccented,
+        anyFolded);
+  }
+
+  private static void medical() {
     add(
         RefusalReason.MEDICAL,
         List.of(
@@ -82,6 +147,7 @@ public final class QuestionGuard {
             "ung thư",
             "tiểu đường",
             "huyết áp"),
+        List.of(),
         List.of(
             "uong thuoc",
             "dung thuoc",
@@ -95,7 +161,11 @@ public final class QuestionGuard {
             "ke don",
             "chan doan",
             "benh vien",
-            "ung thu"));
+            "ung thu"),
+        List.of());
+  }
+
+  private static void legal() {
     add(
         RefusalReason.LEGAL,
         List.of(
@@ -107,6 +177,7 @@ public final class QuestionGuard {
             "tranh chấp đất",
             "tranh chấp tài sản",
             "lawsuit"),
+        List.of(),
         List.of(
             "kien tung",
             "kien cao",
@@ -116,7 +187,11 @@ public final class QuestionGuard {
             "ra toa",
             "hau toa",
             "toa an",
-            "tranh chap dat"));
+            "tranh chap dat"),
+        List.of());
+  }
+
+  private static void finance() {
     add(
         RefusalReason.FINANCE,
         List.of(
@@ -129,9 +204,12 @@ public final class QuestionGuard {
             "tiền ảo",
             "tiền điện tử",
             "mua vàng",
-            "vay",
             "lãi suất",
-            "đầu tư vào"),
+            "đầu tư vào",
+            "vay (?:tiền|nợ|vốn|ngân hàng|lãi|nóng|mua)",
+            "(?:đi|khoản|món) vay"),
+        // bare "vay" collides with unaccented "vậy"
+        List.of("vay"),
         List.of(
             "co phieu",
             "chung khoan",
@@ -142,7 +220,11 @@ public final class QuestionGuard {
             "di vay",
             "khoan vay",
             "lai suat",
-            "dau tu vao"));
+            "dau tu vao"),
+        List.of());
+  }
+
+  private static void gambling() {
     add(
         RefusalReason.GAMBLING,
         List.of(
@@ -159,15 +241,13 @@ public final class QuestionGuard {
             "đánh bài",
             "con số may mắn",
             "lottery"),
+        List.of(),
         List.of(
-            "lo de",
-            "danh de",
-            "so de",
-            "xo so",
-            "ca do",
-            "ca cuoc",
-            "danh bai",
-            "con so may man"));
+            "lo de", "danh de", "so de", "xo so", "ca do", "ca cuoc", "danh bai", "con so may man"),
+        List.of());
+  }
+
+  private static void death() {
     add(
         RefusalReason.DEATH,
         List.of(
@@ -182,6 +262,7 @@ public final class QuestionGuard {
             "tuổi thọ",
             "thọ bao nhiêu",
             "qua đời"),
+        List.of(),
         List.of(
             "khi nao chet",
             "bao gio chet",
@@ -191,28 +272,27 @@ public final class QuestionGuard {
             "song duoc bao lau",
             "song bao lau",
             "song den bao nhieu tuoi",
-            "qua doi"));
-    add(
-        RefusalReason.INJECTION,
+            "qua doi"),
+        List.of());
+  }
+
+  private static void injection() {
+    List<String> english =
         List.of(
-            "(?:bỏ qua|quên|phớt lờ) (?:mọi|các|tất cả|những|hết) (?:hướng dẫn|chỉ dẫn|quy tắc|lệnh)",
-            "(?:ignore|disregard|forget) (?:all|any|previous|prior|the above|your)",
+            "(?:ignore|disregard) (?:all|any|previous|prior|the|these|those|everything|your"
+                + "|above|earlier)",
+            "forget (?:(?:all|your|the|previous|these|prior) )*(?:instructions|rules|prompts?"
+                + "|guidelines)",
             "system prompt",
-            "lời nhắc hệ thống",
-            "tiết lộ (?:prompt|hướng dẫn|lời nhắc)",
-            "đóng vai",
-            "nhập vai",
-            "giả vờ là",
             "act as",
             "pretend to be",
             "you are now",
             "developer mode",
-            "jailbreak",
-            "bạn là một",
-            "câu hỏi:",
-            "tư liệu:"),
+            "jailbreak");
+    List<String> folded =
         List.of(
-            "(?:bo qua|quen|phot lo) (?:moi|cac|tat ca|nhung|het) (?:huong dan|chi dan|quy tac|lenh)",
+            "(?:bo qua|quen|phot lo) (?:moi|cac|tat ca|nhung|het) (?:huong dan|chi dan|quy tac"
+                + "|lenh)",
             "loi nhac he thong",
             "tiet lo (?:prompt|huong dan|loi nhac)",
             "dong vai",
@@ -220,45 +300,79 @@ public final class QuestionGuard {
             "gia vo la",
             "ban la mot",
             "cau hoi:",
-            "tu lieu:"));
-    List<RefusalReason> order = new ArrayList<>();
-    order.add(RefusalReason.SELF_HARM);
-    for (RefusalReason r : RefusalReason.values()) {
-      if (r != RefusalReason.SELF_HARM && ACCENTED.containsKey(r)) {
-        order.add(r);
-      }
-    }
-    ORDER = List.copyOf(order);
+            "tu lieu:");
+    List<String> accented = new ArrayList<>(english);
+    accented.addAll(
+        List.of(
+            "(?:bỏ qua|quên|phớt lờ) (?:mọi|các|tất cả|những|hết) (?:hướng dẫn|chỉ dẫn|quy tắc"
+                + "|lệnh)",
+            "lời nhắc hệ thống",
+            "tiết lộ (?:prompt|hướng dẫn|lời nhắc)",
+            "đóng vai",
+            "nhập vai",
+            "giả vờ là",
+            "bạn là một",
+            "câu hỏi:",
+            "tư liệu:"));
+    List<String> anyFolded = new ArrayList<>(folded);
+    anyFolded.addAll(english);
+    add(RefusalReason.INJECTION, accented, List.of(), folded, anyFolded);
   }
 
   private QuestionGuard() {}
 
-  private static void add(RefusalReason reason, List<String> accented, List<String> folded) {
-    ACCENTED.put(reason, accented.stream().map(t -> word(t)).toList());
-    FOLDED.put(reason, folded.stream().map(t -> word(t)).toList());
+  private static void add(
+      RefusalReason reason,
+      List<String> accented,
+      List<String> accentedTyping,
+      List<String> unaccented,
+      List<String> anyFolded) {
+    ACCENTED.put(reason, compile(accented));
+    ACCENTED_TYPING.put(reason, compile(accentedTyping));
+    UNACCENTED.put(reason, compile(unaccented));
+    ANY_FOLDED.put(reason, compile(anyFolded));
+  }
+
+  private static List<Pattern> compile(List<String> terms) {
+    return terms.stream().map(t -> word(t)).toList();
   }
 
   public static GuardResult check(String raw) {
-    if (raw == null) {
+    if (raw == null || raw.length() > MAX_LENGTH * 8) {
       return new Invalid("question");
     }
-    String trimmed = raw.strip();
-    if (trimmed.length() < MIN_LENGTH || trimmed.length() > MAX_LENGTH) {
+    String cleaned = QuestionNormalizer.clean(raw);
+    if (cleaned.length() < MIN_LENGTH || cleaned.length() > MAX_LENGTH) {
       return new Invalid("question");
     }
-    String visible =
-        INVISIBLE.matcher(Normalizer.normalize(trimmed, Normalizer.Form.NFC)).replaceAll("");
-    String normalized = QuestionNormalizer.normalize(visible);
-    boolean unaccented = !VI_DIACRITIC.matcher(normalized).find();
-    String folded = QuestionNormalizer.fold(normalized);
+    String sanitized = PiiScrubber.scrub(cleaned);
+    String match = QuestionNormalizer.matchForm(sanitized);
+    String folded = QuestionNormalizer.fold(match);
+    String[] words = match.split(" ");
+    StringBuilder unaccentedWords = new StringBuilder(match.length());
+    int letterWords = 0;
+    int accentedWords = 0;
+    for (String w : words) {
+      boolean accented = VI_DIACRITIC.matcher(w).find();
+      if (HAS_LETTER.matcher(w).find()) {
+        letterWords++;
+        accentedWords += accented ? 1 : 0;
+      }
+      if (!unaccentedWords.isEmpty()) {
+        unaccentedWords.append(' ');
+      }
+      unaccentedWords.append(accented ? BLANK : w);
+    }
+    boolean accentedTyping = accentedWords > 0 && accentedWords * 2 >= letterWords;
+    String unaccented = unaccentedWords.toString();
     for (RefusalReason reason : ORDER) {
-      if (matches(ACCENTED.get(reason), normalized)
-          || (unaccented && matches(FOLDED.get(reason), folded))) {
+      if (matches(ACCENTED.get(reason), match)
+          || (accentedTyping && matches(ACCENTED_TYPING.get(reason), match))
+          || matches(UNACCENTED.get(reason), unaccented)
+          || matches(ANY_FOLDED.get(reason), folded)) {
         return new Refused(reason);
       }
     }
-    String sanitized = DELIMITERS.matcher(visible).replaceAll("");
-    sanitized = PiiScrubber.scrub(sanitized).strip().replaceAll("[ \\t]{2,}", " ");
     return new Ok(sanitized);
   }
 

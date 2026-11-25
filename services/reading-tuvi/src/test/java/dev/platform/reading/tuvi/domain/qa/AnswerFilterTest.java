@@ -17,14 +17,6 @@ class AnswerFilterTest {
       "Ta xem cung Tài Bạch của con thì thấy tiền bạc đến đều theo công việc. "
           + "Con nên giữ một khoản dự phòng để thong dong hơn nhé.";
 
-  /** What the Task 1 fake provider returns in ok mode for a realistic prompt. */
-  static final String FAKE_OK =
-      "Con hỏi về tài lộc, ta xem lá số của con thì thấy thế này. "
-          + "Cung Tài Bạch có Vũ Khúc miếu, Hóa Lộc. Cung Mệnh có Tử Vi, Thiên Phủ."
-          + " Con cứ bình tâm mà làm, việc gì cũng có thời của nó.";
-
-  static final String FAKE_UNSAFE = FAKE_OK + " Con nên đi giải hạn ngay.";
-
   @Test
   void safe_answer_passes_free() {
     assertThat(AnswerFilter.check(SAFE, AnswerLimits.FREE)).isEqualTo(new Pass(SAFE));
@@ -130,19 +122,41 @@ class AnswerFilterTest {
     assertThat(AnswerFilter.check(answer, AnswerLimits.FREE)).isInstanceOf(Pass.class);
   }
 
-  @Test
-  void fake_ok_output_passes() {
-    assertThat(AnswerFilter.check(FAKE_OK, AnswerLimits.PAID)).isEqualTo(new Pass(FAKE_OK));
-  }
-
-  @Test
-  void fake_unsafe_output_rejected() {
-    assertThat(AnswerFilter.check(FAKE_UNSAFE, AnswerLimits.PAID)).isEqualTo(new Reject("banned"));
-  }
+  // fake_ok_output_passes / fake_unsafe_output_rejected run against the real FakeLlmProvider in
+  // adapter/out/llm/FakeOutputAnswerFilterTest.
 
   @Test
   void null_answer_rejected_for_length() {
     assertThat(AnswerFilter.check(null, AnswerLimits.FREE)).isInstanceOf(Reject.class);
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @CsvSource(
+      delimiter = '|',
+      textBlock =
+          """
+          fear     | Năm nay con phải hoá giải ngay cung Phu Thê, ta thấy nhiều sóng gió lắm.
+          fear     | Ta thấy năm nay con có đại hoạ ở cung Tài Bạch, con nên cẩn trọng nhé.
+          leak     | Tư liệu: Cung Mệnh có Tử Vi. Ta thấy con điềm đạm, được người tin cậy nhé.
+          leak     | Chủ đề: tài lộc. Ta thấy cung Tài Bạch của con có Vũ Khúc, tiền đến đều.
+          leak     | Câu hỏi : tài lộc. Ta thấy cung Tài Bạch của con có Vũ Khúc, tiền đến đều.
+          contact  | Con nhắn ta qua zalo.me/abc nhé, ta thấy cung Mệnh của con đẹp lắm đấy.
+          contact  | Con ghé trang tuvi-abc.vn nhé, ta thấy cung Mệnh của con đẹp lắm đấy.
+          """)
+  void review_probes_rejected(String rule, String answer) {
+    assertThat(AnswerFilter.check(answer, AnswerLimits.FREE)).isEqualTo(new Reject(rule));
+  }
+
+  @Test
+  void invisible_characters_cannot_hide_banned_words() {
+    String answer = SAFE.replace("thì thấy", "thì thấy ch​ết");
+    assertThat(AnswerFilter.check(answer, AnswerLimits.FREE)).isEqualTo(new Reject("banned"));
+  }
+
+  @Test
+  void decorated_sentinels_are_detected() {
+    assertThat(Sentinel.detect("**NGOAI_PHAM_VI**")).contains(RefusalReason.OFF_TOPIC);
+    assertThat(Sentinel.detect(" \"`_KHONG_DU_TU_LIEU_`\"")).contains(RefusalReason.INSUFFICIENT);
   }
 
   @Test

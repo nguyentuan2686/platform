@@ -15,6 +15,8 @@ public final class PiiScrubber {
       List.of(
           // emails
           Pattern.compile("[\\p{L}\\p{N}._%+-]+@[\\p{L}\\p{N}.-]+\\.[\\p{L}]{2,}"),
+          // grouped digits: card, account and ID numbers written as 1234 5678 9012
+          Pattern.compile("(?<!\\d)\\d{3,4}(?:[\\s.-]\\d{3,4}){2,}(?!\\d)"),
           // Vietnamese phone numbers
           Pattern.compile("(?<![\\d+])(?:\\+?84|0)[\\s.-]?\\d(?:[\\s.-]?\\d){7,9}(?!\\d)"),
           // numeric dates: 12/03/1994, 1-3-94, 12.03.1994

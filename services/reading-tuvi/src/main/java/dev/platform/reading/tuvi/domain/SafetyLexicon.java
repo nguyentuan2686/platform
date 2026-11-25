@@ -2,6 +2,7 @@ package dev.platform.reading.tuvi.domain;
 
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -67,9 +68,87 @@ public final class SafetyLexicon {
         || (cp >= 0x20000 && cp <= 0x2FA1F); // supplementary ideographs
   }
 
-  /** {@code regex} bounded by non-letters on both sides. */
+  /**
+   * {@code regex} bounded by non-letters on both sides, with its tone placement made canonical (see
+   * {@link #canonicalTones}); match it against canonical text.
+   */
   public static Pattern word(String regex) {
-    return Pattern.compile("(?<!\\p{L})(?:" + regex + ")(?!\\p{L})");
+    return Pattern.compile("(?<!\\p{L})(?:" + canonicalTones(regex) + ")(?!\\p{L})");
+  }
+
+  /**
+   * Unifies the two Vietnamese tone-placement conventions at the end of a syllable: {@code oá} →
+   * {@code óa}, {@code oẹ} → {@code ọe}, {@code uỷ} → {@code ủy} (so {@code hoá}, {@code hoạ},
+   * {@code toà}, {@code khoẻ}, {@code thuỷ} read as {@code hóa}, {@code họa}, {@code tòa}, {@code
+   * khỏe}, {@code thủy}). For matching only; lowercase input.
+   */
+  public static String canonicalTones(String text) {
+    Matcher m = Tones.OLD_STYLE.matcher(text);
+    StringBuilder out = new StringBuilder(text.length());
+    while (m.find()) {
+      char base = m.group().charAt(0);
+      char toned = m.group().charAt(1);
+      int tone = Tones.toneOf(toned);
+      String carrier = base == 'o' ? Tones.O_TONES : Tones.U_TONES;
+      char plain = Tones.plainOf(toned);
+      m.appendReplacement(out, Matcher.quoteReplacement(carrier.charAt(tone) + "" + plain));
+    }
+    m.appendTail(out);
+    return out.toString();
+  }
+
+  /** Drops invisible characters: format characters (zero-width etc.), variation selectors, CGJ. */
+  public static String stripInvisible(String text) {
+    return Tones.INVISIBLE.matcher(text).replaceAll("");
+  }
+
+  /** Maps Cyrillic and Greek letters that look like Latin ones to their Latin twins. */
+  public static String mapLookAlikes(String text) {
+    StringBuilder out = new StringBuilder(text.length());
+    for (int i = 0; i < text.length(); i++) {
+      char c = text.charAt(i);
+      int at = Tones.LOOK_ALIKE_FROM.indexOf(c);
+      out.append(at < 0 ? c : Tones.LOOK_ALIKE_TO.charAt(at));
+    }
+    return out.toString();
+  }
+
+  /** Holder, so these exist before the lexicon fields above are compiled. */
+  private static final class Tones {
+    // index 0 = grave, 1 = acute, 2 = hook, 3 = tilde, 4 = dot
+    static final String A_TONES = "àáảãạ";
+    static final String E_TONES = "èéẻẽẹ";
+    static final String Y_TONES = "ỳýỷỹỵ";
+    static final String O_TONES = "òóỏõọ";
+    static final String U_TONES = "ùúủũụ";
+    static final Pattern OLD_STYLE =
+        Pattern.compile("(?:o[" + A_TONES + E_TONES + "]|u[" + Y_TONES + "])(?!\\p{L})");
+    static final Pattern INVISIBLE =
+        Pattern.compile(
+            "[\\p{Cf}\\x{FE00}-\\x{FE0F}\\x{E0100}-\\x{E01EF}\\x{034F}]|[\\p{Cc}&&[^\\n]]");
+    // Cyrillic a e o p c y x i dze je komi-de shha palochka, upper A Ve E Ka Em En O Er Es Te Ha
+    // I Dze Je; Greek omicron nu alpha epsilon iota kappa rho tau upsilon chi, and capitals.
+    static final String LOOK_ALIKE_FROM =
+        "аеорсухіѕјԁһӏ" + "АВЕКМНОРСТХІЅЈ" + "οναεικρτυχ" + "ΑΒΕΖΗΙΚΜΝΟΡΤΥΧ";
+    static final String LOOK_ALIKE_TO =
+        "aeopcyxisjdhl" + "ABEKMHOPCTXISJ" + "ovaeikptux" + "ABEZHIKMNOPTYX";
+
+    static int toneOf(char toned) {
+      for (String set : List.of(A_TONES, E_TONES, Y_TONES)) {
+        int i = set.indexOf(toned);
+        if (i >= 0) {
+          return i;
+        }
+      }
+      throw new IllegalArgumentException("not a toned vowel");
+    }
+
+    static char plainOf(char toned) {
+      if (A_TONES.indexOf(toned) >= 0) {
+        return 'a';
+      }
+      return E_TONES.indexOf(toned) >= 0 ? 'e' : 'y';
+    }
   }
 
   private static Pattern lit(String text) {

@@ -65,11 +65,14 @@ public class FakeLlmProvider implements LlmProviderPort {
         }
       }
     }
-    return "Con hỏi về "
-        + topic
-        + ", ta xem lá số của con thì thấy thế này. "
-        + String.join(" ", facts)
-        + " Con cứ bình tâm mà làm, việc gì cũng có thời của nó.";
+    // At least 150 characters even without facts, so it passes the PAID answer limits.
+    List<String> parts = new ArrayList<>();
+    parts.add("Con hỏi về " + topic + ", ta xem lá số của con thì thấy thế này.");
+    parts.addAll(facts);
+    parts.add("Con cứ bình tâm mà làm, việc gì cũng có thời của nó.");
+    parts.add(
+        "Điều nào hợp với con thì con giữ lấy, điều nào chưa hợp thì con cứ để đó mà ngẫm thêm.");
+    return String.join(" ", parts);
   }
 
   private static int tokens(String text) {

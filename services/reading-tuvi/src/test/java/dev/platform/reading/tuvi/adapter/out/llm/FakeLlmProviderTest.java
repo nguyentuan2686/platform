@@ -32,7 +32,10 @@ class FakeLlmProviderTest {
         .isEqualTo(
             "Con hỏi về tài lộc, ta xem lá số của con thì thấy thế này. "
                 + "Mệnh có Tử Vi. Tài Bạch có Vũ Khúc."
-                + " Con cứ bình tâm mà làm, việc gì cũng có thời của nó.");
+                + " Con cứ bình tâm mà làm, việc gì cũng có thời của nó."
+                + " Điều nào hợp với con thì con giữ lấy, điều nào chưa hợp thì con cứ để đó"
+                + " mà ngẫm thêm.");
+    assertThat(out.text().length()).isGreaterThanOrEqualTo(150);
     assertThat(out.provider()).isEqualTo("fake");
   }
 
