@@ -1,0 +1,219 @@
+openapi: 3.1.0
+info:
+  title: payment-svc
+  version: 0.1.0
+  description: >-
+    Payment service: price catalog, orders and checkout (VietQR bank transfer through SePay, or
+    PayPal), PaymentSucceeded through the outbox. Called by the web BFF, which supplies the
+    authenticated `account_id`; the service itself has no sessions. Every path except /health/**
+    requires the X-Internal-Token header when INTERNAL_API_TOKEN is set. Money is a decimal string
+    with two decimals. Bank transfer content, account numbers and tokens are never logged.
+security:
+  - internalToken: []
+paths:
+  /health/live:
+    get:
+      operationId: healthLive
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: The process is up.
+  /health/ready:
+    get:
+      operationId: healthReady
+      summary: Readiness probe
+      security: []
+      responses:
+        '200':
+          description: The service can take traffic (database reachable).
+  /products:
+    get:
+      operationId: listProducts
+      summary: Active prices in one currency, cheapest first.
+      parameters:
+        - {name: site, in: query, required: true, schema: {enum: [tuvi, astro]}}
+        - {name: currency, in: query, required: true, schema: {enum: [VND, USD]}}
+      responses:
+        '200':
+          description: The catalog.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Product'}
+        '400':
+          description: Unknown site or currency (`errors[].field`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /orders:
+    post:
+      operationId: createOrder
+      summary: Open a PENDING order and get the payment instructions.
+      description: >-
+        SEPAY orders are VND and answer with a VietQR payload whose `content` is the order code the
+        customer must type in the transfer; PAYPAL orders are USD and answer with the approve URL.
+        The order is payable for ORDER_PAYMENT_WINDOW (default 30 minutes); after that it reads
+        EXPIRED, but a late payment still matches it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateOrderRequest'}
+      responses:
+        '201':
+          description: Order created.
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreatedOrder'}
+        '400':
+          description: >-
+            Invalid request (`errors[].field` is one of `account_id`, `site`, `product_code`,
+            `currency`, `provider`, `adult_confirmed`, `body`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '503':
+          description: The receiving bank account is not configured (SEPAY only).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    get:
+      operationId: listOrders
+      summary: The account's newest 50 orders (transaction history).
+      parameters:
+        - {name: account_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Orders, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: Missing or malformed account_id.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      summary: One order of the account.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: account_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The order; `status` reads EXPIRED for a PENDING order past its window.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Order'}
+        '400':
+          description: Missing or malformed id or account_id.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: No such order, or it belongs to another account.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+components:
+  securitySchemes:
+    internalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+  schemas:
+    Money:
+      type: string
+      pattern: '^[0-9]+\.[0-9]{2}$'
+      example: '119000.00'
+    Product:
+      type: object
+      required: [code, amount, currency]
+      properties:
+        code: {enum: [CREDIT_1, CREDIT_5, PASS_MONTH, PASS_YEAR]}
+        amount: {$ref: '#/components/schemas/Money'}
+        currency: {enum: [VND, USD]}
+    CreateOrderRequest:
+      type: object
+      required: [account_id, site, product_code, currency, provider, adult_confirmed]
+      properties:
+        account_id: {type: string, format: uuid}
+        site: {enum: [tuvi, astro]}
+        product_code: {enum: [CREDIT_1, CREDIT_5, PASS_MONTH, PASS_YEAR]}
+        currency: {enum: [VND, USD]}
+        provider: {enum: [SEPAY, PAYPAL]}
+        adult_confirmed:
+          type: boolean
+          description: Must be true (the customer confirmed being an adult).
+        chart_profile_id: {type: [string, 'null'], format: uuid}
+    Order:
+      type: object
+      required: [order_id, code, status, amount, currency, provider, product_code, created_at, expires_at]
+      properties:
+        order_id: {type: string, format: uuid}
+        code:
+          type: string
+          description: Site prefix (TV tuvi, CT astro) plus 6 characters from 23456789ABCDEFGHJKMNPQRSTUVWXYZ.
+          example: TV7K3M9P
+        status: {enum: [PENDING, EXPIRED, PAID, REFUND_REQUESTED, REFUNDED]}
+        amount: {$ref: '#/components/schemas/Money'}
+        currency: {enum: [VND, USD]}
+        provider: {enum: [SEPAY, PAYPAL]}
+        product_code: {enum: [CREDIT_1, CREDIT_5, PASS_MONTH, PASS_YEAR]}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        paid_at: {type: string, format: date-time}
+    CreatedOrder:
+      allOf:
+        - $ref: '#/components/schemas/Order'
+        - type: object
+          required: [payment]
+          properties:
+            payment: {$ref: '#/components/schemas/Payment'}
+    Payment:
+      oneOf:
+        - $ref: '#/components/schemas/VietQrPayment'
+        - $ref: '#/components/schemas/PayPalPayment'
+    VietQrPayment:
+      type: object
+      required: [kind, bank_code, account_number, account_name, amount, content, qr_image_url]
+      properties:
+        kind: {const: VIETQR}
+        bank_code: {type: string}
+        account_number: {type: string}
+        account_name: {type: string}
+        amount: {$ref: '#/components/schemas/Money'}
+        content:
+          type: string
+          description: The transfer content, exactly the order code.
+        qr_image_url: {type: string, format: uri}
+    PayPalPayment:
+      type: object
+      required: [kind, approve_url]
+      properties:
+        kind: {const: PAYPAL}
+        approve_url: {type: string, format: uri}
+    Problem:
+      type: object
+      required: [type, title, status, trace_id]
+      properties:
+        type: {type: string, example: 'urn:problem:validation-error'}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        trace_id: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: {type: string}
+              message: {type: string}
