@@ -55,6 +55,7 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
 - `scripts/smoke-chart.sh http://localhost:8082` - POST /tuvi/chart happy path: 12 palaces, lunar.month 2
 - `scripts/smoke-reading.sh http://localhost:8083` - basic reading (17 sections, last `disclaimer`) + today (4 areas) via reading-tuvi -> chart-svc
+- `scripts/smoke-web.sh http://localhost:3001` - web: /health/ready 200 and /vi contains "Lão Thiên Cơ"; web e2e (Playwright + stub upstream): `npm run e2e` in services/web (CI job `e2e`)
 - `docker run --rm -v "$PWD/services/web:/app" -w /app node:22-alpine sh -c "npm ci && npm run lint && npm run typecheck && npm test && npm run build"` - web (Next.js) gates; no native Node. Local: web on http://localhost:3001 (`--profile app`)
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
 

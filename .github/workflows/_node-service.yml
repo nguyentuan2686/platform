@@ -49,6 +49,29 @@ jobs:
       - name: Build
         run: npm run build
 
+  e2e:
+    runs-on: ubuntu-24.04
+    needs: verify
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.dir }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ inputs.dir }}/package-lock.json
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: E2E (stub upstream + next start)
+        run: npm run e2e
+
   # Non-publish runs (PRs): build amd64 only, no push, to catch Dockerfile breakage.
   image-check:
     if: ${{ !inputs.publish }}
