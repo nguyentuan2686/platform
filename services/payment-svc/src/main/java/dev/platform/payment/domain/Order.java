@@ -143,6 +143,22 @@ public final class Order {
         id, code.value(), accountId, productCode, site, amount, provider, at, chartProfileId);
   }
 
+  /** A paid order whose customer asked for the money back. */
+  public void requestRefund() {
+    if (status != OrderStatus.PAID) {
+      throw new IllegalStateException("order is not paid");
+    }
+    status = OrderStatus.REFUND_REQUESTED;
+  }
+
+  /** The money went back to the customer. */
+  public void completeRefund() {
+    if (status != OrderStatus.REFUND_REQUESTED) {
+      throw new IllegalStateException("no refund was requested");
+    }
+    status = OrderStatus.REFUNDED;
+  }
+
   /** Status to show: a pending order past its window reads EXPIRED (late payments still match). */
   public String viewStatus(Instant now) {
     if (status == OrderStatus.PENDING && now.isAfter(expiresAt)) {

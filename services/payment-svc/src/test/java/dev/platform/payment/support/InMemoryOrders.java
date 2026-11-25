@@ -3,6 +3,7 @@ package dev.platform.payment.support;
 import dev.platform.payment.application.OrderRepositoryPort;
 import dev.platform.payment.domain.Order;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,5 +55,15 @@ public class InMemoryOrders implements OrderRepositoryPort {
   @Override
   public void save(Order order) {
     orders.put(order.id(), order);
+  }
+
+  @Override
+  public List<Order> findByCodes(Collection<String> codes) {
+    return orders.values().stream().filter(o -> codes.contains(o.code().value())).toList();
+  }
+
+  @Override
+  public Optional<Order> findByProviderRef(String providerRef) {
+    return orders.values().stream().filter(o -> providerRef.equals(o.providerRef())).findFirst();
   }
 }

@@ -5,7 +5,8 @@ info:
   description: >-
     Payment service: price catalog, orders and checkout (VietQR bank transfer through SePay, or
     PayPal), PaymentSucceeded through the outbox. Called by the web BFF, which supplies the
-    authenticated `account_id`; the service itself has no sessions. Every path except /health/**
+    authenticated `account_id`; the service itself has no sessions. Every path except /health/**,
+    /webhooks/** (own authentication) and /admin/** (X-Admin-Token)
     requires the X-Internal-Token header when INTERNAL_API_TOKEN is set. Money is a decimal string
     with two decimals. Bank transfer content, account numbers and tokens are never logged.
 security:
@@ -122,12 +123,278 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /orders/{id}/refund-requests:
+    post:
+      operationId: requestRefund
+      summary: Ask for the money back of an unused credit pack.
+      description: >-
+        Only PAID credit-pack orders of the account qualify (passes are refunded by hand). The
+        credits are taken back from identity-svc first (idempotent on the order id); then a
+        refund request is opened and the order becomes REFUND_REQUESTED. PayPal orders are
+        refunded at once (DONE, order REFUNDED); SePay requests stay OPEN until the operator has
+        sent the transfer. Repeating the call returns the existing request with 200.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account_id]
+              properties:
+                account_id: {type: string, format: uuid}
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '201':
+          description: A new refund request.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RefundRequest'}
+        '200':
+          description: The existing refund request of this order.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RefundRequest'}
+        '404':
+          description: No such order, or it belongs to another account.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '409':
+          description: Refused; `reason` is `not_refundable` or `credits_used`.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '503':
+          description: identity-svc or PayPal is unavailable (`urn:problem:upstream-unavailable`); retry.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /webhooks/sepay:
+    post:
+      operationId: sepayWebhook
+      summary: SePay bank-transfer webhook.
+      description: >-
+        Open of the internal token; authenticated by SEPAY_WEBHOOK_AUTH. `apikey`: header
+        `Authorization: Apikey <secret>`. `hmac-sha256`: header `X-SePay-Signature` is the hex
+        HMAC-SHA256 of the raw body under the secret. Both compare in constant time. Anything that
+        is not an incoming transfer (`transferType` other than `in`) is acknowledged and ignored.
+        Once authenticated and parseable the answer is always 200 `{"success": true}`, whatever the
+        match outcome (a transfer that cannot be applied waits in the unmatched queue). Delivering
+        the same transaction id again changes nothing.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SepayWebhookBody'}
+      responses:
+        '200':
+          description: Accepted (applied, queued as unmatched, a duplicate, or ignored).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookAck'}
+        '400':
+          description: The body is malformed (`errors[].field` names the field, never its value).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '401':
+          description: Missing or wrong credentials; no detail is given.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /webhooks/paypal:
+    post:
+      operationId: paypalWebhook
+      summary: PayPal webhook (fake adapter until F3).
+      description: >-
+        Open of the internal token; the signature is verified by the PayPal adapter over the exact
+        body. `PAYMENT.CAPTURE.COMPLETED` pays the order whose PayPal order id is
+        `resource.supplementary_data.related_ids.order_id` when `resource.amount` equals the
+        order's price; other event types are acknowledged and ignored.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookAck'}
+        '400':
+          description: The body is malformed.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '401':
+          description: Invalid signature.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /admin/unmatched-transactions:
+    get:
+      operationId: listUnmatchedTransactions
+      summary: The "chua khop" queue, oldest first.
+      description: Operator API. Needs `X-Admin-Token` (ADMIN_API_TOKEN), not the internal token. Shows the transfer content, here only.
+      security:
+        - adminToken: []
+      responses:
+        '200':
+          description: Transactions waiting for a human.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/UnmatchedTransaction'}
+        '401':
+          description: Missing or wrong admin token.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /admin/unmatched-transactions/{id}/assign:
+    post:
+      operationId: assignUnmatchedTransaction
+      summary: Pay a PENDING order with an unmatched transfer.
+      security:
+        - adminToken: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_code]
+              properties:
+                order_code: {type: string}
+      responses:
+        '200':
+          description: The order is PAID, PaymentSucceeded is published, the transaction is MATCHED.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Ok'}
+        '401':
+          description: Missing or wrong admin token.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: No such unmatched transaction or order code.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '409':
+          description: Refused; `reason` is `order_not_pending` or `amount_low`.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /admin/unmatched-transactions/{id}/resolve:
+    post:
+      operationId: resolveUnmatchedTransaction
+      summary: Close an unmatched transaction that was dealt with outside the system.
+      security:
+        - adminToken: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: {enum: [REFUNDED_MANUALLY, IGNORED]}
+                note: {type: [string, 'null']}
+      responses:
+        '200':
+          description: The transaction is RESOLVED and leaves the queue.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Ok'}
+        '400':
+          description: Unknown resolution.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '401':
+          description: Missing or wrong admin token.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: No such unmatched transaction.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /admin/refund-requests:
+    get:
+      operationId: listRefundRequests
+      summary: Refund requests by status (default OPEN), oldest first.
+      security:
+        - adminToken: []
+      parameters:
+        - {name: status, in: query, required: false, schema: {enum: [OPEN, DONE], default: OPEN}}
+      responses:
+        '200':
+          description: The requests.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/RefundRequest'}
+        '401':
+          description: Missing or wrong admin token.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /admin/refund-requests/{id}/complete:
+    post:
+      operationId: completeRefundRequest
+      summary: The operator sent the money back; the request is DONE and the order REFUNDED.
+      security:
+        - adminToken: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: {type: [string, 'null']}
+      responses:
+        '200':
+          description: The completed request (repeating is a no-op).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RefundRequest'}
+        '401':
+          description: Missing or wrong admin token.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: No such refund request.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
 components:
   securitySchemes:
     internalToken:
       type: apiKey
       in: header
       name: X-Internal-Token
+    adminToken:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
   schemas:
     Money:
       type: string
@@ -209,6 +476,7 @@ components:
         status: {type: integer}
         detail: {type: string}
         trace_id: {type: string}
+        reason: {type: string, description: "Snake_case code of a 409 refusal."}
         errors:
           type: array
           items:
@@ -217,3 +485,64 @@ components:
             properties:
               field: {type: string}
               message: {type: string}
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok: {type: boolean}
+    WebhookAck:
+      type: object
+      required: [success]
+      properties:
+        success: {const: true}
+    SepayWebhookBody:
+      type: object
+      description: The body SePay sends. Only the fields below are read.
+      required: [id, transferType, transferAmount, transactionDate]
+      properties:
+        id:
+          type: [integer, string]
+          description: SePay transaction id, the idempotency key.
+        gateway: {type: string}
+        transactionDate:
+          type: string
+          description: Vietnam local time, `yyyy-MM-dd HH:mm:ss` (Asia/Ho_Chi_Minh).
+        accountNumber: {type: string}
+        code: {type: [string, 'null']}
+        content: {type: [string, 'null']}
+        transferType: {enum: [in, out]}
+        transferAmount: {type: number}
+        accumulated: {type: number}
+        subAccount: {type: [string, 'null']}
+        referenceCode: {type: [string, 'null']}
+        description: {type: [string, 'null']}
+    UnmatchedTransaction:
+      type: object
+      required: [id, provider, amount, currency, occurred_at, unmatched_reason, candidate_codes]
+      properties:
+        id: {type: integer, format: int64}
+        provider: {enum: [SEPAY, PAYPAL]}
+        amount: {$ref: '#/components/schemas/Money'}
+        currency: {enum: [VND, USD]}
+        occurred_at: {type: string, format: date-time}
+        unmatched_reason: {enum: [NO_CODE, UNKNOWN_CODE, AMBIGUOUS, ALREADY_PAID, AMOUNT_LOW]}
+        candidate_codes:
+          type: array
+          items: {type: string}
+        content:
+          type: [string, 'null']
+          description: The payer's transfer text; shown to the operator only, never logged.
+    RefundRequest:
+      type: object
+      required: [id, order_id, provider, amount, currency, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        order_id: {type: string, format: uuid}
+        provider: {enum: [SEPAY, PAYPAL]}
+        amount: {$ref: '#/components/schemas/Money'}
+        currency: {enum: [VND, USD]}
+        status: {enum: [OPEN, DONE]}
+        provider_refund_id: {type: string}
+        note: {type: string}
+        created_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}

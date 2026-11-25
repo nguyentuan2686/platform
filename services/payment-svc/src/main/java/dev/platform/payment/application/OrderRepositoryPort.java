@@ -1,6 +1,7 @@
 package dev.platform.payment.application;
 
 import dev.platform.payment.domain.Order;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +17,12 @@ public interface OrderRepositoryPort {
 
   /** Locks the row for the caller's transaction. */
   Optional<Order> findForUpdate(UUID id);
+
+  /** Orders whose code is one of {@code codes}. */
+  List<Order> findByCodes(Collection<String> codes);
+
+  /** The order carrying this provider reference (the PayPal order id). */
+  Optional<Order> findByProviderRef(String providerRef);
 
   /** Newest first. */
   List<Order> findByAccount(UUID accountId, int limit);

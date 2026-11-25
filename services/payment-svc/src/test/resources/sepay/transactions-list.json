@@ -1,0 +1,63 @@
+{
+  "status": 200,
+  "error": null,
+  "messages": {"success": true},
+  "transactions": [
+    {
+      "id": "92704",
+      "bank_brand_name": "TestBank",
+      "account_number": "0000000000",
+      "transaction_date": "2026-11-25 16:30:05",
+      "amount_out": "0.00",
+      "amount_in": "119000.00",
+      "accumulated": "5119000.00",
+      "transaction_content": "TV8K2QAB chuyen tien",
+      "reference_number": "FT26329000001",
+      "code": null,
+      "sub_account": null,
+      "bank_account_id": "1"
+    },
+    {
+      "id": "92705",
+      "bank_brand_name": "TestBank",
+      "account_number": "0000000000",
+      "transaction_date": "2026-11-25 14:00:00",
+      "amount_out": "0.00",
+      "amount_in": "29000.00",
+      "accumulated": "5148000.00",
+      "transaction_content": "MBVCB.123.TV9M3RCDFT25330 nguyen van a",
+      "reference_number": "FT26329000002",
+      "code": null,
+      "sub_account": null,
+      "bank_account_id": "1"
+    },
+    {
+      "id": "92700",
+      "bank_brand_name": "TestBank",
+      "account_number": "0000000000",
+      "transaction_date": "2026-11-25 12:00:00",
+      "amount_out": "50000.00",
+      "amount_in": "0.00",
+      "accumulated": "5098000.00",
+      "transaction_content": "rut tien",
+      "reference_number": "FT26329000003",
+      "code": null,
+      "sub_account": null,
+      "bank_account_id": "1"
+    },
+    {
+      "id": "92001",
+      "bank_brand_name": "TestBank",
+      "account_number": "0000000000",
+      "transaction_date": "2026-11-20 09:00:00",
+      "amount_out": "0.00",
+      "amount_in": "29000.00",
+      "accumulated": "4000000.00",
+      "transaction_content": "TV234567",
+      "reference_number": "FT26324000009",
+      "code": null,
+      "sub_account": null,
+      "bank_account_id": "1"
+    }
+  ]
+}

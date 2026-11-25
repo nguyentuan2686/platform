@@ -6,26 +6,41 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import dev.platform.payment.adapter.in.web.AdminController;
 import dev.platform.payment.adapter.in.web.OrderController;
+import dev.platform.payment.adapter.in.web.PayPalWebhookController;
 import dev.platform.payment.adapter.in.web.PaymentExceptionHandler;
 import dev.platform.payment.adapter.in.web.ProductController;
+import dev.platform.payment.adapter.in.web.RefundController;
+import dev.platform.payment.adapter.in.web.SepayWebhookAuthenticator;
+import dev.platform.payment.adapter.in.web.SepayWebhookController;
+import dev.platform.payment.application.AdminUseCase;
 import dev.platform.payment.application.CatalogEntry;
 import dev.platform.payment.application.CatalogUseCase;
+import dev.platform.payment.application.ConflictException;
 import dev.platform.payment.application.CreateOrderCommand;
 import dev.platform.payment.application.CreateOrderUseCase;
 import dev.platform.payment.application.CreatedOrder;
 import dev.platform.payment.application.GetOrderUseCase;
 import dev.platform.payment.application.OrderValidationException;
 import dev.platform.payment.application.OrderView;
+import dev.platform.payment.application.PayPalWebhookUseCase;
 import dev.platform.payment.application.PaymentInstructions;
 import dev.platform.payment.application.PaymentNotConfiguredException;
+import dev.platform.payment.application.RecordBankTransactionUseCase;
+import dev.platform.payment.application.RefundUseCase;
+import dev.platform.payment.application.UpstreamUnavailableException;
 import dev.platform.payment.domain.Money;
 import dev.platform.payment.domain.Order;
 import dev.platform.payment.domain.OrderCode;
 import dev.platform.payment.domain.Provider;
+import dev.platform.payment.domain.RefundRequest;
+import dev.platform.payment.domain.RefundStatus;
+import dev.platform.payment.domain.UnmatchedReason;
 import dev.platform.starter.error.NotFoundException;
 import dev.platform.starter.web.PlatformWebAutoConfiguration;
 import java.net.URI;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
@@ -48,7 +63,14 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@WebMvcTest({OrderController.class, ProductController.class})
+@WebMvcTest({
+  OrderController.class,
+  ProductController.class,
+  SepayWebhookController.class,
+  PayPalWebhookController.class,
+  AdminController.class,
+  RefundController.class
+})
 @Import({PlatformWebAutoConfiguration.class, PaymentExceptionHandler.class})
 class ContractTest {
 
@@ -64,6 +86,12 @@ class ContractTest {
   @MockitoBean CreateOrderUseCase createOrder;
   @MockitoBean GetOrderUseCase getOrder;
   @MockitoBean CatalogUseCase catalog;
+  @MockitoBean SepayWebhookAuthenticator sepayAuth;
+  @MockitoBean RecordBankTransactionUseCase recorder;
+  @MockitoBean PayPalWebhookUseCase paypalWebhook;
+  @MockitoBean AdminUseCase admin;
+  @MockitoBean RefundUseCase refunds;
+  @MockitoBean Clock clock;
 
   static Order order(Provider provider) {
     return Order.create(
@@ -100,7 +128,18 @@ class ContractTest {
 
     assertThat(declared)
         .containsExactlyInAnyOrder(
-            "GET /products", "POST /orders", "GET /orders", "GET /orders/{id}");
+            "GET /products",
+            "POST /orders",
+            "GET /orders",
+            "GET /orders/{id}",
+            "POST /orders/{id}/refund-requests",
+            "POST /webhooks/sepay",
+            "POST /webhooks/paypal",
+            "GET /admin/unmatched-transactions",
+            "POST /admin/unmatched-transactions/{id}/assign",
+            "POST /admin/unmatched-transactions/{id}/resolve",
+            "GET /admin/refund-requests",
+            "POST /admin/refund-requests/{id}/complete");
     assertThat(served).containsAll(declared);
   }
 
@@ -207,6 +246,95 @@ class ContractTest {
             mvc.perform(post("/orders").contentType(MediaType.APPLICATION_JSON).content(BODY)),
             503);
     assertThat(ContractSupport.componentSchema("Problem").validate(unavailable)).isEmpty();
+  }
+
+  @Test
+  void admin_queue_and_refund_requests_match_the_spec_schema() throws Exception {
+    when(admin.unmatched())
+        .thenReturn(
+            List.of(
+                new AdminUseCase.UnmatchedView(
+                    7L,
+                    Provider.SEPAY,
+                    Money.of("100000", "VND"),
+                    T0,
+                    UnmatchedReason.AMOUNT_LOW,
+                    "TV234567 chuyen tien",
+                    List.of("TV234567"))));
+    RefundRequest request = RefundRequest.open(UUID.randomUUID(), order(Provider.SEPAY), T0);
+    when(admin.refundRequests(RefundStatus.OPEN)).thenReturn(List.of(request));
+    when(admin.completeRefund(any(UUID.class), any())).thenReturn(request);
+    when(refunds.request(any(UUID.class), any(UUID.class)))
+        .thenReturn(new RefundUseCase.Result(request, true));
+
+    JsonNode queue = body(mvc.perform(get("/admin/unmatched-transactions")), 200);
+    JsonNode open = body(mvc.perform(get("/admin/refund-requests")), 200);
+    JsonNode done =
+        body(
+            mvc.perform(
+                post("/admin/refund-requests/" + request.id() + "/complete")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"note\":\"sent\"}")),
+            200);
+    JsonNode created =
+        body(
+            mvc.perform(
+                post("/orders/" + request.orderId() + "/refund-requests")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"account_id\":\"" + ACCOUNT + "\"}")),
+            201);
+
+    assertThat(ContractSupport.componentSchema("UnmatchedTransaction").validate(queue.get(0)))
+        .isEmpty();
+    assertThat(ContractSupport.componentSchema("RefundRequest").validate(open.get(0))).isEmpty();
+    assertThat(ContractSupport.componentSchema("RefundRequest").validate(done)).isEmpty();
+    assertThat(ContractSupport.componentSchema("RefundRequest").validate(created)).isEmpty();
+    assertThat(queue.get(0).get("candidate_codes").get(0).asString()).isEqualTo("TV234567");
+  }
+
+  @Test
+  void webhook_acknowledgement_and_new_problems_match_the_spec_schema() throws Exception {
+    when(sepayAuth.authenticate(any(), any(), any())).thenReturn(true);
+    JsonNode ack =
+        body(
+            mvc.perform(
+                post("/webhooks/sepay")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"id\":1,\"transferType\":\"out\"}")),
+            200);
+    assertThat(ContractSupport.componentSchema("WebhookAck").validate(ack)).isEmpty();
+
+    when(sepayAuth.authenticate(any(), any(), any())).thenReturn(false);
+    JsonNode unauthorized =
+        body(
+            mvc.perform(
+                post("/webhooks/sepay").contentType(MediaType.APPLICATION_JSON).content("{}")),
+            401);
+    assertThat(ContractSupport.componentSchema("Problem").validate(unauthorized)).isEmpty();
+    assertThat(unauthorized.toString()).doesNotContain("secret", "Apikey");
+
+    when(refunds.request(any(UUID.class), any(UUID.class)))
+        .thenThrow(new ConflictException("credits_used"));
+    JsonNode conflict =
+        body(
+            mvc.perform(
+                post("/orders/" + UUID.randomUUID() + "/refund-requests")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"account_id\":\"" + ACCOUNT + "\"}")),
+            409);
+    assertThat(ContractSupport.componentSchema("Problem").validate(conflict)).isEmpty();
+    assertThat(conflict.get("reason").asString()).isEqualTo("credits_used");
+
+    when(refunds.request(any(UUID.class), any(UUID.class)))
+        .thenThrow(new UpstreamUnavailableException("identity-svc"));
+    JsonNode unavailable =
+        body(
+            mvc.perform(
+                post("/orders/" + UUID.randomUUID() + "/refund-requests")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"account_id\":\"" + ACCOUNT + "\"}")),
+            503);
+    assertThat(unavailable.get("type").asString()).isEqualTo("urn:problem:upstream-unavailable");
   }
 
   @Test

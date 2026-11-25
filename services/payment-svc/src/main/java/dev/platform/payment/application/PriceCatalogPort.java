@@ -11,4 +11,9 @@ public interface PriceCatalogPort {
 
   /** Active prices in a currency, cheapest first. */
   List<CatalogEntry> list(String currency);
+
+  /** Credits a refund must take back; empty for products that are not credit packs (passes). */
+  default Optional<Integer> refundableCredits(String productCode) {
+    return Optional.empty();
+  }
 }

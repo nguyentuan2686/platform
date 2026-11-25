@@ -27,6 +27,16 @@ public class JdbcPriceCatalog implements PriceCatalogPort {
   }
 
   @Override
+  public Optional<Integer> refundableCredits(String productCode) {
+    return jdbc.sql(
+            "select refundable_credits from price where product_code = :code"
+                + " and refundable_credits is not null order by currency limit 1")
+        .param("code", productCode)
+        .query(Integer.class)
+        .optional();
+  }
+
+  @Override
   public List<CatalogEntry> list(String currency) {
     return jdbc.sql(
             "select product_code, amount from price where currency = :currency and active"

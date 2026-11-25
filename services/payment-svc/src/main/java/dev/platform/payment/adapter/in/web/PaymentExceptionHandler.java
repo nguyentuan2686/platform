@@ -1,7 +1,9 @@
 package dev.platform.payment.adapter.in.web;
 
+import dev.platform.payment.application.ConflictException;
 import dev.platform.payment.application.OrderValidationException;
 import dev.platform.payment.application.PaymentNotConfiguredException;
+import dev.platform.payment.application.UpstreamUnavailableException;
 import dev.platform.starter.web.PlatformProblemHandler;
 import java.net.URI;
 import java.util.List;
@@ -51,6 +53,36 @@ public class PaymentExceptionHandler {
     detail.setType(URI.create("urn:problem:upstream-unavailable"));
     return platform.handleException(
         new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE, detail, null), request);
+  }
+
+  @ExceptionHandler(ConflictException.class)
+  ResponseEntity<Object> conflict(ConflictException ex, WebRequest request) throws Exception {
+    ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Request refused");
+    detail.setType(URI.create("urn:problem:conflict"));
+    detail.setProperty("reason", ex.reason());
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.CONFLICT, detail, null), request);
+  }
+
+  @ExceptionHandler(UpstreamUnavailableException.class)
+  ResponseEntity<Object> upstream(UpstreamUnavailableException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable");
+    detail.setType(URI.create("urn:problem:upstream-unavailable"));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE, detail, null), request);
+  }
+
+  /** A bare 401: no hint about which credential was wrong. */
+  @ExceptionHandler(UnauthenticatedException.class)
+  ResponseEntity<Object> unauthenticated(UnauthenticatedException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Authentication required");
+    detail.setType(URI.create("urn:problem:unauthenticated"));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.UNAUTHORIZED, detail, null), request);
   }
 
   private ResponseEntity<Object> validation(String field, String message, WebRequest request)

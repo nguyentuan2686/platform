@@ -8,6 +8,7 @@ import dev.platform.payment.domain.OrderStatus;
 import dev.platform.payment.domain.Provider;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -76,6 +77,25 @@ public class JdbcOrderRepository implements OrderRepositoryPort {
   public Optional<Order> findForUpdate(UUID id) {
     return jdbc.sql("select " + COLUMNS + " from orders where id = :id for update")
         .param("id", id)
+        .query(JdbcOrderRepository::map)
+        .optional();
+  }
+
+  @Override
+  public List<Order> findByCodes(Collection<String> codes) {
+    if (codes.isEmpty()) {
+      return List.of();
+    }
+    return jdbc.sql("select " + COLUMNS + " from orders where code in (:codes) order by id")
+        .param("codes", codes)
+        .query(JdbcOrderRepository::map)
+        .list();
+  }
+
+  @Override
+  public Optional<Order> findByProviderRef(String providerRef) {
+    return jdbc.sql("select " + COLUMNS + " from orders where provider_ref = :ref limit 1")
+        .param("ref", providerRef)
         .query(JdbcOrderRepository::map)
         .optional();
   }
