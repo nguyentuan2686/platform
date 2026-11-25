@@ -62,6 +62,11 @@ public final class ReadingPlan {
   }
 
   private static Section palaceSection(String id, String title, Chart chart, Palace p) {
+    return new Section(id, Optional.of(title), Map.of("palace", p.nameVi()), palaceLines(chart, p));
+  }
+
+  /** The lookup lines of one palace (also used to pick Q&A passages); order is stable. */
+  public static List<Line> palaceLines(Chart chart, Palace p) {
     String key = p.key();
     Map<String, String> palaceVar = Map.of("palace", p.nameVi());
     List<Line> lines = new ArrayList<>();
@@ -103,6 +108,6 @@ public final class ReadingPlan {
     if (chart.inTriet(p)) {
       lines.add(new Line(List.of(KnowledgeKey.palaceMark(key, "Triet")), palaceVar));
     }
-    return new Section(id, Optional.of(title), palaceVar, lines);
+    return lines;
   }
 }

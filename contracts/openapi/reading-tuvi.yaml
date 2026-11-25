@@ -6,8 +6,12 @@ info:
     Tu Vi reading service. Turns chart-svc facts into Vietnamese text spoken by the character
     Lão Thiên Cơ (he says "ta", calls the reader "con"). Text comes only from the knowledge
     base (voice frames, daily lines, doctrine); where no record exists the `missing` frame is
-    used. No LLM is involved. Birth data is never logged and never stored; a basic reading is
-    cached by a hash of the chart, not of the birth.
+    used. No LLM is involved in /tuvi/readings/**. Birth data is never logged and never stored;
+    a basic reading is cached by a hash of the chart, not of the birth.
+    The /tuvi/qa/** operations (topic Q&A, paid and free) answer with an LLM grounded in the
+    chart and the knowledge base. They need X-Internal-Token and the user's session bearer
+    (forwarded by the web BFF), read the birth from identity-svc, and store question and answer
+    text AES-GCM encrypted only.
 paths:
   /tuvi/readings/basic:
     post:
@@ -73,8 +77,528 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /tuvi/qa/readings:
+    post:
+      operationId: askQuestion
+      summary: Ask a topic question (PAID, charged once) or a free chat (FREE, daily quota)
+      description: >-
+        Order for PAID: lang/question validation, session (a guest gets 403 account_required),
+        replay of an existing reading_id (same subject only), safety guard (a refused question
+        is never charged), profile, chart, then one credit is consumed and the answer is
+        generated. FREE: guest or account, at most QA_FREE_DAILY_PER_SUBJECT per subject and
+        per chart per Vietnam day, free providers only, never charged.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QaAskRequest'
+      responses:
+        '200':
+          description: >-
+            `text/event-stream`. Each event has an `event:` name and a JSON `data:` line. First
+            `meta` (QaEventMeta); then either one `delta` per sentence (QaEventDelta; the
+            deltas concatenate to the answer) followed by `done` (QaEventDone), or exactly one
+            of `refused` (QaEventRefused), `queued` (QaEventQueued: the paid answer arrives in
+            the history within QA_RETRY_WINDOW, else the credit is refunded), `busy`
+            (QaEventBusy) or `error` (QaEventError, an unexpected failure after streaming
+            started; a charged reading is retried). Then the stream completes. A repeated
+            reading_id replays the stored outcome without a second charge.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: >-
+            Malformed JSON (field `body`), or an invalid `reading_id`, `kind`, `topic`, `lang`
+            (only `vi`) or `question` (5 to 500 characters).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: A guest asked a PAID question (`reason` is `account_required`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: >-
+            `reason` is one of `no_profile`, `no_credits`, `daily_cap`, `free_quota`,
+            `reading_conflict` (the id belongs to another subject, or was a PAID reading deleted
+            from history; use a new reading_id), `reading_in_progress` (the
+            same id is being answered), `reading_refunded` (use a new reading_id).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: >-
+            chart-svc ("Chart service unavailable") or identity-svc ("Identity service
+            unavailable") failed. If consuming the credit timed out, the reading is refunded.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      operationId: listQaReadings
+      summary: The caller's Q&A history, newest 50
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: Readings, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QaReadingList'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      operationId: deleteQaReadings
+      summary: Delete all of the caller's readings and messages
+      description: >-
+        A reading still owed an answer or a refund (PENDING, RETRYING, REFUND_PENDING, or a charged
+        PAID question the model declined whose refund is not yet recorded) is never deleted: while
+        one exists the call answers 409 `reading_in_progress`, and one that becomes
+        in progress during the call (a paid question being charged) is kept. Cached model answers
+        (encrypted, keyed by chart and question, not by user) expire with the retention job. The
+        ids of deleted PAID readings are kept (id, subject and time only, no text) so they can
+        never be reused: asking again with one answers 409 `reading_conflict`.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '204':
+          description: Deleted (or there were none).
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: >-
+            A reading still waits for its answer or refund (`reason` is `reading_in_progress`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tuvi/qa/readings/{id}:
+    get:
+      operationId: getQaReading
+      summary: One reading with its decrypted messages
+      security:
+        - internalToken: []
+          sessionBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The reading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QaReading'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such reading for this caller (another subject's reading included).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tuvi/qa/readings/{id}/follow-ups:
+    post:
+      operationId: askFollowUp
+      summary: A follow-up on the caller's answered PAID reading (at most two, not charged)
+      security:
+        - internalToken: []
+          sessionBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QaFollowUpRequest'
+      responses:
+        '200':
+          description: >-
+            `text/event-stream` with the same events as askQuestion. A failure is `busy` and
+            does not use up a follow-up; a repeated message_id replays its answer.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Malformed JSON (field `body`) or an invalid `message_id` or `question`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: No such reading for this caller.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: >-
+            `reason` is `reading_not_answered` (not an answered PAID reading),
+            `follow_ups_exhausted`, `reading_in_progress`, `reading_conflict` or `no_profile`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: chart-svc or identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tuvi/qa/free-quota:
+    get:
+      operationId: getFreeQuota
+      summary: Free chats used today (Vietnam day) by the caller
+      description: >-
+        Counts the caller's own free chats that reached the model, including those the model
+        declined (off-topic, not enough material); a question refused by the guard is not
+        counted. Asking is also capped per chart, so a new guest
+        on a chart that already used its free chats today can still get 409 `free_quota`.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: The quota.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QaFreeQuota'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
+  securitySchemes:
+    internalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+    sessionBearer:
+      type: http
+      scheme: bearer
+      description: The user's identity-svc session (guest or account), forwarded by the web BFF.
   schemas:
+    QaTopic:
+      type: string
+      enum: [TinhDuyen, SuNghiep, TaiLoc, SucKhoe, GiaDao, VanNam]
+    QaKind:
+      type: string
+      enum: [PAID, FREE]
+    QaStatus:
+      type: string
+      enum: [PENDING, ANSWERED, RETRYING, REFUND_PENDING, REFUNDED, REFUSED, FAILED]
+    QaAskRequest:
+      type: object
+      required: [reading_id, kind, topic, question, lang]
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+          description: Chosen by the client; the idempotency key of the question.
+        kind:
+          $ref: '#/components/schemas/QaKind'
+        topic:
+          $ref: '#/components/schemas/QaTopic'
+        question:
+          type: string
+          minLength: 5
+          maxLength: 500
+        lang:
+          type: string
+          enum: [vi]
+    QaFollowUpRequest:
+      type: object
+      required: [message_id, question]
+      properties:
+        message_id:
+          type: string
+          format: uuid
+          description: Chosen by the client; the idempotency key of the follow-up.
+        question:
+          type: string
+          minLength: 5
+          maxLength: 500
+    QaReadingSummary:
+      type: object
+      required: [reading_id, kind, topic, status, created_at, follow_ups_left]
+      additionalProperties: false
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/QaKind'
+        topic:
+          $ref: '#/components/schemas/QaTopic'
+        status:
+          $ref: '#/components/schemas/QaStatus'
+        created_at:
+          type: string
+          format: date-time
+        follow_ups_left:
+          type: integer
+          minimum: 0
+          maximum: 2
+    QaReadingList:
+      type: object
+      required: [readings]
+      additionalProperties: false
+      properties:
+        readings:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/QaReadingSummary'
+    QaMessage:
+      type: object
+      required: [seq, question, answer, created_at]
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 0
+          maximum: 2
+          description: 0 is the question, 1 and 2 the follow-ups.
+        question:
+          type: string
+        answer:
+          type: [string, 'null']
+          description: Null until answered (never for a refused question).
+        created_at:
+          type: string
+          format: date-time
+    QaReading:
+      type: object
+      required:
+        - reading_id
+        - kind
+        - topic
+        - status
+        - created_at
+        - retry_until
+        - follow_ups_left
+        - notice
+        - disclaimer
+        - messages
+      additionalProperties: false
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/QaKind'
+        topic:
+          $ref: '#/components/schemas/QaTopic'
+        status:
+          $ref: '#/components/schemas/QaStatus'
+        created_at:
+          type: string
+          format: date-time
+        retry_until:
+          type: [string, 'null']
+          format: date-time
+          description: Until when a queued paid answer is retried before the refund.
+        follow_ups_left:
+          type: integer
+          minimum: 0
+          maximum: 2
+        notice:
+          type: [string, 'null']
+          description: The qa_queued text while waiting, the qa_refunded text once refunded.
+        disclaimer:
+          type: string
+          description: The server-side qa_disclaimer frame shown under every answer.
+        messages:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/QaMessage'
+    QaFreeQuota:
+      type: object
+      required: [limit, used, remaining]
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+          minimum: 0
+        used:
+          type: integer
+          minimum: 0
+        remaining:
+          type: integer
+          minimum: 0
+    QaEventMeta:
+      type: object
+      description: 'SSE `event: meta`, always first.'
+      required: [reading_id, kind, topic, follow_ups_left]
+      additionalProperties: false
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/QaKind'
+        topic:
+          $ref: '#/components/schemas/QaTopic'
+        follow_ups_left:
+          type: integer
+          minimum: 0
+          maximum: 2
+    QaEventDelta:
+      type: object
+      description: 'SSE `event: delta`: one sentence of the answer, trailing whitespace kept.'
+      required: [text]
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+          minLength: 1
+    QaEventDone:
+      type: object
+      description: 'SSE `event: done`: the answer is complete and stored.'
+      required: [reading_id, seq, disclaimer]
+      additionalProperties: false
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          minimum: 0
+          maximum: 2
+        disclaimer:
+          type: string
+    QaEventRefused:
+      type: object
+      description: 'SSE `event: refused`: declined without an answer; never charged.'
+      required: [reading_id, reason, text, disclaimer]
+      additionalProperties: false
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          enum:
+            - medical
+            - legal
+            - finance
+            - gambling
+            - death
+            - self_harm
+            - injection
+            - off_topic
+            - insufficient
+        text:
+          type: string
+        disclaimer:
+          type: string
+    QaEventQueued:
+      type: object
+      description: 'SSE `event: queued`: the paid answer will appear in the history later.'
+      required: [reading_id, retry_until, text]
+      additionalProperties: false
+      properties:
+        reading_id:
+          type: string
+          format: uuid
+        retry_until:
+          type: [string, 'null']
+          format: date-time
+          description: Null when the reading is waiting for its refund.
+        text:
+          type: string
+    QaEventBusy:
+      type: object
+      description: 'SSE `event: busy`: no provider could answer (free chat or follow-up).'
+      required: [text]
+      additionalProperties: false
+      properties:
+        text:
+          type: string
+    QaEventError:
+      type: object
+      description: 'SSE `event: error`: an unexpected failure after the stream started.'
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          enum: [internal]
     BirthRequest:
       type: object
       required: [birth, gender]
@@ -201,9 +725,11 @@ components:
       type: object
       description: >-
         RFC 9457 problem details with platform extensions. Types used here:
-        urn:problem:validation-error (400), urn:problem:upstream-unavailable (503, detail
-        "Chart service unavailable"), urn:problem:internal-error (500, detail "Unexpected
-        error").
+        urn:problem:validation-error (400), urn:problem:unauthenticated (401),
+        urn:problem:forbidden (403, with `reason`), urn:problem:not-found (404),
+        urn:problem:conflict (409, with a snake_case `reason`), urn:problem:upstream-unavailable
+        (503, detail "Chart service unavailable" or "Identity service unavailable"),
+        urn:problem:internal-error (500, detail "Unexpected error").
       required: [type, title, status, trace_id]
       properties:
         type:
@@ -218,6 +744,9 @@ components:
           type: string
         trace_id:
           type: string
+        reason:
+          type: string
+          description: Machine-readable cause of a 403 or 409 (snake_case).
         errors:
           type: array
           items:

@@ -60,8 +60,9 @@ jobs:
               - 'contracts/openapi/chart-svc.yaml'
             reading:
               - 'services/reading-tuvi/**'
-              - 'knowledge/tuvi/**'
+              - 'knowledge/**'
               - 'contracts/openapi/reading-tuvi.yaml'
+              - 'contracts/openapi/identity-svc.yaml'
               - 'contracts/knowledge/**'
               - 'libs/java/**'
             identity:

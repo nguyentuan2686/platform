@@ -3,8 +3,10 @@ package dev.platform.reading.tuvi;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import dev.platform.reading.tuvi.adapter.in.web.QaController;
 import dev.platform.reading.tuvi.adapter.in.web.ReadingController;
 import dev.platform.reading.tuvi.application.BasicReading;
 import dev.platform.reading.tuvi.application.BasicReadingUseCase;
@@ -13,15 +15,25 @@ import dev.platform.reading.tuvi.application.TodayReading;
 import dev.platform.reading.tuvi.application.TodayUseCase;
 import dev.platform.reading.tuvi.application.UpstreamUnavailableException;
 import dev.platform.reading.tuvi.application.UpstreamValidationException;
+import dev.platform.reading.tuvi.application.qa.FreeQuota;
+import dev.platform.reading.tuvi.application.qa.QaConflictException;
+import dev.platform.reading.tuvi.application.qa.QaKind;
+import dev.platform.reading.tuvi.application.qa.QaService;
+import dev.platform.reading.tuvi.application.qa.QaStatus;
+import dev.platform.reading.tuvi.application.qa.ReadingDetail;
+import dev.platform.reading.tuvi.application.qa.ReadingSummary;
 import dev.platform.reading.tuvi.domain.Area;
 import dev.platform.reading.tuvi.domain.Level;
+import dev.platform.reading.tuvi.domain.qa.QaTopic;
 import dev.platform.starter.web.PlatformWebAutoConfiguration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,12 +49,118 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@WebMvcTest(ReadingController.class)
+@WebMvcTest({ReadingController.class, QaController.class})
 @Import({
   PlatformWebAutoConfiguration.class,
-  dev.platform.reading.tuvi.adapter.in.web.ReadingExceptionHandler.class
+  dev.platform.reading.tuvi.adapter.in.web.ReadingExceptionHandler.class,
+  QaSseContractTest.SyncExecutor.class
 })
 class ContractTest {
+
+  static final String INTERNAL = "local-test-internal-token";
+  static final UUID QA_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
+
+  @MockitoBean QaService qa;
+
+  private ResultActions qaGet(String path) throws Exception {
+    return mvc.perform(
+        get(path).header("X-Internal-Token", INTERNAL).header("Authorization", "Bearer s"));
+  }
+
+  @Test
+  void qa_list_matches_the_spec_schema() throws Exception {
+    when(qa.list("s"))
+        .thenReturn(
+            List.of(
+                new ReadingSummary(
+                    QA_ID,
+                    QaKind.PAID,
+                    QaTopic.TaiLoc,
+                    QaStatus.ANSWERED,
+                    Instant.parse("2026-11-25T03:00:00Z"),
+                    2)));
+
+    JsonNode json = JsonMapper.shared().readTree(okBody(qaGet("/tuvi/qa/readings")));
+
+    assertThat(ContractSupport.componentSchema("QaReadingList").validate(json)).isEmpty();
+    assertThat(json.get("readings").get(0).get("reading_id").asString())
+        .isEqualTo(QA_ID.toString());
+  }
+
+  @Test
+  void qa_reading_matches_the_spec_schema() throws Exception {
+    Instant at = Instant.parse("2026-11-25T03:00:00Z");
+    when(qa.get("s", QA_ID))
+        .thenReturn(
+            new ReadingDetail(
+                QA_ID,
+                QaKind.PAID,
+                QaTopic.TaiLoc,
+                QaStatus.RETRYING,
+                at,
+                at.plusSeconds(86400),
+                2,
+                "Ta đang ngẫm.",
+                "Lời nhắc.",
+                List.of(new ReadingDetail.Message(0, "Tài lộc ra sao", null, at))));
+
+    JsonNode json = JsonMapper.shared().readTree(okBody(qaGet("/tuvi/qa/readings/" + QA_ID)));
+
+    assertThat(ContractSupport.componentSchema("QaReading").validate(json)).isEmpty();
+    assertThat(json.get("messages").get(0).get("answer").isNull()).isTrue();
+
+    when(qa.get("s", QA_ID))
+        .thenReturn(
+            new ReadingDetail(
+                QA_ID,
+                QaKind.FREE,
+                QaTopic.TaiLoc,
+                QaStatus.ANSWERED,
+                at,
+                null,
+                0,
+                null,
+                "Lời nhắc.",
+                List.of(new ReadingDetail.Message(0, "Tài lộc ra sao", "Con à.", at))));
+    JsonNode answered = JsonMapper.shared().readTree(okBody(qaGet("/tuvi/qa/readings/" + QA_ID)));
+    assertThat(ContractSupport.componentSchema("QaReading").validate(answered)).isEmpty();
+  }
+
+  @Test
+  void qa_free_quota_and_conflict_match_the_spec_schema() throws Exception {
+    when(qa.freeQuota("s")).thenReturn(new FreeQuota(3, 3, 0));
+
+    JsonNode json = JsonMapper.shared().readTree(okBody(qaGet("/tuvi/qa/free-quota")));
+
+    assertThat(ContractSupport.componentSchema("QaFreeQuota").validate(json)).isEmpty();
+
+    when(qa.list("s")).thenThrow(new QaConflictException("reading_in_progress"));
+    JsonNode problem = problem(qaGet("/tuvi/qa/readings"), 409);
+    assertThat(ContractSupport.componentSchema("Problem").validate(problem)).isEmpty();
+    assertThat(problem.get("reason").asString()).isEqualTo("reading_in_progress");
+  }
+
+  @Test
+  void qa_schemas_are_not_vacuous() {
+    JsonNode bad = JsonMapper.shared().readTree("{\"readings\":[{}],\"limit\":-1}");
+    for (String s : List.of("QaReadingList", "QaReading", "QaFreeQuota", "QaAskRequest")) {
+      assertThat(ContractSupport.componentSchema(s).validate(bad)).as(s).isNotEmpty();
+    }
+    JsonNode ask =
+        JsonMapper.shared()
+            .readTree(
+                "{\"reading_id\":\""
+                    + QA_ID
+                    + "\",\"kind\":\"PAID\",\"topic\":\"TaiLoc\",\"question\":\"Tài lộc?\","
+                    + "\"lang\":\"vi\"}");
+    assertThat(ContractSupport.componentSchema("QaAskRequest").validate(ask)).isEmpty();
+  }
+
+  private static String okBody(ResultActions result) throws Exception {
+    var response = result.andReturn().getResponse();
+    assertThat(response.getStatus()).as(response.getContentAsString()).isEqualTo(200);
+    return response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+  }
 
   static final String BODY =
       "{\"birth\":\"1994-03-12T08:30\",\"zone\":\"Asia/Ho_Chi_Minh\",\"gender\":\"male\","
@@ -70,7 +188,15 @@ class ContractTest {
     }
 
     assertThat(declared)
-        .containsExactlyInAnyOrder("POST /tuvi/readings/basic", "POST /tuvi/readings/today");
+        .containsExactlyInAnyOrder(
+            "POST /tuvi/readings/basic",
+            "POST /tuvi/readings/today",
+            "POST /tuvi/qa/readings",
+            "GET /tuvi/qa/readings",
+            "DELETE /tuvi/qa/readings",
+            "GET /tuvi/qa/readings/{id}",
+            "POST /tuvi/qa/readings/{id}/follow-ups",
+            "GET /tuvi/qa/free-quota");
     assertThat(served).containsAll(declared);
   }
 

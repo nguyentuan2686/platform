@@ -108,14 +108,14 @@ public class ChartSvcClient implements ChartPort {
                   throw rejected(bytes);
                 }
                 LOG.warn("chart-svc answered {}", status);
-                throw new UpstreamUnavailableException("chart-svc status");
+                throw new UpstreamUnavailableException("chart");
               });
     } catch (UpstreamValidationException | UpstreamUnavailableException e) {
       throw e;
     } catch (RestClientException | IllegalStateException e) {
       // I/O failure or connect/read timeout; the type is enough, a message may name the target.
       LOG.warn("chart-svc call failed: {}", e.getClass().getSimpleName());
-      throw new UpstreamUnavailableException("chart-svc unreachable");
+      throw new UpstreamUnavailableException("chart");
     }
   }
 
@@ -138,7 +138,7 @@ public class ChartSvcClient implements ChartPort {
 
   private static UpstreamUnavailableException unusable(RuntimeException e) {
     LOG.warn("chart-svc answered an unusable body: {}", e.getClass().getSimpleName());
-    return new UpstreamUnavailableException("chart-svc body");
+    return new UpstreamUnavailableException("chart");
   }
 
   private static String sha256(byte[] bytes) {
