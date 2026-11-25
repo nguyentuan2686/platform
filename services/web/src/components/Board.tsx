@@ -23,7 +23,6 @@ function Cell({ p }: { p: Palace }) {
       href={p.key === "Menh" ? "#menh" : `#cung-${p.key}`}
       className={`cell${p.key === "Menh" ? " menh" : ""}`}
       style={style}
-      aria-label={`Cung ${p.nameVi}, ${canChi(p.stem, p.branch)}`}
     >
       <span className="pn">
         {p.nameVi}

@@ -63,8 +63,39 @@ export default function Dialogue({ sections }: { sections: Section[] }) {
   let current = -1;
   for (let i = 0; i < flat.length; i++) if (flat[i].start <= tick) current = i;
   const currentRef = useRef<HTMLElement | null>(null);
+  const follow = useRef(true);
+
+  // Stop following the line as soon as the reader takes over: scrolling, or using a link to a section.
   useEffect(() => {
-    if (done || current < 1) return;
+    const stop = () => {
+      follow.current = false;
+    };
+    const reveal = () => {
+      follow.current = false;
+      setTick(total);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End", " "].includes(e.key)) stop();
+    };
+    const onClick = (e: MouseEvent) => {
+      if (e.target instanceof Element && e.target.closest('.board a[href^="#"]')) reveal();
+    };
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchmove", stop, { passive: true });
+    window.addEventListener("keydown", onKey, { passive: true });
+    window.addEventListener("hashchange", reveal);
+    document.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchmove", stop);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("hashchange", reveal);
+      document.removeEventListener("click", onClick);
+    };
+  }, [total]);
+
+  useEffect(() => {
+    if (done || current < 1 || !follow.current) return;
     currentRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [current, done]);
 

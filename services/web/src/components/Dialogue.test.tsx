@@ -109,3 +109,67 @@ describe("Dialogue animating", () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
   });
 });
+
+describe("Dialogue following", () => {
+  beforeEach(() => {
+    mockMotion(false);
+    vi.useFakeTimers();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  const advance = (ms: number) =>
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+
+  it.each([
+    ["wheel", () => window.dispatchEvent(new Event("wheel"))],
+    ["touchmove", () => window.dispatchEvent(new Event("touchmove"))],
+    ["PageDown", () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "PageDown" }))],
+  ])("stops following after a user %s", (_n, fire) => {
+    render(<Dialogue sections={reading.sections} />);
+    advance(3000);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockClear();
+    act(() => {
+      fire();
+    });
+    advance(20000);
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("keeps following after an unrelated key", () => {
+    render(<Dialogue sections={reading.sections} />);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
+    });
+    advance(3000);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("reveals everything and stops following on a hash change", () => {
+    const { container } = render(<Dialogue sections={reading.sections} />);
+    advance(300);
+    act(() => {
+      window.dispatchEvent(new Event("hashchange"));
+    });
+    expect(words(container).every((w) => w.dataset.on === "true")).toBe(true);
+    expect(seal()).not.toBeNull();
+    expect(showAll()).toBeNull();
+  });
+
+  it("reveals everything when a board link is clicked", () => {
+    const { container } = render(
+      <div>
+        <nav className="board">
+          <a href="#cung-QuanLoc">Quan Lộc</a>
+        </nav>
+        <Dialogue sections={reading.sections} />
+      </div>,
+    );
+    advance(300);
+    fireEvent.click(screen.getByRole("link", { name: "Quan Lộc" }));
+    expect(words(container).every((w) => w.dataset.on === "true")).toBe(true);
+    expect(showAll()).toBeNull();
+  });
+});
