@@ -85,6 +85,11 @@ describe("session cookie", () => {
     expect(jar.sets[0].opts.maxAge).toBe(0);
   });
 
+  it("falls back to one day for an unparsable expires_at", async () => {
+    await setSessionCookie("tok", "not-a-date");
+    expect(jar.sets[0].opts.maxAge).toBe(86400);
+  });
+
   it("reads and clears the token", async () => {
     expect(await readSessionToken()).toBeUndefined();
     jar.values.set("tv_sid", "abc");

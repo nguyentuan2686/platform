@@ -16,11 +16,15 @@ export class UpstreamValidation extends Error {
     this.name = "UpstreamValidation";
   }
 }
-/** Upstream answered 401, 403, 404 or 409; `reason` is the problem's snake_case `reason`, if any. */
+/**
+ * Upstream answered 401, 403, 404 or 409; `reason` is the problem's snake_case `reason`, if any;
+ * `upstream` names the service (for logs).
+ */
 export class UpstreamProblem extends Error {
   constructor(
     readonly status: 401 | 403 | 404 | 409,
     readonly reason?: string,
+    readonly upstream?: string,
   ) {
     super(reason ? `upstream ${status} ${reason}` : `upstream ${status}`);
     this.name = "UpstreamProblem";
@@ -34,7 +38,7 @@ export type CallOpts = {
   body?: unknown;
   admin?: boolean;
   timeoutMs?: number;
-  /** Extra request headers (e.g. webhook authentication). Never logged. */
+  /** Extra request headers (e.g. webhook authentication). Never logged; cannot override the auth headers. */
   headers?: Record<string, string>;
 };
 
@@ -56,11 +60,12 @@ export function baseUrl(svc: Svc): string {
 export function upstreamHeaders(opts: CallOpts & { accept?: string; json?: boolean }): Headers {
   const c = cfg();
   const h = new Headers({ accept: opts.accept ?? "application/json, application/problem+json" });
+  // Extras first, so the internal token, bearer and admin token below always win.
+  for (const [k, v] of Object.entries(opts.headers ?? {})) h.set(k, v);
   if (opts.json) h.set("content-type", "application/json");
   if (c.internalToken) h.set("x-internal-token", c.internalToken);
   if (opts.bearer) h.set("authorization", `Bearer ${opts.bearer}`);
   if (opts.admin && c.adminToken) h.set("x-admin-token", c.adminToken);
-  for (const [k, v] of Object.entries(opts.headers ?? {})) h.set(k, v);
   return h;
 }
 
@@ -89,7 +94,7 @@ export async function errorFor(svc: Svc, res: Response): Promise<Error> {
     } catch {
       /* no body */
     }
-    return new UpstreamProblem(res.status as UpstreamProblem["status"], reason);
+    return new UpstreamProblem(res.status as UpstreamProblem["status"], reason, SVC_NAME[svc]);
   }
   logUpstream(svc, String(res.status));
   await res.body?.cancel().catch(() => {});

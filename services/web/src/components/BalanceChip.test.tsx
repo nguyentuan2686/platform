@@ -5,7 +5,7 @@ const getViewer = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/session", () => ({ getViewer }));
 
 import { BalanceChip } from "./BalanceChip";
-import { UpstreamError } from "@/lib/http";
+import { UpstreamError, UpstreamProblem } from "@/lib/http";
 
 const account = (entitlements: unknown) => ({
   kind: "account",
@@ -53,10 +53,42 @@ describe("BalanceChip", () => {
     expect(await text()).toBe("");
   });
 
-  it("renders nothing when identity is down", async () => {
+  it("renders nothing when identity is down (http.ts already logged it)", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
     getViewer.mockImplementation(async () => {
       throw new UpstreamError();
     });
     expect(await BalanceChip()).toBeNull();
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("treats a 401 as anonymous without an error log", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    getViewer.mockImplementation(async () => {
+      throw new UpstreamProblem(401, undefined, "identity-svc");
+    });
+    expect(await BalanceChip()).toBeNull();
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("logs a 403 (e.g. wrong internal token) with no PII and hides the chip", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    getViewer.mockImplementation(async () => {
+      throw new UpstreamProblem(403, undefined, "identity-svc");
+    });
+    expect(await BalanceChip()).toBeNull();
+    const out = write.mock.calls.map((c) => String(c[0])).join("");
+    write.mockRestore();
+    expect(JSON.parse(out)).toMatchObject({ level: "warn", upstream: "identity-svc", status: "403", part: "balance-chip" });
+    expect(out).not.toMatch(/Bearer|token|@/);
+  });
+
+  it("rethrows a bug instead of hiding it", async () => {
+    getViewer.mockImplementation(async () => {
+      throw new TypeError("boom");
+    });
+    await expect(BalanceChip()).rejects.toThrow("boom");
   });
 });

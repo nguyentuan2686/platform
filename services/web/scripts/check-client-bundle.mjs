@@ -38,7 +38,7 @@ export function findLeaks(dir, extra = []) {
     const lower = text.toLowerCase();
     for (const marker of markers) {
       const hit = marker.startsWith("X-") ? lower.includes(marker.toLowerCase()) : text.includes(marker);
-      if (hit) leaks.push({ file, marker: FORBIDDEN.includes(marker) ? marker : "(configured secret value)" });
+      if (hit) leaks.push({ file, marker: FORBIDDEN.includes(marker) ? marker : "(configured secret or service URL)" });
     }
   }
   return leaks;
@@ -51,7 +51,17 @@ function main() {
     // An empty or partial build must not pass as "clean".
     if (![...files(root)].some((f) => f.endsWith(".js"))) throw Object.assign(new Error("no .js chunks"), { code: "EMPTY" });
     // The configured secret values themselves, when present in the build environment.
-    leaks = findLeaks(root, [process.env.INTERNAL_API_TOKEN, process.env.ADMIN_API_TOKEN, process.env.SEPAY_WEBHOOK_SECRET]);
+    // Also the configured service URLs (a prod URL may carry no :808x port).
+    const env = process.env;
+    leaks = findLeaks(root, [
+      env.INTERNAL_API_TOKEN,
+      env.ADMIN_API_TOKEN,
+      env.SEPAY_WEBHOOK_SECRET,
+      env.CHART_SVC_URL,
+      env.READING_URL,
+      env.IDENTITY_SVC_URL,
+      env.PAYMENT_SVC_URL,
+    ]);
   } catch (e) {
     console.error(`check-client-bundle: cannot read ${root} (run npm run build first): ${e.code ?? e}`);
     process.exit(1);

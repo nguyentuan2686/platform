@@ -17,6 +17,8 @@ export type Viewer =
       isAdmin: boolean;
     };
 
+const ONE_DAY_S = 86400;
+
 /** `__Host-` (Secure, Path=/, no Domain) in prod; a plain name for local http. */
 export function sessionCookieName(): string {
   return cfg().cookieSecure ? "__Host-tv_sid" : "tv_sid";
@@ -30,7 +32,8 @@ export async function readSessionToken(): Promise<string | undefined> {
 /** HttpOnly; SameSite=Lax; Path=/ (+ Secure), living until the session's expires_at. */
 export async function setSessionCookie(token: string, expiresAt: string): Promise<void> {
   const ms = Date.parse(expiresAt) - Date.now();
-  const maxAge = Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : 0;
+  // Unparsable expires_at (never expected): one day rather than a cookie deleted at once.
+  const maxAge = Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 1000)) : ONE_DAY_S;
   (await cookies()).set(sessionCookieName(), token, {
     httpOnly: true,
     sameSite: "lax",

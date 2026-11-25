@@ -1,14 +1,16 @@
-import { getViewer } from "@/lib/session";
+import { degradeOrThrow } from "@/lib/degrade";
+import { getViewer, type Viewer } from "@/lib/session";
 
 const PASS_LABEL = { MONTH: "Thẻ tháng", YEAR: "Thẻ năm" } as const;
 
 /** Header balance: an account's credits or active pass. Guests get the login link from Task 3 on. */
 export async function BalanceChip() {
-  let viewer;
+  let viewer: Viewer;
   try {
     viewer = await getViewer();
-  } catch {
-    return null; // identity down: the header still renders
+  } catch (e) {
+    degradeOrThrow(e, "balance-chip"); // a bug rethrows; identity trouble is logged and hides the chip
+    return null;
   }
   if (viewer.kind !== "account") return null;
   const { credits, pass } = viewer.entitlements;

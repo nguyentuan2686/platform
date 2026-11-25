@@ -52,6 +52,21 @@ describe("callJson", () => {
     expect(headersOf(f.mock.calls[1][1]).get("x-admin-token")).toBe("local-test-admin");
   });
 
+  it("never lets extra headers override the auth headers; problems carry the upstream name", async () => {
+    process.env.INTERNAL_API_TOKEN = "local-test-internal";
+    const f = stubFetch(async () => json(403, {}));
+    const err = await callJson<never>("identity", "/me", {
+      bearer: "real",
+      headers: { "x-internal-token": "forged", authorization: "Bearer forged", "x-extra": "1" },
+    }).catch((e) => e);
+    const h = headersOf(f.mock.calls[0][1]);
+    expect(h.get("x-internal-token")).toBe("local-test-internal");
+    expect(h.get("authorization")).toBe("Bearer real");
+    expect(h.get("x-extra")).toBe("1");
+    expect(err).toBeInstanceOf(UpstreamProblem);
+    expect(err.upstream).toBe("identity-svc");
+  });
+
   it("uses a 5 s timeout by default and honours timeoutMs", async () => {
     const spy = vi.spyOn(AbortSignal, "timeout");
     stubFetch(async () => json(200, {}));

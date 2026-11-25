@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { BirthForm } from "@/components/BirthForm";
 import { Sage } from "@/components/Sage";
+import { degradeOrThrow } from "@/lib/degrade";
 import { getProfile } from "@/lib/identity";
 import { getViewer } from "@/lib/session";
 
-/** True when the viewer already saved a chart. An unavailable identity service just hides the link. */
+/** True when the viewer already saved a chart. Identity trouble hides the link (logged); a bug rethrows. */
 async function hasProfile(): Promise<boolean> {
   try {
     const viewer = await getViewer();
     if (viewer.kind === "anon") return false;
     return (await getProfile(viewer.token)) !== null;
-  } catch {
+  } catch (e) {
+    degradeOrThrow(e, "saved-chart-link");
     return false;
   }
 }

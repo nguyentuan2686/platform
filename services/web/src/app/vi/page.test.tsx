@@ -7,7 +7,7 @@ vi.mock("@/lib/identity", () => ({ getProfile: (b: string) => m.getProfile(b) })
 vi.mock("@/app/vi/actions", () => ({ submitBirth: vi.fn() }));
 
 import Home from "@/app/vi/page";
-import { UpstreamError } from "@/lib/http";
+import { UpstreamError, UpstreamProblem } from "@/lib/http";
 
 afterEach(cleanup);
 beforeEach(() => {
@@ -40,5 +40,22 @@ describe("/vi", () => {
     m.getViewer.mockRejectedValue(new UpstreamError());
     render(await Home());
     expect(screen.queryByRole("link", { name: "Xem lá số của con" })).toBeNull();
+  });
+  it("hides the link on a 401 with no log, logs a 403 and hides it, rethrows a bug", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.getViewer.mockResolvedValue({ kind: "guest", guestId: "g", token: "t" });
+    m.getProfile.mockRejectedValue(new UpstreamProblem(401, undefined, "identity-svc"));
+    render(await Home());
+    expect(screen.queryByRole("link", { name: "Xem lá số của con" })).toBeNull();
+    expect(write).not.toHaveBeenCalled();
+    cleanup();
+    m.getProfile.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
+    render(await Home());
+    expect(screen.queryByRole("link", { name: "Xem lá số của con" })).toBeNull();
+    const out = write.mock.calls.map((c) => String(c[0])).join("");
+    write.mockRestore();
+    expect(JSON.parse(out)).toMatchObject({ upstream: "identity-svc", status: "403", part: "saved-chart-link" });
+    m.getProfile.mockRejectedValue(new TypeError("boom"));
+    await expect(Home()).rejects.toThrow("boom");
   });
 });
