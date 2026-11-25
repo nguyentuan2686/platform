@@ -215,7 +215,7 @@ class ContractTest {
     UUID account = UUID.randomUUID();
     when(sessions.resolve("g")).thenReturn(new Subject.Guest(UUID.randomUUID()));
     when(sessions.resolve("a")).thenReturn(new Subject.Account(account));
-    when(sessions.accountEmail(account)).thenReturn(Optional.of(new Email("tuan@gmail.com")));
+    when(sessions.accountEmail(account)).thenReturn(Optional.of(new Email("tuan@example.com")));
 
     JsonNode guest = body(mvc.perform(get("/me").header("Authorization", "Bearer g")), 200);
     JsonNode acct = body(mvc.perform(get("/me").header("Authorization", "Bearer a")), 200);

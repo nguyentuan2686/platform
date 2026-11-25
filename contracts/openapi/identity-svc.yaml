@@ -466,7 +466,7 @@ components:
         kind: {type: string, enum: [guest, account]}
         guest_id: {type: string, format: uuid}
         account_id: {type: string, format: uuid}
-        email_masked: {type: string, example: 't***@g***.com'}
+        email_masked: {type: string, example: 't***@e***.com'}
       oneOf:
         - required: [guest_id]
           properties: {kind: {const: guest}}

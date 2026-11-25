@@ -241,13 +241,13 @@ class AuthControllerTest {
   void me_for_an_account_masks_the_email() throws Exception {
     UUID id = UUID.randomUUID();
     when(sessions.resolve("t")).thenReturn(new Subject.Account(id));
-    when(sessions.accountEmail(id)).thenReturn(Optional.of(new Email("tuan@gmail.com")));
+    when(sessions.accountEmail(id)).thenReturn(Optional.of(new Email("tuan@example.com")));
 
     mvc.perform(get("/me").header("Authorization", "Bearer t"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.kind").value("account"))
         .andExpect(jsonPath("$.account_id").value(id.toString()))
-        .andExpect(jsonPath("$.email_masked").value("t***@g***.com"))
+        .andExpect(jsonPath("$.email_masked").value("t***@e***.com"))
         .andExpect(jsonPath("$.guest_id").doesNotExist());
   }
 

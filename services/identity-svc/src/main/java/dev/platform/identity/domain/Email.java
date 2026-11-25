@@ -25,7 +25,7 @@ public record Email(String value) {
     }
   }
 
-  /** Display form that hides most of the address, e.g. {@code t***@g***.com}. */
+  /** Display form that hides most of the address, e.g. {@code t***@e***.com}. */
   public String masked() {
     int at = value.indexOf('@');
     String local = value.substring(0, at);

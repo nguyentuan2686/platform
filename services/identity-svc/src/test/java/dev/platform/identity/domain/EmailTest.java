@@ -82,7 +82,7 @@ class EmailTest {
 
   @Test
   void masks_for_display() {
-    assertThat(new Email("tuan@gmail.com").masked()).isEqualTo("t***@g***.com");
+    assertThat(new Email("tuan@example.com").masked()).isEqualTo("t***@e***.com");
     assertThat(new Email("a@b.co.uk").masked()).isEqualTo("a***@b***.uk");
     assertThat(new Email("a@localhost").masked()).isEqualTo("a***@l***");
   }
