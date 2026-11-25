@@ -67,6 +67,30 @@ class LlmConfigurationTest {
   }
 
   @Test
+  void keyed_providers_are_enabled_and_keyless_skipped() {
+    runner
+        .withPropertyValues("LLM_PROVIDERS=groq,gemini,fake", "GROQ_API_KEY=local-test-groq-key")
+        .run(
+            ctx -> {
+              var providers = ctx.getBean(LlmConfiguration.ConfiguredProviders.class);
+              assertThat(ids(providers)).containsExactly("groq", "fake");
+              assertThat(providers.ordered().get(0).dailyRequestLimit()).isEqualTo(900);
+            });
+  }
+
+  @Test
+  void paid_provider_is_flagged_paid() {
+    runner
+        .withPropertyValues("LLM_PROVIDERS=paid,fake", "LLM_PAID_API_KEY=local-test-paid-key")
+        .run(
+            ctx -> {
+              var providers = ctx.getBean(LlmConfiguration.ConfiguredProviders.class);
+              assertThat(ids(providers)).containsExactly("paid", "fake");
+              assertThat(providers.ordered().get(0).paid()).isTrue();
+            });
+  }
+
+  @Test
   void gateway_bean_is_built() {
     runner.run(ctx -> assertThat(ctx).hasSingleBean(LlmGateway.class));
   }
