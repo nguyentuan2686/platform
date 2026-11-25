@@ -640,6 +640,137 @@ class QaServiceTest {
     assertThat(qa.list("acc")).isEmpty();
   }
 
+  // ---- status transitions are compare-and-set ----
+
+  @Test
+  void delete_racing_in_flight_paid_question_keeps_charged_reading() {
+    UUID settled = UUID.randomUUID();
+    paid(settled);
+    UUID id = UUID.randomUUID();
+    // the DELETE's statement lands after the insert, before the charge is recorded
+    identity.consume =
+        () -> {
+          repo.deleteSettledBySubject(repo.reading(settled).subjectId());
+          return new ConsumeOutcome.Charged("CREDIT");
+        };
+
+    QaOutcome out = paid(id);
+
+    assertThat(out).isInstanceOf(Answered.class);
+    assertThat(repo.reading(settled)).isNull();
+    assertThat(repo.reading(id).status()).isEqualTo(QaStatus.ANSWERED);
+    assertThat(repo.reading(id).creditSource()).isEqualTo("CREDIT");
+    assertThat(identity.refunds).isEmpty();
+  }
+
+  @Test
+  void charged_reading_whose_row_vanished_is_refunded_not_kept() {
+    UUID id = UUID.randomUUID();
+    identity.consume =
+        () -> {
+          repo.remove(id); // e.g. an operator delete: no row left to answer or refund
+          return new ConsumeOutcome.Charged("CREDIT");
+        };
+
+    assertThatThrownBy(() -> paid(id))
+        .satisfies(t -> assertThat(reason(t)).isEqualTo("reading_in_progress"));
+    assertThat(identity.refunds).containsExactly(id);
+  }
+
+  @Test
+  void catch_all_after_answered_does_not_flip_to_retrying() {
+    UUID id = UUID.randomUUID();
+    Prepared.Job job =
+        (Prepared.Job)
+            qa.prepare(new AskCommand("acc", id, QaKind.PAID, QaTopic.TinhDuyen, Q, "vi"));
+    knowledge.failFrames = true; // the disclaimer lookup fails after the answer is stored
+
+    assertThatThrownBy(() -> qa.generate(job)).isInstanceOf(IllegalStateException.class);
+
+    QaReading r = repo.reading(id);
+    assertThat(r.status()).isEqualTo(QaStatus.ANSWERED);
+    assertThat(r.lastError()).isNull();
+    assertThat(cipher.decrypt(id + ":0", repo.messages(id).get(0).answerEnc())).isEqualTo(GOOD);
+  }
+
+  @Test
+  void catch_all_after_refunded_refusal_does_not_flip_to_retrying() {
+    provider.then("NGOAI_PHAM_VI");
+    UUID id = UUID.randomUUID();
+    Prepared.Job job =
+        (Prepared.Job)
+            qa.prepare(new AskCommand("acc", id, QaKind.PAID, QaTopic.TinhDuyen, Q, "vi"));
+    knowledge.failFrames = true;
+
+    assertThatThrownBy(() -> qa.generate(job)).isInstanceOf(IllegalStateException.class);
+
+    assertThat(repo.reading(id).status()).isEqualTo(QaStatus.REFUSED);
+    assertThat(repo.reading(id).refundedAt()).isEqualTo(T0);
+    assertThat(identity.refunds).containsExactly(id);
+  }
+
+  @Test
+  void failure_on_a_reading_answered_meanwhile_reports_the_answer() {
+    UUID id = UUID.randomUUID();
+    Prepared.Job job =
+        (Prepared.Job)
+            qa.prepare(new AskCommand("acc", id, QaKind.PAID, QaTopic.TinhDuyen, Q, "vi"));
+    qa.generate(job); // e.g. the retry job answered it
+
+    QaOutcome late = qa.rejected(job);
+
+    assertThat(late).isInstanceOf(Answered.class);
+    assertThat(repo.reading(id).status()).isEqualTo(QaStatus.ANSWERED);
+  }
+
+  @Test
+  void second_generation_of_an_answered_reading_keeps_the_first_answer() {
+    UUID id = UUID.randomUUID();
+    Prepared.Job job =
+        (Prepared.Job)
+            qa.prepare(new AskCommand("acc", id, QaKind.PAID, QaTopic.TinhDuyen, Q, "vi"));
+    qa.generate(job);
+    cache.entries.clear();
+    provider.then(GOOD + " Thêm một câu khác nhé con.");
+
+    QaOutcome again = qa.generate(job);
+
+    assertThat(((Answered) again).text()).isEqualTo(GOOD);
+  }
+
+  @Test
+  void free_failure_after_answer_keeps_answered() {
+    UUID id = UUID.randomUUID();
+    Prepared.Job job =
+        (Prepared.Job)
+            qa.prepare(new AskCommand("guest", id, QaKind.FREE, QaTopic.TinhDuyen, Q, "vi"));
+    qa.generate(job);
+
+    assertThat(qa.rejected(job)).isInstanceOf(Answered.class);
+    assertThat(repo.reading(id).status()).isEqualTo(QaStatus.ANSWERED);
+  }
+
+  @Test
+  void failed_follow_up_frees_its_seq_for_the_next_one() {
+    UUID id = UUID.randomUUID();
+    paid(id);
+    Prepared.Job first =
+        (Prepared.Job)
+            qa.prepareFollowUp(
+                new FollowUpCommand("acc", id, UUID.randomUUID(), "Vậy năm sau thì sao"));
+    Prepared.Job second =
+        (Prepared.Job)
+            qa.prepareFollowUp(
+                new FollowUpCommand("acc", id, UUID.randomUUID(), "Còn chuyện nhà thì sao"));
+    provider.thenFail();
+    assertThat(qa.generate(first)).isInstanceOf(Busy.class); // seq 1 deleted
+    assertThat(((Answered) qa.generate(second)).seq()).isEqualTo(2);
+
+    QaOutcome third = followUp(id, "Thêm một câu nữa được không");
+
+    assertThat(((Answered) third).seq()).isEqualTo(1);
+  }
+
   @Test
   void unknown_bearer_is_unauthenticated() {
     assertThatThrownBy(() -> qa.list("nope")).isInstanceOf(UnauthenticatedException.class);

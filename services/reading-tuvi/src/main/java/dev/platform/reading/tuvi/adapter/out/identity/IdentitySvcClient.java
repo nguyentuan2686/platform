@@ -157,7 +157,7 @@ public class IdentitySvcClient implements IdentityPort {
   private static Response call(java.util.function.Supplier<Response> exchange) {
     try {
       return exchange.get();
-    } catch (RestClientException | IllegalStateException e) {
+    } catch (RestClientException | IllegalStateException | IllegalArgumentException e) {
       // I/O failure or a connect/read timeout; the message may name the target, the type does not.
       throw unavailable("call failed: " + e.getClass().getSimpleName());
     }

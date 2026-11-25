@@ -26,6 +26,8 @@ CREATE TABLE qa_reading (
 CREATE INDEX qa_reading_subject_created_idx ON qa_reading (subject_id, created_at DESC);
 CREATE INDEX qa_reading_status_next_idx ON qa_reading (status, next_attempt_at);
 CREATE INDEX qa_reading_free_chart_idx ON qa_reading (chart_hash, created_at) WHERE kind = 'FREE';
+-- the global free-chat count per Vietnam day
+CREATE INDEX qa_reading_free_created_idx ON qa_reading (created_at) WHERE kind = 'FREE';
 
 -- Seq 0 is the question (client_message_id = reading id); seqs 1-2 are follow-ups.
 -- prompt_enc: the encrypted prompt of a pending message, so the retry job can call the model

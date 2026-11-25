@@ -176,6 +176,11 @@ paths:
     delete:
       operationId: deleteQaReadings
       summary: Delete all of the caller's readings and messages
+      description: >-
+        A reading still owed an answer or a refund (PENDING, RETRYING, REFUND_PENDING) is never
+        deleted: while one exists the call answers 409 `reading_in_progress`, and one that becomes
+        in progress during the call (a paid question being charged) is kept. Cached model answers
+        (encrypted, keyed by chart and question, not by user) expire with the retention job.
       security:
         - internalToken: []
           sessionBearer: []
@@ -305,6 +310,9 @@ paths:
     get:
       operationId: getFreeQuota
       summary: Free chats used today (Vietnam day) by the caller
+      description: >-
+        Counts the caller's own free chats only. Asking is also capped per chart, so a new guest
+        on a chart that already used its free chats today can still get 409 `free_quota`.
       security:
         - internalToken: []
           sessionBearer: []

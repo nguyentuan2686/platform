@@ -12,7 +12,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
@@ -26,6 +28,7 @@ public class JdbcQaRepository implements QaRepositoryPort {
       "id, subject_kind, subject_id, kind, topic, lang, chart_hash, status, refusal_reason,"
           + " credit_source, attempts, next_attempt_at, retry_until, last_error, created_at,"
           + " answered_at, refunded_at";
+  private static final String IN_PROGRESS = list(QaStatus.IN_PROGRESS);
   private static final String COUNTED_FREE =
       " kind = 'FREE' and status in ('PENDING', 'ANSWERED') and created_at >= ?";
 
@@ -116,87 +119,133 @@ public class JdbcQaRepository implements QaRepositoryPort {
   }
 
   @Override
-  public void delete(UUID id) {
-    jdbc.update("delete from qa_reading where id = ?", id);
+  public boolean deleteUncharged(UUID id) {
+    return jdbc.update(
+            "delete from qa_reading where id = ? and status = 'PENDING' and credit_source is null",
+            id)
+        == 1;
+  }
+
+  /** {@code and status in (...)} for the statuses a reading may move to {@code target} from. */
+  private static String from(QaStatus target) {
+    return " and status in " + list(target.allowedFrom());
+  }
+
+  private static String list(Set<QaStatus> statuses) {
+    return statuses.stream()
+        .map(s -> "'" + s.name() + "'")
+        .collect(Collectors.joining(", ", "(", ")"));
   }
 
   @Override
-  public void markCharged(UUID id, String creditSource) {
-    jdbc.update("update qa_reading set credit_source = ? where id = ?", creditSource, id);
+  public boolean markCharged(UUID id, String creditSource) {
+    return jdbc.update(
+            "update qa_reading set credit_source = ? where id = ? and status = 'PENDING'",
+            creditSource,
+            id)
+        == 1;
   }
 
   @Override
-  public void markRefundPending(UUID id, String lastError) {
-    jdbc.update(
-        "update qa_reading set status = 'REFUND_PENDING', last_error = ? where id = ?",
-        lastError,
-        id);
+  public boolean markRefundPending(UUID id, String lastError) {
+    return jdbc.update(
+            "update qa_reading set status = 'REFUND_PENDING', last_error = ? where id = ?"
+                + from(QaStatus.REFUND_PENDING),
+            lastError,
+            id)
+        == 1;
   }
 
   @Override
-  public void markRefused(UUID id, RefusalReason reason) {
-    jdbc.update(
-        "update qa_reading set status = 'REFUSED', refusal_reason = ? where id = ?",
-        reason.name(),
-        id);
-    jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+  public boolean markRefused(UUID id, RefusalReason reason) {
+    boolean changed =
+        jdbc.update(
+                "update qa_reading set status = 'REFUSED', refusal_reason = ? where id = ?"
+                    + from(QaStatus.REFUSED),
+                reason.name(),
+                id)
+            == 1;
+    if (changed) {
+      jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+    }
+    return changed;
   }
 
   @Override
-  public void recordRefund(UUID id, Instant at) {
-    jdbc.update("update qa_reading set refunded_at = ? where id = ?", ts(at), id);
+  public boolean recordRefund(UUID id, Instant at) {
+    return jdbc.update(
+            "update qa_reading set refunded_at = ? where id = ? and status = 'REFUSED'"
+                + " and refunded_at is null",
+            ts(at),
+            id)
+        == 1;
   }
 
   @Override
-  public void markRetrying(
+  public boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError) {
-    jdbc.update(
-        "update qa_reading set status = 'RETRYING', attempts = ?, next_attempt_at = ?,"
-            + " retry_until = ?, last_error = ? where id = ?",
-        attempts,
-        ts(nextAttemptAt),
-        ts(retryUntil),
-        lastError,
-        id);
+    return jdbc.update(
+            "update qa_reading set status = 'RETRYING', attempts = ?, next_attempt_at = ?,"
+                + " retry_until = ?, last_error = ? where id = ?"
+                + from(QaStatus.RETRYING),
+            attempts,
+            ts(nextAttemptAt),
+            ts(retryUntil),
+            lastError,
+            id)
+        == 1;
   }
 
   @Override
-  public void markFailed(UUID id, String lastError) {
-    jdbc.update(
-        "update qa_reading set status = 'FAILED', last_error = ? where id = ?", lastError, id);
+  public boolean markFailed(UUID id, String lastError) {
+    boolean changed =
+        jdbc.update(
+                "update qa_reading set status = 'FAILED', last_error = ? where id = ?"
+                    + from(QaStatus.FAILED),
+                lastError,
+                id)
+            == 1;
+    if (changed) {
+      jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+    }
+    return changed;
   }
 
   @Override
-  public void markAnswered(UUID id, Instant at) {
-    jdbc.update(
-        "update qa_reading set status = 'ANSWERED', answered_at = ?, next_attempt_at = null"
-            + " where id = ?",
-        ts(at),
-        id);
+  public boolean markAnswered(UUID id, Instant at) {
+    return jdbc.update(
+            "update qa_reading set status = 'ANSWERED', answered_at = ?, next_attempt_at = null"
+                + " where id = ?"
+                + from(QaStatus.ANSWERED),
+            ts(at),
+            id)
+        == 1;
   }
 
   @Override
-  public void answerMessage(
+  public boolean answerMessage(
       UUID readingId,
       int seq,
       byte[] answerEnc,
       String provider,
       List<String> usedKeys,
       Instant at) {
-    jdbc.update(
-        con -> {
-          var ps =
-              con.prepareStatement(
-                  "update qa_message set answer_enc = ?, provider = ?, used_keys = ?,"
-                      + " answered_at = ?, prompt_enc = null where reading_id = ? and seq = ?");
-          ps.setBytes(1, answerEnc);
-          ps.setString(2, provider);
-          ps.setArray(3, con.createArrayOf("text", usedKeys.toArray()));
-          ps.setTimestamp(4, ts(at));
-          ps.setObject(5, readingId);
-          ps.setInt(6, seq);
-          return ps;
-        });
+    return jdbc.update(
+            con -> {
+              var ps =
+                  con.prepareStatement(
+                      "update qa_message set answer_enc = ?, provider = ?, used_keys = ?,"
+                          + " answered_at = ?, prompt_enc = null"
+                          + " where reading_id = ? and seq = ? and answer_enc is null");
+              ps.setBytes(1, answerEnc);
+              ps.setString(2, provider);
+              ps.setArray(3, con.createArrayOf("text", usedKeys.toArray()));
+              ps.setTimestamp(4, ts(at));
+              ps.setObject(5, readingId);
+              ps.setInt(6, seq);
+              return ps;
+            })
+        == 1;
   }
 
   @Override
@@ -233,8 +282,13 @@ public class JdbcQaRepository implements QaRepositoryPort {
   }
 
   @Override
-  public void deleteMessage(UUID readingId, int seq) {
-    jdbc.update("delete from qa_message where reading_id = ? and seq = ?", readingId, seq);
+  public boolean deleteUnansweredMessage(UUID readingId, int seq) {
+    return jdbc.update(
+            "delete from qa_message where reading_id = ? and seq = ? and seq > 0"
+                + " and answer_enc is null",
+            readingId,
+            seq)
+        == 1;
   }
 
   @Override
@@ -291,15 +345,17 @@ public class JdbcQaRepository implements QaRepositoryPort {
   public boolean anyInProgress(UUID subjectId) {
     return Boolean.TRUE.equals(
         jdbc.queryForObject(
-            "select exists (select 1 from qa_reading where subject_id = ?"
-                + " and status in ('PENDING', 'RETRYING', 'REFUND_PENDING'))",
+            "select exists (select 1 from qa_reading where subject_id = ? and status in "
+                + IN_PROGRESS
+                + ")",
             Boolean.class,
             subjectId));
   }
 
   @Override
-  public void deleteBySubject(UUID subjectId) {
-    jdbc.update("delete from qa_reading where subject_id = ?", subjectId);
+  public int deleteSettledBySubject(UUID subjectId) {
+    return jdbc.update(
+        "delete from qa_reading where subject_id = ? and status not in " + IN_PROGRESS, subjectId);
   }
 
   private static Timestamp ts(Instant i) {

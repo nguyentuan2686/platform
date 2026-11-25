@@ -88,7 +88,11 @@ public class QaStore {
       throw new QaConflictException("reading_not_answered");
     }
     List<StoredMessage> earlier = repo.messages(readingId);
-    int seq = earlier.stream().mapToInt(StoredMessage::seq).max().orElse(-1) + 1;
+    // lowest free follow-up seq: a failed (deleted) follow-up frees its seq again
+    int seq = 1;
+    while (seq <= MAX_SEQ && hasSeq(earlier, seq)) {
+      seq++;
+    }
     if (seq > MAX_SEQ) {
       throw new QaConflictException("follow_ups_exhausted");
     }
@@ -98,27 +102,46 @@ public class QaStore {
     return new FollowUpSlot.Reserved(seq, earlier);
   }
 
-  /** Stores an answer and, for the first message, marks the reading answered. */
+  private static boolean hasSeq(List<StoredMessage> messages, int seq) {
+    return messages.stream().anyMatch(m -> m.seq() == seq);
+  }
+
+  /**
+   * Stores an answer; for the first message the reading moves to {@code ANSWERED} first
+   * (compare-and-set). False, with nothing written, when the reading or message can no longer be
+   * answered (e.g. already answered, refused or waiting for its refund).
+   */
   @Transactional
-  public void answer(
+  public boolean answer(
       UUID readingId,
       int seq,
       byte[] answerEnc,
       String provider,
       List<String> usedKeys,
       Instant now) {
-    repo.answerMessage(readingId, seq, answerEnc, provider, usedKeys, now);
-    if (seq == 0) {
-      repo.markAnswered(readingId, now);
+    if (seq == 0 && !repo.markAnswered(readingId, now)) {
+      return false;
     }
+    if (!repo.answerMessage(readingId, seq, answerEnc, provider, usedKeys, now)) {
+      if (seq == 0) {
+        // the reading moved but its message is gone or answered: roll the status back
+        throw new IllegalStateException("first message cannot be answered");
+      }
+      return false;
+    }
+    return true;
   }
 
-  /** 409 {@code reading_in_progress} while any reading still waits for an answer or refund. */
+  /**
+   * Deletes the subject's settled readings. 409 {@code reading_in_progress} when any reading still
+   * waits for an answer or refund; the delete itself also skips such readings, so one that becomes
+   * in progress concurrently (a paid question being charged) is never deleted.
+   */
   @Transactional
-  public void deleteAll(UUID subjectId) {
+  public int deleteAll(UUID subjectId) {
     if (repo.anyInProgress(subjectId)) {
       throw new QaConflictException("reading_in_progress");
     }
-    repo.deleteBySubject(subjectId);
+    return repo.deleteSettledBySubject(subjectId);
   }
 }

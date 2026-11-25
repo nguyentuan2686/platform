@@ -14,7 +14,8 @@ final class Bearer {
       throw new UnauthenticatedException();
     }
     String token = header.substring(PREFIX.length()).strip();
-    if (token.isEmpty()) {
+    // only visible ASCII can be forwarded as a header value; anything else is not a session
+    if (token.isEmpty() || !token.chars().allMatch(c -> c > 0x20 && c < 0x7F)) {
       throw new UnauthenticatedException();
     }
     return token;

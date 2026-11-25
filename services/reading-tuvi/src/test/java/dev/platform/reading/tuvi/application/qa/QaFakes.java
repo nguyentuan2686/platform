@@ -141,6 +141,7 @@ final class QaFakes {
 
   static final class FakeKnowledge implements KnowledgePort {
     final Map<String, String> frames = new HashMap<>();
+    boolean failFrames;
 
     FakeKnowledge() {
       frames.put("qa_disclaimer", "LỜI-NHẮC");
@@ -157,6 +158,9 @@ final class QaFakes {
     @Override
     public Optional<String> find(KnowledgeKey key, String lang) {
       String v = key.value();
+      if (failFrames && v.startsWith("tuvi:frame=")) {
+        throw new IllegalStateException("knowledge down");
+      }
       if (v.startsWith("tuvi:frame=")) {
         return Optional.ofNullable(frames.get(v.substring("tuvi:frame=".length())));
       }
@@ -310,55 +314,97 @@ final class QaFakes {
       return find(id);
     }
 
-    @Override
-    public void delete(UUID id) {
+    /** Hook run before each status change (to simulate a concurrent writer). */
+    Runnable beforeTransition = () -> {};
+
+    void remove(UUID id) {
       readings.remove(id);
       messages.removeIf(m -> m.readingId().equals(id));
     }
 
-    private void update(UUID id, java.util.function.UnaryOperator<QaReading> f) {
-      readings.computeIfPresent(id, (k, r) -> f.apply(r));
+    @Override
+    public synchronized boolean deleteUncharged(UUID id) {
+      QaReading r = readings.get(id);
+      if (r == null || r.status() != QaStatus.PENDING || r.creditSource() != null) {
+        return false;
+      }
+      remove(id);
+      return true;
+    }
+
+    /** Compare-and-set to {@code target}, exactly as the JDBC adapter does. */
+    private synchronized boolean transition(
+        UUID id, QaStatus target, java.util.function.UnaryOperator<QaReading> f) {
+      beforeTransition.run();
+      QaReading r = readings.get(id);
+      if (r == null || !target.allowedFrom().contains(r.status())) {
+        return false;
+      }
+      readings.put(id, f.apply(r));
+      return true;
     }
 
     @Override
-    public void markCharged(UUID id, String creditSource) {
-      update(id, r -> r.withCreditSource(creditSource));
+    public synchronized boolean markCharged(UUID id, String creditSource) {
+      beforeTransition.run();
+      QaReading r = readings.get(id);
+      if (r == null || r.status() != QaStatus.PENDING) {
+        return false;
+      }
+      readings.put(id, r.withCreditSource(creditSource));
+      return true;
     }
 
     @Override
-    public void markRefundPending(UUID id, String lastError) {
-      update(id, r -> r.withStatus(QaStatus.REFUND_PENDING).withLastError(lastError));
+    public boolean markRefundPending(UUID id, String lastError) {
+      return transition(
+          id,
+          QaStatus.REFUND_PENDING,
+          r -> r.withStatus(QaStatus.REFUND_PENDING).withLastError(lastError));
     }
 
     @Override
-    public void markRefused(UUID id, RefusalReason reason) {
-      update(id, r -> r.withStatus(QaStatus.REFUSED).withRefusal(reason.name()));
-      clearPrompt(id, 0);
+    public boolean markRefused(UUID id, RefusalReason reason) {
+      boolean ok =
+          transition(
+              id, QaStatus.REFUSED, r -> r.withStatus(QaStatus.REFUSED).withRefusal(reason.name()));
+      if (ok) {
+        clearPrompt(id, 0);
+      }
+      return ok;
     }
 
     @Override
-    public void recordRefund(UUID id, Instant at) {
-      update(id, r -> r.withRefundedAt(at));
+    public synchronized boolean recordRefund(UUID id, Instant at) {
+      QaReading r = readings.get(id);
+      if (r == null || r.status() != QaStatus.REFUSED || r.refundedAt() != null) {
+        return false;
+      }
+      readings.put(id, r.withRefundedAt(at));
+      return true;
     }
 
     @Override
-    public void markRetrying(
+    public boolean markRetrying(
         UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError) {
-      update(id, r -> r.withRetry(attempts, nextAttemptAt, retryUntil, lastError));
+      return transition(
+          id, QaStatus.RETRYING, r -> r.withRetry(attempts, nextAttemptAt, retryUntil, lastError));
     }
 
     @Override
-    public void markFailed(UUID id, String lastError) {
-      update(id, r -> r.withStatus(QaStatus.FAILED).withLastError(lastError));
+    public boolean markFailed(UUID id, String lastError) {
+      return transition(
+          id, QaStatus.FAILED, r -> r.withStatus(QaStatus.FAILED).withLastError(lastError));
     }
 
     @Override
-    public void markAnswered(UUID id, Instant at) {
-      update(id, r -> r.withStatus(QaStatus.ANSWERED).withAnsweredAt(at));
+    public boolean markAnswered(UUID id, Instant at) {
+      return transition(
+          id, QaStatus.ANSWERED, r -> r.withStatus(QaStatus.ANSWERED).withAnsweredAt(at));
     }
 
     @Override
-    public void answerMessage(
+    public synchronized boolean answerMessage(
         UUID readingId,
         int seq,
         byte[] answerEnc,
@@ -367,7 +413,7 @@ final class QaFakes {
         Instant at) {
       for (int i = 0; i < messages.size(); i++) {
         StoredMessage m = messages.get(i);
-        if (m.readingId().equals(readingId) && m.seq() == seq) {
+        if (m.readingId().equals(readingId) && m.seq() == seq && m.answerEnc() == null) {
           messages.set(
               i,
               new StoredMessage(
@@ -380,8 +426,10 @@ final class QaFakes {
                   m.createdAt(),
                   at));
           providers.put(readingId + ":" + seq, provider);
+          return true;
         }
       }
+      return false;
     }
 
     private void clearPrompt(UUID readingId, int seq) {
@@ -435,8 +483,13 @@ final class QaFakes {
     }
 
     @Override
-    public void deleteMessage(UUID readingId, int seq) {
-      messages.removeIf(m -> m.readingId().equals(readingId) && m.seq() == seq);
+    public synchronized boolean deleteUnansweredMessage(UUID readingId, int seq) {
+      return messages.removeIf(
+          m ->
+              m.readingId().equals(readingId)
+                  && m.seq() == seq
+                  && seq > 0
+                  && m.answerEnc() == null);
     }
 
     private boolean countedFree(QaReading r, Instant since) {
@@ -498,13 +551,16 @@ final class QaFakes {
     }
 
     @Override
-    public void deleteBySubject(UUID subjectId) {
+    public synchronized int deleteSettledBySubject(UUID subjectId) {
       List<UUID> ids =
           readings.values().stream()
-              .filter(r -> r.subjectId().equals(subjectId))
+              .filter(
+                  r ->
+                      r.subjectId().equals(subjectId) && !QaStatus.IN_PROGRESS.contains(r.status()))
               .map(QaReading::id)
               .toList();
-      ids.forEach(this::delete);
+      ids.forEach(this::remove);
+      return ids.size();
     }
   }
 }

@@ -195,17 +195,40 @@ public class QaService {
       outcome = identity.consume(subject.id(), id, topic);
     } catch (RuntimeException e) {
       // a timeout may still have charged: compensate with a refund (retry job)
-      repo.markRefundPending(id, "consume_unavailable");
-      LOG.warn("qa consume failed, refund pending reading_id={}", id);
+      if (repo.markRefundPending(id, "consume_unavailable")) {
+        LOG.warn("qa consume failed, refund pending reading_id={}", id);
+      } else {
+        skipped(id, "REFUND_PENDING");
+      }
       throw e;
     }
     switch (outcome) {
-      case ConsumeOutcome.Charged charged -> repo.markCharged(id, charged.source());
+      case ConsumeOutcome.Charged charged -> {
+        if (!repo.markCharged(id, charged.source())) {
+          // the PENDING row is gone or moved: never keep a charge without a reading to answer
+          skipped(id, "charged");
+          refundOrphan(id);
+          throw new QaConflictException("reading_in_progress");
+        }
+      }
       case ConsumeOutcome.Refused refused -> {
-        repo.delete(id);
+        if (!repo.deleteUncharged(id)) {
+          skipped(id, "deleted");
+        }
         LOG.info("qa consume refused reading_id={} reason={}", id, refused.reason());
         throw new QaConflictException(refused.reason());
       }
+    }
+  }
+
+  /**
+   * Refunds a charge whose reading row could not be marked; logged for the operator if it fails.
+   */
+  private void refundOrphan(UUID id) {
+    try {
+      identity.refund(id);
+    } catch (RuntimeException e) {
+      LOG.error("qa charged reading without row, refund failed reading_id={}", id);
     }
   }
 
@@ -435,8 +458,11 @@ public class QaService {
   private QaOutcome answered(
       Prepared.Job job, String text, String provider, List<String> keys, boolean putCache) {
     UUID id = job.readingId();
-    store.answer(
-        id, job.seq(), cipher.encrypt(aad(id, job.seq()), text), provider, keys, clock.instant());
+    if (!store.answer(
+        id, job.seq(), cipher.encrypt(aad(id, job.seq()), text), provider, keys, clock.instant())) {
+      skipped(id, "ANSWERED");
+      return settled(job);
+    }
     if (putCache && job.cacheKey() != null) {
       try {
         cache.put(job.cacheKey(), cipher.encrypt(job.cacheKey(), text));
@@ -458,10 +484,16 @@ public class QaService {
     UUID id = job.readingId();
     LOG.info("qa model declined reading_id={} seq={} reason={}", id, job.seq(), reason);
     if (job.followUp()) {
-      repo.deleteMessage(id, job.seq());
+      if (!repo.deleteUnansweredMessage(id, job.seq())) {
+        skipped(id, "follow-up refused");
+        return settled(job);
+      }
       return refusedOutcome(id, reason);
     }
-    repo.markRefused(id, reason);
+    if (!repo.markRefused(id, reason)) {
+      skipped(id, "REFUSED");
+      return settled(job);
+    }
     if (job.kind() == QaKind.PAID) {
       refundRefused(id);
     }
@@ -470,32 +502,78 @@ public class QaService {
 
   private void refundRefused(UUID id) {
     try {
-      if (identity.refund(id) == RefundOutcome.REFUNDED) {
-        repo.recordRefund(id, clock.instant());
+      if (identity.refund(id) == RefundOutcome.REFUNDED
+          && !repo.recordRefund(id, clock.instant())) {
+        skipped(id, "refunded_at");
       }
     } catch (RuntimeException e) {
-      repo.markRefundPending(id, "refund_unavailable");
-      LOG.warn("qa refund pending reading_id={}", id);
+      if (repo.markRefundPending(id, "refund_unavailable")) {
+        LOG.warn("qa refund pending reading_id={}", id);
+      } else {
+        skipped(id, "REFUND_PENDING");
+      }
     }
   }
 
-  /** Model unavailable, two filter rejects, a full executor or an unexpected error. */
+  /**
+   * Model unavailable, two filter rejects, a full executor or an unexpected error. Each status
+   * change is a compare-and-set from {@code PENDING}: a reading that has already moved on
+   * (answered, refused, refunded) keeps its state and is reported as it is.
+   */
   private QaOutcome failure(Prepared.Job job, String code) {
     UUID id = job.readingId();
     if (job.followUp()) {
-      repo.deleteMessage(id, job.seq());
+      if (!repo.deleteUnansweredMessage(id, job.seq())) {
+        skipped(id, "follow-up failure");
+        return settled(job);
+      }
       LOG.info("qa follow-up failed reading_id={} seq={} error={}", id, job.seq(), code);
       return new Busy(frames.busy());
     }
     if (job.kind() == QaKind.PAID) {
       Instant until = job.createdAt().plus(settings.retryWindow());
-      repo.markRetrying(id, 1, clock.instant().plus(FIRST_RETRY), until, code);
+      if (!repo.markRetrying(id, 1, clock.instant().plus(FIRST_RETRY), until, code)) {
+        skipped(id, "RETRYING");
+        return settled(job);
+      }
       LOG.info("qa queued reading_id={} status=RETRYING error={}", id, code);
       return new Queued(id, until, frames.queued());
     }
-    repo.markFailed(id, code);
+    if (!repo.markFailed(id, code)) {
+      skipped(id, "FAILED");
+      return settled(job);
+    }
     LOG.info("qa free chat failed reading_id={} status=FAILED error={}", id, code);
     return new Busy(frames.busy());
+  }
+
+  private static void skipped(UUID id, String target) {
+    LOG.warn("qa status change skipped reading_id={} target={}", id, target);
+  }
+
+  /** What the user is told about a job whose reading was changed by someone else meanwhile. */
+  private QaOutcome settled(Prepared.Job job) {
+    UUID id = job.readingId();
+    Optional<QaReading> reading = repo.find(id);
+    Optional<StoredMessage> message =
+        repo.messages(id).stream().filter(m -> m.seq() == job.seq()).findFirst();
+    if (reading.isPresent() && message.isPresent() && message.get().answerEnc() != null) {
+      return new Answered(
+          id,
+          job.seq(),
+          cipher.decrypt(aad(id, job.seq()), message.get().answerEnc()),
+          disclaimer(),
+          job.followUpsLeft());
+    }
+    if (reading.isEmpty() || job.followUp()) {
+      return new Busy(frames.busy());
+    }
+    QaReading r = reading.get();
+    return switch (r.status()) {
+      case REFUSED -> refusedOutcome(id, RefusalReason.valueOf(r.refusalReason()));
+      case RETRYING, REFUND_PENDING, PENDING -> new Queued(id, r.retryUntil(), frames.queued());
+      default -> new Busy(frames.busy());
+    };
   }
 
   // ---------------------------------------------------------------- history

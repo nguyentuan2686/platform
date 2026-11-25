@@ -135,6 +135,16 @@ class QaControllerTest {
   }
 
   @Test
+  void bearer_with_non_token_characters_is_401() throws Exception {
+    mvc.perform(
+            get("/tuvi/qa/readings")
+                .header("X-Internal-Token", TOKEN)
+                .header("Authorization", "Bearer abcédef"))
+        .andExpect(status().isUnauthorized());
+    verifyNoInteractions(qa);
+  }
+
+  @Test
   void invalid_session_is_401() throws Exception {
     when(qa.list("sess-1")).thenThrow(new UnauthenticatedException());
 

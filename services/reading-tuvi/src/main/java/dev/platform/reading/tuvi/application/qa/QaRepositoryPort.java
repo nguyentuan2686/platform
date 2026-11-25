@@ -37,28 +37,35 @@ public interface QaRepositoryPort {
   /** {@code SELECT ... FOR UPDATE}: serialises follow-ups of one reading. */
   Optional<QaReading> findForUpdate(UUID id);
 
-  /** Deletes the reading and (cascade) its messages. */
-  void delete(UUID id);
+  /**
+   * Deletes a reading whose consume was refused; only while it is {@code PENDING} and uncharged.
+   * Cascades to its messages.
+   */
+  boolean deleteUncharged(UUID id);
 
-  void markCharged(UUID id, String creditSource);
+  // Status transitions: each is a compare-and-set on QaStatus.allowedFrom() of its target and
+  // returns false (changing nothing) when the reading is gone or in any other status.
 
-  void markRefundPending(UUID id, String lastError);
+  /** Records the credit source on a {@code PENDING} reading. */
+  boolean markCharged(UUID id, String creditSource);
+
+  boolean markRefundPending(UUID id, String lastError);
 
   /** Status {@code REFUSED} with the reason; the stored prompt is dropped. */
-  void markRefused(UUID id, RefusalReason reason);
+  boolean markRefused(UUID id, RefusalReason reason);
 
-  /** Sets {@code refunded_at} only (a refused reading keeps its status). */
-  void recordRefund(UUID id, Instant at);
+  /** Sets {@code refunded_at} once on a {@code REFUSED} reading (its status stays). */
+  boolean recordRefund(UUID id, Instant at);
 
-  void markRetrying(
+  boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError);
 
-  void markFailed(UUID id, String lastError);
+  boolean markFailed(UUID id, String lastError);
 
-  void markAnswered(UUID id, Instant at);
+  boolean markAnswered(UUID id, Instant at);
 
-  /** Stores the answer of one message and drops its prompt. */
-  void answerMessage(
+  /** Stores the answer of one unanswered message and drops its prompt. */
+  boolean answerMessage(
       UUID readingId,
       int seq,
       byte[] answerEnc,
@@ -74,7 +81,8 @@ public interface QaRepositoryPort {
   /** False when the client message id is already used. */
   boolean insertMessage(UUID readingId, NewMessage message, Instant at);
 
-  void deleteMessage(UUID readingId, int seq);
+  /** Deletes a follow-up that has no answer yet (an answered one is kept). */
+  boolean deleteUnansweredMessage(UUID readingId, int seq);
 
   /** FREE readings that are {@code PENDING} or {@code ANSWERED}, created at or after since. */
   int countFreeBySubject(UUID subjectId, Instant since);
@@ -93,8 +101,12 @@ public interface QaRepositoryPort {
 
   int countFollowUps(UUID readingId);
 
-  /** Any reading in {@code PENDING}, {@code RETRYING} or {@code REFUND_PENDING}. */
+  /** Any reading in {@link QaStatus#IN_PROGRESS}. */
   boolean anyInProgress(UUID subjectId);
 
-  void deleteBySubject(UUID subjectId);
+  /**
+   * Deletes the subject's readings except those in {@link QaStatus#IN_PROGRESS}, in one statement,
+   * so a question charged concurrently is never deleted. Returns the number deleted.
+   */
+  int deleteSettledBySubject(UUID subjectId);
 }
