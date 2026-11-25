@@ -25,6 +25,7 @@ jobs:
       notify: ${{ steps.filter.outputs.notify }}
       chart: ${{ steps.filter.outputs.chart }}
       reading: ${{ steps.filter.outputs.reading }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -61,6 +62,8 @@ jobs:
               - 'contracts/openapi/reading-tuvi.yaml'
               - 'contracts/knowledge/**'
               - 'libs/java/**'
+            web:
+              - 'services/web/**'
             root:
               - 'pom.xml'
               - '.github/**'
@@ -116,10 +119,23 @@ jobs:
       image: reading-tuvi
       publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_node-service.yml
+    with:
+      dir: services/web
+      image: web
+      dockerfile: services/web/Dockerfile
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, web]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

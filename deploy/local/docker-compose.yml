@@ -1,4 +1,4 @@
-# Local dev stack. Infra only by default; add `--profile app` to also run the services (order-svc, notify-svc, chart-svc, reading-tuvi).
+# Local dev stack. Infra only by default; add `--profile app` to also run the services (order-svc, notify-svc, chart-svc, reading-tuvi, web).
 name: platform-local
 services:
   postgres:
@@ -143,6 +143,26 @@ services:
     ports:
       - "127.0.0.1:${READING_TUVI_PORT:-8083}:8083"
     mem_limit: 384m
+
+  web:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/web/Dockerfile
+    image: web:local
+    depends_on:
+      chart-svc:
+        condition: service_started
+      reading-tuvi:
+        condition: service_started
+    environment:
+      PORT: "3000"
+      CHART_SVC_URL: http://chart-svc:8082
+      READING_URL: http://reading-tuvi:8083
+    ports:
+      # Host 3000 is taken by Grafana (lgtm), so web defaults to 3001.
+      - "127.0.0.1:${WEB_PORT:-3001}:3000"
+    mem_limit: 256m
 
 volumes:
   pgdata:

@@ -4,3 +4,5 @@ target/
 .superpowers
 .claude
 docs
+**/node_modules
+**/.next

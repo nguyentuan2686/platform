@@ -1,0 +1,25 @@
+{
+  "character": "LaoThienCo",
+  "school": "vn+vn-calendar;hour=local-standard;ty23=next-day;leap=split15",
+  "chartHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "knowledgeVersion": 1,
+  "sections": [
+    { "id": "greeting", "lines": ["Con đến rồi đấy à, lại đây ngồi, ta mở lá số của con ra xem nào.", "Cứ thong thả, ta kể từng trang một cho con nghe."] },
+    { "id": "menh", "title": "Cung Mệnh, gốc của lá số", "lines": ["Ở cung Mệnh, ta đọc tính nết bẩm sinh của con.", "Sống ngăn nắp, làm việc đúng mực và giữ lời là nết của con khi Thiên Tướng đắc địa ở Mệnh."] },
+    { "id": "than", "title": "Cung Thân, nếp sống về sau", "lines": ["Cung Thân là nếp sống con dần mang theo khi đã đi qua nhiều năm tháng."] },
+    { "id": "cuc", "title": "Cục, nhịp nền của lá số", "lines": ["Lá số của con thuộc Hỏa lục cục, như nhịp trống nền để các sao cất tiếng theo."] },
+    { "id": "PhuMau", "title": "Cung Phụ Mẫu", "lines": ["Cung Phụ Mẫu nói về cha mẹ, người bề trên và cái nếp nhà con được nuôi dạy."] },
+    { "id": "PhucDuc", "title": "Cung Phúc Đức", "lines": ["Phúc Đức là cung của đời sống tinh thần: con tìm niềm vui ở đâu, lòng có yên hay không."] },
+    { "id": "DienTrach", "title": "Cung Điền Trạch", "lines": ["Điền Trạch nói về nhà cửa, đất đai và chỗ con thấy mình an cư."] },
+    { "id": "QuanLoc", "title": "Cung Quan Lộc", "lines": ["Quan Lộc cho thấy con làm việc theo cách nào và đi được xa đến đâu."] },
+    { "id": "NoBoc", "title": "Cung Nô Bộc", "lines": ["Nô Bộc là cung của bạn bè, đồng nghiệp và những người con nhờ cậy."] },
+    { "id": "ThienDi", "title": "Cung Thiên Di", "lines": ["Thiên Di nói về con khi ra ngoài, nơi xa và những cơ hội từ bên ngoài."] },
+    { "id": "TatAch", "title": "Cung Tật Ách", "lines": ["Tật Ách là cung xem thể chất, ta chỉ nhắc con giữ gìn sức khỏe theo lẽ thường."] },
+    { "id": "TaiBach", "title": "Cung Tài Bạch", "lines": ["Tài Bạch nói về cách con kiếm tiền, giữ tiền và tiêu tiền."] },
+    { "id": "TuTuc", "title": "Cung Tử Tức", "lines": ["Tử Tức là cung con cái và những gì con gieo trồng cho mai sau."] },
+    { "id": "PhuThe", "title": "Cung Phu Thê", "lines": ["Phu Thê nói về duyên đôi lứa và cách con đối đãi người đầu ấp tay gối."] },
+    { "id": "HuynhDe", "title": "Cung Huynh Đệ", "lines": ["Huynh Đệ là anh chị em ruột thịt và những người bạn thân như ruột thịt."] },
+    { "id": "closing", "lines": ["Ta nói đến đây thôi, lá số chỉ là tấm bản đồ, con mới là người đi đường."] },
+    { "id": "disclaimer", "lines": ["Nội dung mang tính tham khảo văn hóa và giải trí."] }
+  ]
+}
