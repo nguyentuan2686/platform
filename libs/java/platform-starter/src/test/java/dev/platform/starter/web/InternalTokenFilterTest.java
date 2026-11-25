@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.platform.starter.testapp.TestApp;
+import java.net.URI;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +56,18 @@ class InternalTokenFilterTest {
     @Test
     void health_is_open_without_header() throws Exception {
       mvc.perform(get("/health/live")).andExpect(status().isOk());
+    }
+
+    @Test
+    void traversal_out_of_open_path_is_401() throws Exception {
+      for (String path :
+          new String[] {
+            "/health/../boom/not-found",
+            "/health/..;/boom/not-found",
+            "/health/%2e%2e/boom/not-found"
+          }) {
+        mvc.perform(get(URI.create(path))).andExpect(status().isUnauthorized());
+      }
     }
   }
 

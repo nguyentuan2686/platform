@@ -34,6 +34,15 @@ public class InternalTokenFilter extends OncePerRequestFilter {
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI().substring(request.getContextPath().length());
+    // Anything that could be normalized into a different path (dot segments, path params,
+    // encoded characters, backslashes, empty segments) is never treated as open.
+    if (path.contains("..")
+        || path.contains(";")
+        || path.contains("%")
+        || path.contains("\\")
+        || path.contains("//")) {
+      return false;
+    }
     return openPaths.stream().anyMatch(pattern -> matcher.match(pattern, path));
   }
 
