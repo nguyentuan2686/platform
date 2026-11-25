@@ -5,6 +5,7 @@ import dev.platform.identity.domain.Email;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 public class JdbcAccountRepository implements AccountRepositoryPort {
@@ -56,13 +57,18 @@ public class JdbcAccountRepository implements AccountRepositoryPort {
 
   @Override
   public boolean linkGoogleSub(UUID accountId, String sub) {
-    return jdbc.sql(
-                "update account set google_sub = :sub"
-                    + " where id = :id and google_sub is null"
-                    + " and not exists (select 1 from account where google_sub = :sub)")
-            .param("sub", sub)
-            .param("id", accountId)
-            .update()
-        == 1;
+    try {
+      return jdbc.sql(
+                  "update account set google_sub = :sub"
+                      + " where id = :id and google_sub is null"
+                      + " and not exists (select 1 from account where google_sub = :sub)")
+              .param("sub", sub)
+              .param("id", accountId)
+              .update()
+          == 1;
+    } catch (DuplicateKeyException e) {
+      // A concurrent login linked the same subject between our check and our update.
+      throw new dev.platform.identity.application.AccountConflictException();
+    }
   }
 }

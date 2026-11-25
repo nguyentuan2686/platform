@@ -42,7 +42,8 @@ class OidcLoginUseCaseTest {
             grants,
             clock,
             new SecureRandom(),
-            Set.of(REDIRECT));
+            Set.of(REDIRECT),
+            org.springframework.transaction.support.TransactionOperations.withoutTransaction());
     oidc.claims = claims("sub-1", "user@example.com", true, null);
   }
 
@@ -159,6 +160,28 @@ class OidcLoginUseCaseTest {
         .isInstanceOf(UnauthenticatedException.class);
     assertThat(accounts.byGoogleSub).doesNotContainKey("sub-1");
     assertThat(sessions.stored).isEmpty();
+  }
+
+  @Test
+  void concurrent_first_login_for_the_same_subject_is_retried_once_and_finds_the_winner() {
+    UUID winner = accounts.upsert(new Email("user@example.com"), T0).id();
+    accounts.conflictOnNextLink = winner;
+    String state = begin(Optional.empty());
+
+    LoginResult result = useCase.callback("c", state, Optional.empty());
+
+    assertThat(result.created()).isFalse();
+    assertThat(result.session().subject()).isEqualTo(new Subject.Account(winner));
+    assertThat(grants.bonuses).isEmpty();
+  }
+
+  @Test
+  void repeated_conflicts_end_as_unauthenticated() {
+    accounts.alwaysConflict = true;
+    String state = begin(Optional.empty());
+
+    assertThatThrownBy(() -> useCase.callback("c", state, Optional.empty()))
+        .isInstanceOf(UnauthenticatedException.class);
   }
 
   @Test

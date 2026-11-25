@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.transaction.support.TransactionOperations;
 
 /** Wires the framework-free application services to their adapters. */
 @Configuration(proxyBeanMethods = false)
@@ -105,6 +106,7 @@ class IdentityConfiguration {
       EntitlementGrantPort grants,
       Clock clock,
       SecureRandom random,
+      TransactionOperations tx,
       @Value("${identity.oidc.google.redirect-uris}") String redirectUris) {
     Set<URI> allowed =
         Arrays.stream(redirectUris.split(","))
@@ -113,7 +115,7 @@ class IdentityConfiguration {
             .map(URI::create)
             .collect(Collectors.toUnmodifiableSet());
     return new OidcLoginUseCase(
-        accounts, sessions, logins, oidc, merges, grants, clock, random, allowed);
+        accounts, sessions, logins, oidc, merges, grants, clock, random, allowed, tx);
   }
 
   @Bean

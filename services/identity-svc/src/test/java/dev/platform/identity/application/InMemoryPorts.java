@@ -42,6 +42,8 @@ final class InMemoryPorts {
     }
 
     final Map<String, UUID> byGoogleSub = new HashMap<>();
+    UUID conflictOnNextLink;
+    boolean alwaysConflict;
 
     @Override
     public Optional<UUID> findByGoogleSub(String sub) {
@@ -50,6 +52,14 @@ final class InMemoryPorts {
 
     @Override
     public boolean linkGoogleSub(UUID accountId, String sub) {
+      if (alwaysConflict) {
+        throw new AccountConflictException();
+      }
+      if (conflictOnNextLink != null) {
+        byGoogleSub.put(sub, conflictOnNextLink);
+        conflictOnNextLink = null;
+        throw new AccountConflictException();
+      }
       if (byGoogleSub.containsValue(accountId) || byGoogleSub.containsKey(sub)) {
         return false;
       }

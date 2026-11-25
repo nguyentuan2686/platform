@@ -12,7 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.random.RandomGenerator;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 /** Google login: authorization code with PKCE, reusing the magic-link account and session path. */
 public class OidcLoginUseCase {
@@ -28,6 +28,7 @@ public class OidcLoginUseCase {
   private final Clock clock;
   private final RandomGenerator random;
   private final Set<URI> allowedRedirects;
+  private final TransactionOperations tx;
 
   public OidcLoginUseCase(
       AccountRepositoryPort accounts,
@@ -38,7 +39,8 @@ public class OidcLoginUseCase {
       EntitlementGrantPort grants,
       Clock clock,
       RandomGenerator random,
-      Set<URI> allowedRedirects) {
+      Set<URI> allowedRedirects,
+      TransactionOperations tx) {
     this.accounts = accounts;
     this.sessions = sessions;
     this.logins = logins;
@@ -48,10 +50,14 @@ public class OidcLoginUseCase {
     this.clock = clock;
     this.random = random;
     this.allowedRedirects = Set.copyOf(allowedRedirects);
+    this.tx = tx;
   }
 
-  /** Records state, nonce and PKCE verifier and returns where to send the browser. */
-  @Transactional
+  /**
+   * Records state, nonce and PKCE verifier and returns where to send the browser. The provider is
+   * contacted (discovery) before, and the state saved in a short transaction after, never inside
+   * one.
+   */
   public AuthorizationStart start(URI redirectUri, Optional<UUID> guestId) {
     requireEnabled();
     if (redirectUri == null || !allowedRedirects.contains(redirectUri)) {
@@ -62,26 +68,42 @@ public class OidcLoginUseCase {
     String nonce = Pkce.randomValue(random);
     String verifier = Pkce.randomValue(random);
     URI url = oidc.authorizationUri(state, nonce, Pkce.challenge(verifier), redirectUri);
-    logins.save(
+    PendingOidcLogin pending =
         new PendingOidcLogin(
-            state, nonce, verifier, redirectUri, guestId.orElse(null), now.plus(STATE_TTL)));
+            state, nonce, verifier, redirectUri, guestId.orElse(null), now.plus(STATE_TTL));
+    tx.executeWithoutResult(status -> logins.save(pending));
     return new AuthorizationStart(url, state);
   }
 
   /**
-   * Completes the login. A failed attempt still burns the state (nothing is written before the
-   * token checks pass), so a state can never be tried twice.
+   * Completes the login in three steps, none holding a transaction across the provider call: (1)
+   * consume the state in its own committed transaction, so it is burned whatever happens next; (2)
+   * exchange the code and validate the ID token with no transaction; (3) find, create or link the
+   * account and issue the session in one short transaction.
    */
-  @Transactional(noRollbackFor = UnauthenticatedException.class)
   public LoginResult callback(String code, String state, Optional<UUID> guestId) {
     requireEnabled();
     Instant now = clock.instant();
-    PendingOidcLogin login = logins.consume(state, now).orElseThrow(UnauthenticatedException::new);
+    PendingOidcLogin login =
+        tx.execute(status -> logins.consume(state, now)).orElseThrow(UnauthenticatedException::new);
     IdTokenClaims claims = oidc.exchange(code, login.codeVerifier(), login.redirectUri());
     if (!sameSecret(login.nonce(), claims.nonce()) || !claims.emailVerified()) {
       throw new UnauthenticatedException();
     }
+    try {
+      return tx.execute(status -> signIn(claims, login, guestId, now));
+    } catch (AccountConflictException first) {
+      // A concurrent first login for the same Google subject won; look it up again, once.
+      try {
+        return tx.execute(status -> signIn(claims, login, guestId, now));
+      } catch (AccountConflictException second) {
+        throw new UnauthenticatedException();
+      }
+    }
+  }
 
+  private LoginResult signIn(
+      IdTokenClaims claims, PendingOidcLogin login, Optional<UUID> guestId, Instant now) {
     UUID accountId;
     boolean created = false;
     Optional<UUID> bySub = accounts.findByGoogleSub(claims.subject());
