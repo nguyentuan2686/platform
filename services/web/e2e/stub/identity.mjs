@@ -13,7 +13,7 @@ const sessions = new Map();
 const profiles = new Map();
 /** email -> { account_id, credits } */
 const accounts = new Map();
-/** magic token -> { email, used } */
+/** magic token -> { email, used, guest_id } (the guest that asked, merged at verify like identity-svc) */
 const links = new Map();
 let lastMagicToken = null;
 
@@ -65,15 +65,17 @@ function verify(req, res, body, send) {
     account = { account_id: randomUUID(), credits: 1 }; // signup bonus
     accounts.set(link.email, account);
   }
-  // A guest bearer: its profile follows the user into the account (when the account has none).
+  // The guest bearer at verify, else the guest that asked for the link: its profile follows the user
+  // into the account (when the account has none), as identity-svc does.
   const guestToken = bearer(req);
   const guest = guestToken ? sessions.get(guestToken) : undefined;
-  if (guest?.kind === "guest") {
-    const p = profiles.get(guest.guest_id);
+  const guestId = guest?.kind === "guest" ? guest.guest_id : link.guest_id;
+  if (guestId) {
+    const p = profiles.get(guestId);
     if (p && !profiles.has(account.account_id)) profiles.set(account.account_id, p);
-    profiles.delete(guest.guest_id);
-    sessions.delete(guestToken);
+    profiles.delete(guestId);
   }
+  if (guest?.kind === "guest") sessions.delete(guestToken);
   const token = newToken();
   sessions.set(token, { kind: "account", account_id: account.account_id, email_masked: mask(link.email) });
   send(res, 200, {
@@ -109,7 +111,8 @@ export function handle(req, res, body, send) {
       return true;
     }
     lastMagicToken = newToken();
-    links.set(lastMagicToken, { email, used: false });
+    const asker = sessions.get(bearer(req) ?? "");
+    links.set(lastMagicToken, { email, used: false, guest_id: asker?.kind === "guest" ? asker.guest_id : null });
     send(res, 202, { status: "sent_if_allowed" });
     return true;
   }

@@ -1,9 +1,9 @@
 import { googleAuthorization } from "@/lib/identity";
 import { GOOGLE_ERROR_PATH, googleRedirectUri, notFound, seeOther } from "@/lib/googleLogin";
 import { cfg } from "@/lib/config";
-import { rememberNext, setOidcState } from "@/lib/loginCookies";
+import { bindLoginToSession, rememberNext, setOidcState } from "@/lib/loginCookies";
 import { assertSameOrigin, forbidden, ForbiddenOrigin } from "@/lib/sameOrigin";
-import { loginGuest } from "@/lib/session";
+import { loginGuest, readSessionToken } from "@/lib/session";
 import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
@@ -30,12 +30,14 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   let url: URL;
+  let session: string | undefined;
   try {
     const guest = await loginGuest({ create: true });
     const auth = await googleAuthorization(googleRedirectUri(), guest?.token);
     url = new URL(auth.authorization_url);
     if (url.protocol !== "https:") return seeOther(GOOGLE_ERROR_PATH);
     await setOidcState(auth.state);
+    session = guest?.token ?? (await readSessionToken());
   } catch (e) {
     if (e instanceof UpstreamError || e instanceof UpstreamProblem || e instanceof UpstreamValidation) {
       return seeOther(GOOGLE_ERROR_PATH);
@@ -43,6 +45,7 @@ export async function POST(req: Request): Promise<Response> {
     if (e instanceof TypeError && /URL/i.test(e.message)) return seeOther(GOOGLE_ERROR_PATH);
     throw e;
   }
+  if (session) await bindLoginToSession(session);
   await rememberNext(next);
   return seeOther(url.toString());
 }

@@ -3,8 +3,8 @@ import { cfg } from "@/lib/config";
 import { googleCallback } from "@/lib/identity";
 import { GOOGLE_ERROR_PATH, notFound, seeOther } from "@/lib/googleLogin";
 import { completeLogin } from "@/lib/login";
-import { takeNext, takeOidcState } from "@/lib/loginCookies";
-import { loginGuest } from "@/lib/session";
+import { takeLoginBinding, takeNext, takeOidcState } from "@/lib/loginCookies";
+import { loginGuest, readSessionToken } from "@/lib/session";
 import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +33,10 @@ export async function GET(req: Request): Promise<Response> {
   }
   try {
     const guest = await loginGuest({ create: false });
-    const login = await googleCallback(code, state, guest?.token);
-    await completeLogin(login, guest);
+    // Merge only into a login this browser started with this same session (tv_login, set at start).
+    const bound = await takeLoginBinding(guest?.token ?? (await readSessionToken()));
+    const login = await googleCallback(code, state, bound ? guest?.token : undefined);
+    await completeLogin(login, bound ? guest : null);
   } catch (e) {
     if (e instanceof UpstreamError || e instanceof UpstreamProblem || e instanceof UpstreamValidation) {
       return seeOther(GOOGLE_ERROR_PATH);

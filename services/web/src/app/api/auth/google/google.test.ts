@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   loginGuest: vi.fn(),
+  readSessionToken: vi.fn(),
+  bindLoginToSession: vi.fn(),
+  takeLoginBinding: vi.fn(),
   setSessionCookie: vi.fn(),
   rememberNext: vi.fn(),
   takeNext: vi.fn(),
@@ -14,6 +17,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock("@/lib/session", () => ({
   loginGuest: (o: unknown) => m.loginGuest(o),
+  readSessionToken: () => m.readSessionToken(),
   setSessionCookie: (t: string, e: string) => m.setSessionCookie(t, e),
 }));
 vi.mock("@/lib/loginCookies", () => ({
@@ -21,6 +25,8 @@ vi.mock("@/lib/loginCookies", () => ({
   takeNext: () => m.takeNext(),
   setOidcState: (s: string) => m.setOidcState(s),
   takeOidcState: () => m.takeOidcState(),
+  bindLoginToSession: (s: string) => m.bindLoginToSession(s),
+  takeLoginBinding: (s?: string) => m.takeLoginBinding(s),
 }));
 vi.mock("@/lib/identity", () => ({
   googleAuthorization: (r: string, b?: string) => m.googleAuthorization(r, b),
@@ -57,6 +63,8 @@ beforeEach(() => {
   m.mergeGuest.mockResolvedValue({ moved: 0 });
   m.takeNext.mockResolvedValue("/vi/mua");
   m.takeOidcState.mockResolvedValue(STATE);
+  m.readSessionToken.mockResolvedValue("guest-token");
+  m.takeLoginBinding.mockResolvedValue(true);
   out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
 });
 afterEach(() => {
@@ -93,6 +101,7 @@ describe("POST /api/auth/google", () => {
     expect(m.googleAuthorization).toHaveBeenCalledWith(`${ORIGIN}/vi/dang-nhap/google`, "guest-token");
     expect(m.setOidcState).toHaveBeenCalledWith(STATE);
     expect(m.rememberNext).toHaveBeenCalledWith("/vi/mua");
+    expect(m.bindLoginToSession).toHaveBeenCalledWith("guest-token");
   });
 
   it("sends the user back to the login page when identity fails", async () => {
@@ -140,8 +149,26 @@ describe("GET /vi/dang-nhap/google (callback)", () => {
     expect(m.loginGuest).toHaveBeenCalledWith({ create: false });
     expect(m.setSessionCookie).toHaveBeenCalledWith("acc-session", "2099-01-01T00:00:00Z");
     expect(m.mergeGuest).toHaveBeenCalledWith("guest-1", "acc-1");
+    expect(m.takeLoginBinding).toHaveBeenCalledWith("guest-token");
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(`${ORIGIN}/vi/mua`);
+  });
+
+  it("a login not started with this session (binding missing or mismatched): no guest bearer, no merge", async () => {
+    m.takeLoginBinding.mockResolvedValue(false);
+    const res = await GET(callback(`code=the-code&state=${STATE}`));
+    expect(m.googleCallback).toHaveBeenCalledWith("the-code", STATE, undefined);
+    expect(m.mergeGuest).not.toHaveBeenCalled();
+    expect(m.setSessionCookie).toHaveBeenCalledWith("acc-session", "2099-01-01T00:00:00Z");
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/vi/mua`);
+  });
+
+  it("without the start cookie: no upstream call and no merge", async () => {
+    m.takeOidcState.mockResolvedValue(undefined);
+    const res = await GET(callback(`code=c&state=${STATE}`));
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/vi/dang-nhap?loi=google`);
+    expect(m.googleCallback).not.toHaveBeenCalled();
+    expect(m.mergeGuest).not.toHaveBeenCalled();
   });
 
   it.each([new UpstreamProblem(401, undefined, "identity-svc"), new UpstreamError()])(

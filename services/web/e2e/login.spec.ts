@@ -63,8 +63,56 @@ test("login without a guest session does not merge; next cannot leave the site",
   await context.clearCookies(); // the link opened in another browser
   await page.goto(`/vi/dang-nhap/xac-nhan?token=${await lastMagicToken()}`);
   await page.getByRole("button", { name: "Đăng nhập" }).click();
+  await expect(page.getByText(/Con đang đăng nhập vào tài khoản a\*\*\*@e\*\*\*\.com/)).toBeVisible();
+  await page.getByRole("button", { name: "Vào tài khoản này" }).click();
   await page.waitForURL((u) => u.pathname === "/vi" || u.pathname === "/vi/la-so");
+  await expect(page.locator(".balance-chip")).toHaveText("Còn 1 lượt");
   expect(await stubCalls(READING)).not.toContain("POST /internal/qa/merge");
+});
+
+test.describe("a link this browser did not ask for (someone else's)", () => {
+  const OTHER = "other.person@example.org";
+  const OTHER_MASKED = "o***@e***.org";
+
+  async function foreignLink(browser: import("@playwright/test").Browser): Promise<string> {
+    const other = await browser.newContext();
+    await requestLink(await other.newPage(), undefined, OTHER);
+    await other.close();
+    return lastMagicToken();
+  }
+
+  test("guest confirms → interstitial names the account, nothing merged; cancel keeps the guest's chart", async ({
+    page,
+    browser,
+  }) => {
+    await castChart(page);
+    const token = await foreignLink(browser);
+    await page.goto(`/vi/dang-nhap/xac-nhan?token=${token}`);
+    await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect(page.getByText(`Con đang đăng nhập vào tài khoản ${OTHER_MASKED}.`, { exact: false })).toBeVisible();
+    await expect(page.getByText("Lá số và câu hỏi đang có trên máy này sẽ không được chuyển.", { exact: false })).toBeVisible();
+    expect(await stubCalls(READING)).not.toContain("POST /internal/qa/merge");
+
+    await page.getByRole("button", { name: "Không, hủy" }).click();
+    await page.waitForURL((u) => u.pathname === "/vi");
+    expect(await stubCalls(IDENTITY)).toContain("DELETE /sessions/current"); // the opened session is revoked
+    await page.goto("/vi/la-so");
+    await expect(page.locator(".board a.cell")).toHaveCount(12); // still the guest, chart intact
+    await expect(page.locator(".balance-chip")).toHaveText("Đăng nhập");
+  });
+
+  test("accepting logs into that account without carrying the guest's chart or questions", async ({ page, browser }) => {
+    await castChart(page);
+    const token = await foreignLink(browser);
+    await page.goto(`/vi/dang-nhap/xac-nhan?token=${token}`);
+    await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await page.getByRole("button", { name: "Vào tài khoản này" }).click();
+    await page.waitForURL((u) => u.pathname === "/vi" || u.pathname === "/vi/la-so");
+    expect(await stubCalls(READING)).not.toContain("POST /internal/qa/merge");
+    await page.goto("/vi/tai-khoan");
+    await expect(page.getByText(OTHER_MASKED)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Lập lá số" })).toBeVisible(); // the chart did not move
+  });
 });
 
 test("an invalid email shows the field error", async ({ page }) => {

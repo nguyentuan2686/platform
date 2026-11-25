@@ -209,3 +209,5 @@ a.balance-chip { text-decoration: none; }
 .confirm-dialog h2 { margin: 0 0 8px; font-size: 22px; }
 .confirm-dialog p { margin: 0 0 14px; font-size: 14px; line-height: 1.6; }
 .dialog-actions { display: flex; gap: 10px; }
+.interstitial-text { margin: 0 0 14px; font-size: 14.5px; line-height: 1.65; color: var(--paper); overflow-wrap: anywhere; }
+.interstitial-cancel { margin: 10px 0 0; }
