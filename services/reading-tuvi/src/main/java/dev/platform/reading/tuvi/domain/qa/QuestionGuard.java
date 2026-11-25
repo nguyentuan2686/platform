@@ -79,7 +79,9 @@ public final class QuestionGuard {
   private static void selfHarm() {
     List<String> anyFolded =
         List.of(
-            "tu sat",
+            // bare "tu sat" would also be the stars "tứ sát"/"Tử Sát"; only intent phrasings
+            "(?:muon|dinh|nghi den|nghi toi|se|co nen) tu sat",
+            "tu sat cho xong",
             "muon chet",
             "ket lieu",
             "khong muon song",
@@ -295,7 +297,7 @@ public final class QuestionGuard {
                 + "|lenh)",
             "loi nhac he thong",
             "tiet lo (?:prompt|huong dan|loi nhac)",
-            "dong vai",
+            "dong vai(?! tro)",
             "nhap vai",
             "gia vo la",
             "ban la mot",
@@ -308,7 +310,7 @@ public final class QuestionGuard {
                 + "|lệnh)",
             "lời nhắc hệ thống",
             "tiết lộ (?:prompt|hướng dẫn|lời nhắc)",
-            "đóng vai",
+            "đóng vai(?! trò)",
             "nhập vai",
             "giả vờ là",
             "bạn là một",
