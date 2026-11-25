@@ -12,14 +12,14 @@ describe("Board", () => {
     const links = container.querySelectorAll("a.cell");
     expect(links).toHaveLength(12);
     for (const p of chart.palaces) {
-      expect(container.querySelector(`a[href="#cung-${p.key}"]`)).not.toBeNull();
+      expect(container.querySelector(`a[href="${p.key === "Menh" ? "#menh" : `#cung-${p.key}`}"]`)).not.toBeNull();
     }
   });
 
   it("places palaces on the traditional grid", () => {
     const { container } = render(<Board chart={chart} />);
     const menh = chart.palaces.find((p) => p.key === "Menh")!;
-    const el = container.querySelector(`a[href="#cung-Menh"]`) as HTMLElement;
+    const el = container.querySelector(`a[href="#menh"]`) as HTMLElement;
     expect(menh).toBeTruthy();
     expect(el.style.gridRow).toMatch(/^\d/);
     const si = chart.palaces.find((p) => p.branch === "Si")!;
@@ -57,7 +57,7 @@ describe("Board", () => {
 
   it("outlines Mệnh and marks Thân", () => {
     const { container } = render(<Board chart={chart} />);
-    const menh = container.querySelector(`a[href="#cung-Menh"]`) as HTMLElement;
+    const menh = container.querySelector(`a[href="#menh"]`) as HTMLElement;
     expect(menh.className).toContain("menh");
     const bodyKey = chart.palaces.find((p) => p.isBody)!.key;
     const body = container.querySelector(`a[href="#cung-${bodyKey}"]`) as HTMLElement;

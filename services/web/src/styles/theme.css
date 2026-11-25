@@ -112,3 +112,43 @@ html { scroll-padding-top: 12px; }
   .cell .pn { font-size: 9px; }
   .center .meta, .center .cuc { font-size: 9.5px; }
 }
+
+/* ---------- tu vi: Lao Thien Co dialogue, ink, seal, Hom nay ---------- */
+.today { margin: 0 0 22px; padding: 14px 14px 12px; border: 1px solid rgba(200, 160, 74, 0.45); border-radius: var(--radius-lg); background: linear-gradient(180deg, #2a110d, #200c09); }
+.today h2 { margin: 0 0 8px; font-size: 22px; }
+.today-lunar { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); }
+.today-say { margin: 8px 0; font-size: 14px; line-height: 1.65; color: var(--paper); }
+.today-areas { list-style: none; margin: 8px 0; padding: 0; }
+.today-areas li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 0; border-bottom: 1px solid color-mix(in srgb, var(--metal) 18%, transparent); }
+.today-areas .area-name { color: var(--metal-soft); font-family: var(--plain); font-size: 14px; }
+.today-areas .level { justify-self: end; font-size: 12px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--metal); color: var(--metal-soft); }
+.today-areas .level[data-level="Thuan"] { border-color: var(--good); color: #9fd1b5; }
+.today-areas .level[data-level="LuuY"] { border-color: #e0685f; color: #f0a39b; }
+.today-areas .area-line { grid-column: 1 / -1; font-size: 13.5px; line-height: 1.55; color: var(--muted); }
+
+.reading { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px; }
+.reading-sage { flex: none; position: sticky; top: 12px; width: 58px; height: auto; }
+.reading-body { flex: 1; min-width: 0; }
+.bubble { position: relative; padding: 14px 14px 22px; color: var(--ink); font-size: 14.5px; line-height: 1.7; background: linear-gradient(180deg, #f3e8cf, #eadbb8); border-radius: 2px 10px 10px 10px; overflow-wrap: anywhere; }
+.bubble .say { scroll-margin-top: 12px; }
+.bubble .say + .say { margin-top: 14px; }
+.bubble p { margin: 0 0 9px; }
+.bubble .say-title { margin: 0 0 6px; font-family: var(--display); font-weight: 700; font-size: 17px; line-height: 1.3; color: var(--accent); }
+.w { display: inline-block; opacity: 0; filter: blur(3px); color: var(--accent); transform: scale(1.08); transition: opacity 0.5s ease-out, filter 0.7s ease-out, color 0.9s ease-out, transform 0.5s ease-out; }
+.w[data-on="true"] { opacity: 1; filter: none; color: inherit; transform: none; }
+.seal-stamp { position: absolute; right: -6px; bottom: -10px; display: grid; place-items: center; width: 34px; height: 34px; background: var(--accent); color: #ffe9c8; font-family: var(--glyph); font-size: 21px; border-radius: 3px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); transform: rotate(-6deg); }
+.show-all { position: sticky; bottom: 12px; width: auto; margin: 12px 0 0 auto; padding: 9px 16px; font-size: 13.5px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }
+.disclaimer { margin-top: 22px; }
+.disclaimer p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+@keyframes stamp { 0% { opacity: 0; transform: scale(2.3) rotate(-14deg); } 75% { opacity: 1; transform: scale(0.9) rotate(-5deg); } 100% { opacity: 1; transform: scale(1) rotate(-6deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  .seal-stamp { animation: stamp 0.4s both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .w { opacity: 1; filter: none; color: inherit; transform: none; transition: none; }
+}
+@media (max-width: 400px) {
+  .reading-sage { width: 46px; }
+  .reading { gap: 8px; }
+  .bubble { padding: 12px 11px 20px; }
+}

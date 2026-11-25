@@ -20,7 +20,7 @@ function Cell({ p }: { p: Palace }) {
   const style: CSSProperties = { gridRow: String(row), gridColumn: String(col) };
   return (
     <a
-      href={`#cung-${p.key}`}
+      href={p.key === "Menh" ? "#menh" : `#cung-${p.key}`}
       className={`cell${p.key === "Menh" ? " menh" : ""}`}
       style={style}
       aria-label={`Cung ${p.nameVi}, ${canChi(p.stem, p.branch)}`}
