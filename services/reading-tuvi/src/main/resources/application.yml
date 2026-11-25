@@ -11,9 +11,30 @@ spring:
   flyway:
     locations: classpath:db/migration
 
-# chart-svc base URL, used by the readings adapter (later task).
+platform:
+  # Empty = internal-token filter off (local use only); set INTERNAL_API_TOKEN everywhere else.
+  # Also sent to identity-svc on every call.
+  internal-token: ${INTERNAL_API_TOKEN:}
+  # basic/today stay open for the web; /tuvi/qa/** requires the token.
+  internal-token.open-paths: /health/**,/tuvi/readings/**
+
+# chart-svc base URL, used by the readings adapter.
 chart-svc:
   url: ${CHART_SVC_URL:http://localhost:8082}
+
+# identity-svc: sessions, profile and credits for Q&A.
+identity-svc:
+  url: ${IDENTITY_SVC_URL:http://localhost:8084}
+
+qa:
+  # base64 of 32 bytes (AES-256) for question/answer text; startup fails when missing or wrong.
+  enc-key: ${QA_ENC_KEY:}
+  # 0 disables free chat.
+  free-daily-per-subject: ${QA_FREE_DAILY_PER_SUBJECT:3}
+  free-global-daily-cap: ${QA_FREE_GLOBAL_DAILY_CAP:500}
+  retry-window: ${QA_RETRY_WINDOW:PT24H}
+  workers: ${QA_WORKERS:2}
+  stream-timeout: ${QA_STREAM_TIMEOUT:PT90S}
 
 # OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
 

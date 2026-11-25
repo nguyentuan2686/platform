@@ -37,7 +37,10 @@ class HealthIT {
   private HttpResponse<String> get(String path) throws Exception {
     return HttpClient.newHttpClient()
         .send(
-            HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET().build(),
+            HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("X-Internal-Token", "local-test-internal-token")
+                .GET()
+                .build(),
             HttpResponse.BodyHandlers.ofString());
   }
 

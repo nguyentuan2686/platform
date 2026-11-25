@@ -2,6 +2,11 @@ package dev.platform.reading.tuvi.adapter.in.web;
 
 import dev.platform.reading.tuvi.application.UpstreamUnavailableException;
 import dev.platform.reading.tuvi.application.UpstreamValidationException;
+import dev.platform.reading.tuvi.application.qa.AccountRequiredException;
+import dev.platform.reading.tuvi.application.qa.QaConflictException;
+import dev.platform.reading.tuvi.application.qa.QaInvalidRequestException;
+import dev.platform.reading.tuvi.application.qa.QaNotFoundException;
+import dev.platform.reading.tuvi.application.qa.UnauthenticatedException;
 import dev.platform.starter.web.PlatformProblemHandler;
 import java.net.URI;
 import java.util.List;
@@ -27,6 +32,9 @@ import org.springframework.web.context.request.WebRequest;
 public class ReadingExceptionHandler {
 
   static final URI UPSTREAM_UNAVAILABLE = URI.create("urn:problem:upstream-unavailable");
+  static final URI UNAUTHENTICATED = URI.create("urn:problem:unauthenticated");
+  static final URI FORBIDDEN = URI.create("urn:problem:forbidden");
+  static final URI CONFLICT = URI.create("urn:problem:conflict");
 
   private final PlatformProblemHandler platform;
 
@@ -53,12 +61,60 @@ public class ReadingExceptionHandler {
   @ExceptionHandler(UpstreamUnavailableException.class)
   ResponseEntity<Object> upstreamUnavailable(UpstreamUnavailableException ex, WebRequest request)
       throws Exception {
-    ProblemDetail detail =
-        ProblemDetail.forStatusAndDetail(
-            HttpStatus.SERVICE_UNAVAILABLE, "Chart service unavailable");
+    String text =
+        "identity".equals(ex.upstream())
+            ? "Identity service unavailable"
+            : "Chart service unavailable";
+    ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, text);
     detail.setType(UPSTREAM_UNAVAILABLE);
-    return platform.handleException(
-        new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE, detail, null), request);
+    return respond(HttpStatus.SERVICE_UNAVAILABLE, detail, request);
+  }
+
+  @ExceptionHandler(QaInvalidRequestException.class)
+  ResponseEntity<Object> invalidQa(QaInvalidRequestException ex, WebRequest request)
+      throws Exception {
+    return validation(
+        List.of(Map.of("field", ex.field(), "message", ex.field() + " is invalid")), request);
+  }
+
+  @ExceptionHandler(UnauthenticatedException.class)
+  ResponseEntity<Object> unauthenticated(UnauthenticatedException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "Authentication required");
+    detail.setType(UNAUTHENTICATED);
+    return respond(HttpStatus.UNAUTHORIZED, detail, request);
+  }
+
+  @ExceptionHandler(AccountRequiredException.class)
+  ResponseEntity<Object> accountRequired(AccountRequiredException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "An account is required");
+    detail.setType(FORBIDDEN);
+    detail.setProperty("reason", "account_required");
+    return respond(HttpStatus.FORBIDDEN, detail, request);
+  }
+
+  @ExceptionHandler(QaConflictException.class)
+  ResponseEntity<Object> conflict(QaConflictException ex, WebRequest request) throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The request conflicts");
+    detail.setType(CONFLICT);
+    detail.setProperty("reason", ex.reason());
+    return respond(HttpStatus.CONFLICT, detail, request);
+  }
+
+  @ExceptionHandler(QaNotFoundException.class)
+  ResponseEntity<Object> notFound(QaNotFoundException ex, WebRequest request) throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Reading not found");
+    return respond(HttpStatus.NOT_FOUND, detail, request);
+  }
+
+  private ResponseEntity<Object> respond(
+      HttpStatus status, ProblemDetail detail, WebRequest request) throws Exception {
+    return platform.handleException(new ErrorResponseException(status, detail, null), request);
   }
 
   private ResponseEntity<Object> validation(List<Map<String, String>> errors, WebRequest request)
