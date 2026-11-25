@@ -3,6 +3,7 @@ package dev.platform.reading.tuvi;
 import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.SpecificationVersion;
+import dev.platform.reading.tuvi.domain.SafetyLexicon;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,25 +24,7 @@ import tools.jackson.databind.JsonNode;
  */
 final class QualityRules {
 
-  private static final Set<String> BANNED =
-      Set.of(
-          "chết",
-          "tử vong",
-          "tai nạn",
-          "ung thư",
-          "bệnh nặng",
-          "giải hạn",
-          "cúng",
-          "bùa",
-          "yểm",
-          "phá sản",
-          "ly hôn",
-          "tuyệt tự",
-          "đoản mệnh",
-          "yểu",
-          "suốt đời",
-          "chắc chắn sẽ",
-          "không tránh khỏi");
+  private static final Set<String> BANNED = SafetyLexicon.BANNED;
 
   private static final Pattern SENTENCE_END = Pattern.compile("[.!?…]+(\\s+|$)");
   private static final Pattern DIACRITIC =
@@ -115,7 +98,7 @@ final class QualityRules {
     if (!DIACRITIC.matcher(content).find()) {
       out.add(v("diacritic", key));
     }
-    if (content.codePoints().anyMatch(QualityRules::isCjk)) {
+    if (content.codePoints().anyMatch(SafetyLexicon::isCjk)) {
       out.add(v("cjk", key));
     }
     if (BANNED.stream().anyMatch(lower::contains)) {
@@ -230,14 +213,6 @@ final class QualityRules {
         .filter(
             r -> Normalizer.normalize(str(r, "content"), Normalizer.Form.NFC).startsWith(prefix))
         .count();
-  }
-
-  private static boolean isCjk(int cp) {
-    return (cp >= 0x3000 && cp <= 0x303F) // CJK symbols and punctuation
-        || (cp >= 0x3400 && cp <= 0x9FFF) // CJK ideographs (ext. A and unified)
-        || (cp >= 0xF900 && cp <= 0xFAFF) // compatibility ideographs
-        || (cp >= 0xFF00 && cp <= 0xFFEF) // halfwidth and fullwidth forms
-        || (cp >= 0x20000 && cp <= 0x2FA1F); // supplementary ideographs
   }
 
   private static String str(JsonNode r, String field) {

@@ -36,7 +36,19 @@ class KnowledgeFilesTest {
           "closing",
           "disclaimer",
           "today_opening",
-          "today_closing");
+          "today_closing",
+          "qa_disclaimer",
+          "qa_refuse_medical",
+          "qa_refuse_legal",
+          "qa_refuse_finance",
+          "qa_refuse_gambling",
+          "qa_refuse_death",
+          "qa_refuse_selfharm",
+          "qa_refuse_offtopic",
+          "qa_insufficient",
+          "qa_queued",
+          "qa_busy",
+          "qa_refunded");
 
   private static Schema schema() throws IOException {
     Path file = ROOT.resolve("contracts").resolve("knowledge").resolve("tuvi-record.schema.json");
@@ -90,7 +102,7 @@ class KnowledgeFilesTest {
     assertThat(keys)
         .containsExactlyInAnyOrderElementsOf(
             FRAME_IDS.stream().map(i -> "tuvi:frame=" + i).toList());
-    assertThat(keys).hasSize(12);
+    assertThat(keys).hasSize(24);
     for (String line : Files.readAllLines(KNOWLEDGE.resolve("frames.vi.jsonl"))) {
       assertThat(JsonMapper.shared().readTree(line).get("status").stringValue())
           .as(line)

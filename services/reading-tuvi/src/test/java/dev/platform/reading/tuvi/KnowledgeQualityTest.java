@@ -120,6 +120,46 @@ class KnowledgeQualityTest {
     assertThat(QualityRules.missingHeadings(all, SOURCES)).isEmpty();
   }
 
+  /**
+   * The Q&A frames (Plan F1.4) are shown verbatim, so they pass the content rules too. The frames
+   * file is outside the doctrine gate; its {@code original:frame} source ref is the only exemption.
+   */
+  @Test
+  void qa_frames_pass_the_content_rules() throws IOException {
+    List<JsonNode> qa =
+        read(KNOWLEDGE.resolve("frames.vi.jsonl")).stream()
+            .filter(r -> r.get("key").stringValue().startsWith("tuvi:frame=qa_"))
+            .toList();
+    assertThat(qa)
+        .extracting(r -> r.get("key").stringValue().substring("tuvi:frame=".length()))
+        .containsExactlyInAnyOrder(
+            "qa_disclaimer",
+            "qa_refuse_medical",
+            "qa_refuse_legal",
+            "qa_refuse_finance",
+            "qa_refuse_gambling",
+            "qa_refuse_death",
+            "qa_refuse_selfharm",
+            "qa_refuse_offtopic",
+            "qa_insufficient",
+            "qa_queued",
+            "qa_busy",
+            "qa_refunded");
+    for (JsonNode r : qa) {
+      assertThat(r.get("source_ref").stringValue()).isEqualTo("original:frame");
+      assertThat(r.get("status").stringValue()).isEqualTo("approved");
+    }
+    assertThat(QualityRules.checkAll(qa)).allMatch(v -> v.startsWith("rule=source_ref "));
+    assertThat(
+            qa.stream()
+                .filter(r -> r.get("key").stringValue().equals("tuvi:frame=qa_disclaimer"))
+                .map(r -> r.get("content").stringValue()))
+        .containsExactly(
+            "Lời ta nói là nội dung do AI biên soạn từ kho tư liệu cổ, mang tính tham khảo và"
+                + " giải trí thôi con nhé. Việc sức khỏe, pháp lý hay tiền bạc lớn, con hãy hỏi"
+                + " người có chuyên môn.");
+  }
+
   @Test
   void p2_files_rarely_open_with_neu() throws IOException {
     if (!Files.isDirectory(KNOWLEDGE.resolve("doctrine"))) {
