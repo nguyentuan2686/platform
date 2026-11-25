@@ -5,7 +5,16 @@ import { parseBirthForm, type FormErrors } from "@/lib/birthForm";
 import { birthStore } from "@/lib/birthStore";
 import { getChart, UpstreamError, UpstreamValidation } from "@/lib/upstream";
 
-export type FormState = { errors: Partial<FormErrors>; unavailable?: boolean } | null;
+export type FormValues = { date: string; time: string; gender: string; zone: string };
+export type FormState = { errors: Partial<FormErrors>; unavailable?: boolean; values?: FormValues } | null;
+
+function submitted(fd: FormData): FormValues {
+  const s = (k: string) => {
+    const v = fd.get(k);
+    return typeof v === "string" ? v : "";
+  };
+  return { date: s("date"), time: s("time"), gender: s("gender"), zone: s("zone") };
+}
 
 const FIELD_MAP: Record<string, keyof FormErrors> = { birth: "date", zone: "zone", gender: "gender" };
 const FIELD_MSG: Record<keyof FormErrors, string> = {
@@ -16,8 +25,9 @@ const FIELD_MSG: Record<keyof FormErrors, string> = {
 };
 
 export async function submitBirth(_prev: FormState, fd: FormData): Promise<FormState> {
+  const values = submitted(fd);
   const parsed = parseBirthForm(fd);
-  if (!parsed.ok) return { errors: parsed.errors };
+  if (!parsed.ok) return { errors: parsed.errors, values };
   // Validate upstream before issuing an id, so e.g. a daylight-saving gap shows as a form error.
   try {
     await getChart(parsed.birth);
@@ -29,9 +39,9 @@ export async function submitBirth(_prev: FormState, fd: FormData): Promise<FormS
         if (k) errors[k] = FIELD_MSG[k];
       }
       if (Object.keys(errors).length === 0) errors.date = FIELD_MSG.date;
-      return { errors };
+      return { errors, values };
     }
-    if (e instanceof UpstreamError) return { errors: {}, unavailable: true };
+    if (e instanceof UpstreamError) return { errors: {}, unavailable: true, values };
     throw e;
   }
   const id = birthStore.put(parsed.birth);

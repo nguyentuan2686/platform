@@ -38,6 +38,19 @@ describe("BirthForm", () => {
     expect(screen.getByText("Chọn giới tính.")).toBeTruthy();
   });
 
+  it("keeps submitted values after a failed submit", () => {
+    const state: FormState = {
+      errors: { date: "Ngày sai." },
+      values: { date: "1994-03-12", time: "08:30", gender: "female", zone: "Asia/Tokyo" },
+    };
+    render(<BirthForm initialState={state} />);
+    expect((screen.getByLabelText("Ngày sinh (dương lịch)") as HTMLInputElement).value).toBe("1994-03-12");
+    expect((screen.getByLabelText("Giờ sinh") as HTMLInputElement).value).toBe("08:30");
+    expect((screen.getByLabelText("Nữ") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Nam") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Nơi sinh") as HTMLSelectElement).value).toBe("Asia/Tokyo");
+  });
+
   it("shows the gentle unavailable message", () => {
     render(<BirthForm initialState={{ errors: {}, unavailable: true }} />);
     expect(screen.getByRole("alert").textContent).toContain("cần một lát");
