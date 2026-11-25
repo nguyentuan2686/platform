@@ -1,0 +1,39 @@
+openapi: 3.1.0
+info:
+  title: identity-svc
+  version: 0.1.0
+  description: >-
+    Identity service (guests, accounts, sessions, magic link, Google OIDC). Skeleton: health
+    probes only; the API arrives in later F1.3 tasks. Every path except /health/** requires the
+    X-Internal-Token header when INTERNAL_API_TOKEN is set.
+paths:
+  /health/live:
+    get:
+      operationId: healthLive
+      summary: Liveness probe
+      responses:
+        '200':
+          description: The process is up.
+  /health/ready:
+    get:
+      operationId: healthReady
+      summary: Readiness probe
+      responses:
+        '200':
+          description: The service can take traffic (database reachable).
+components:
+  securitySchemes:
+    internalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, trace_id]
+      properties:
+        type: {type: string, example: 'urn:problem:unauthenticated'}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        trace_id: {type: string}
