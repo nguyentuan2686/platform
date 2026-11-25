@@ -1,14 +1,17 @@
 package dev.platform.identity.adapter.config;
 
+import dev.platform.identity.adapter.out.crypto.AesGcmBirthCipherAdapter;
 import dev.platform.identity.adapter.out.mail.SmtpMailerAdapter;
 import dev.platform.identity.adapter.out.oidc.DisabledOidcAdapter;
 import dev.platform.identity.adapter.out.oidc.NimbusOidcAdapter;
 import dev.platform.identity.adapter.out.persistence.JdbcAccountRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcMagicLinkRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcOidcLoginRepository;
+import dev.platform.identity.adapter.out.persistence.JdbcProfileRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcSessionRepository;
 import dev.platform.identity.application.AccountMergePort;
 import dev.platform.identity.application.AccountRepositoryPort;
+import dev.platform.identity.application.BirthCipherPort;
 import dev.platform.identity.application.EntitlementGrantPort;
 import dev.platform.identity.application.GuestUseCase;
 import dev.platform.identity.application.MagicLinkRepositoryPort;
@@ -17,6 +20,8 @@ import dev.platform.identity.application.MailerPort;
 import dev.platform.identity.application.OidcLoginRepositoryPort;
 import dev.platform.identity.application.OidcLoginUseCase;
 import dev.platform.identity.application.OidcPort;
+import dev.platform.identity.application.ProfileRepositoryPort;
+import dev.platform.identity.application.ProfileUseCase;
 import dev.platform.identity.application.SessionRepositoryPort;
 import dev.platform.identity.application.SessionUseCase;
 import java.net.URI;
@@ -66,10 +71,27 @@ class IdentityConfiguration {
     return new SmtpMailerAdapter(sender, from);
   }
 
-  /** Replaced by the real merge in a later task. */
+  /** Fails startup when PROFILE_ENC_KEY is missing or is not base64 of 32 bytes. */
   @Bean
-  AccountMergePort accountMerge() {
-    return (guestId, accountId) -> {};
+  BirthCipherPort birthCipher(
+      @Value("${identity.profile.enc-key:}") String key, SecureRandom random) {
+    return new AesGcmBirthCipherAdapter(key, random);
+  }
+
+  @Bean
+  ProfileRepositoryPort profileRepository(JdbcClient jdbc) {
+    return new JdbcProfileRepository(jdbc);
+  }
+
+  /** Also the {@code AccountMergePort}: the guest-to-account merge is the profile move. */
+  @Bean
+  ProfileUseCase profileUseCase(
+      ProfileRepositoryPort profiles,
+      SessionRepositoryPort sessions,
+      BirthCipherPort cipher,
+      Clock clock,
+      TransactionOperations tx) {
+    return new ProfileUseCase(profiles, sessions, cipher, clock, tx);
   }
 
   /** Replaced by the real grant in a later task. */

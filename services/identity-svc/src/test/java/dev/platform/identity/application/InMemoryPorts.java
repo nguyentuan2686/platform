@@ -130,6 +130,12 @@ final class InMemoryPorts {
     final Set<UUID> guests = new HashSet<>();
     final List<StoredSession> stored = new ArrayList<>();
     final Map<UUID, Instant> revoked = new HashMap<>();
+    final Map<UUID, UUID> mergedInto = new HashMap<>();
+
+    @Override
+    public void markGuestMerged(UUID guestId, UUID accountId) {
+      mergedInto.putIfAbsent(guestId, accountId);
+    }
 
     @Override
     public void createGuest(UUID id, Instant now) {
@@ -222,6 +228,65 @@ final class InMemoryPorts {
     @Override
     public void mergeGuest(UUID guestId, UUID accountId) {
       merged.add(new UUID[] {guestId, accountId});
+    }
+  }
+
+  static final class Profiles implements ProfileRepositoryPort {
+    final Map<UUID, StoredProfile> byId = new HashMap<>();
+    final Map<UUID, Subject> owners = new HashMap<>();
+    final Set<UUID> lockedAccounts = new HashSet<>();
+
+    private Optional<UUID> idOf(Subject owner) {
+      return owners.entrySet().stream()
+          .filter(e -> e.getValue().equals(owner))
+          .map(Map.Entry::getKey)
+          .findFirst();
+    }
+
+    @Override
+    public Optional<StoredProfile> find(Subject owner) {
+      return idOf(owner).map(byId::get);
+    }
+
+    @Override
+    public boolean insert(Subject owner, StoredProfile profile, Instant now) {
+      if (idOf(owner).isPresent()) {
+        return false;
+      }
+      byId.put(profile.id(), profile);
+      owners.put(profile.id(), owner);
+      return true;
+    }
+
+    @Override
+    public void update(StoredProfile profile, Instant now) {
+      byId.put(profile.id(), profile);
+    }
+
+    @Override
+    public boolean delete(Subject owner) {
+      Optional<UUID> id = idOf(owner);
+      id.ifPresent(
+          i -> {
+            byId.remove(i);
+            owners.remove(i);
+          });
+      return id.isPresent();
+    }
+
+    @Override
+    public boolean birthLocked(UUID accountId) {
+      return lockedAccounts.contains(accountId);
+    }
+
+    @Override
+    public void lockAccount(UUID accountId) {}
+
+    @Override
+    public boolean moveGuestProfile(UUID guestId, UUID accountId) {
+      Optional<UUID> id = idOf(new Subject.Guest(guestId));
+      id.ifPresent(i -> owners.put(i, new Subject.Account(accountId)));
+      return id.isPresent();
     }
   }
 

@@ -191,6 +191,75 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /me/profile:
+    get:
+      operationId: getProfile
+      summary: The caller's chart profile (one per guest or account).
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: The profile; the birth data is decrypted for the owner only.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Profile'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: No profile yet.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    put:
+      operationId: putProfile
+      summary: Create or update the profile. Label and calendar are always editable; the birth only while unlocked.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProfileRequest'}
+      responses:
+        '200':
+          description: The saved profile.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Profile'}
+        '400':
+          description: Invalid label, birth, zone, gender or calendar.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '409':
+          description: The birth is locked and the request changes it (reason `profile_locked`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    delete:
+      operationId: deleteProfile
+      summary: Delete the profile. The account's birth lock is kept.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '204':
+          description: Deleted, or there was none.
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /sessions/current:
     delete:
       operationId: logout
@@ -276,6 +345,32 @@ components:
           properties: {kind: {const: guest}}
         - required: [account_id]
           properties: {kind: {const: account}}
+    Birth:
+      type: object
+      required: [birth, gender]
+      properties:
+        birth: {type: string, pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$', example: '1994-03-12T05:30'}
+        zone: {type: string, default: Asia/Ho_Chi_Minh, description: IANA zone}
+        gender: {type: string, enum: [male, female]}
+    ProfileRequest:
+      type: object
+      required: [label, birth, calendar]
+      properties:
+        label: {type: string, minLength: 1, maxLength: 40}
+        birth: {$ref: '#/components/schemas/Birth'}
+        calendar: {type: string, enum: [VN, CN]}
+    Profile:
+      type: object
+      required: [id, label, birth, calendar, locked]
+      properties:
+        id: {type: string, format: uuid}
+        label: {type: string, minLength: 1, maxLength: 40}
+        birth:
+          allOf:
+            - $ref: '#/components/schemas/Birth'
+          required: [birth, zone, gender]
+        calendar: {type: string, enum: [VN, CN]}
+        locked: {type: boolean, description: True when the account's birth data can no longer change.}
     Problem:
       type: object
       required: [type, title, status, trace_id]

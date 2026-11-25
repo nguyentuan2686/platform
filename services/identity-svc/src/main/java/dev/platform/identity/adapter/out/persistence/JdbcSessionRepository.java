@@ -68,6 +68,14 @@ public class JdbcSessionRepository implements SessionRepositoryPort {
   }
 
   @Override
+  public void markGuestMerged(UUID guestId, UUID accountId) {
+    jdbc.sql("update guest set merged_into = :account where id = :guest and merged_into is null")
+        .param("guest", guestId)
+        .param("account", accountId)
+        .update();
+  }
+
+  @Override
   public void revokeGuestSessions(UUID guestId, Instant now) {
     jdbc.sql("update session set revoked_at = :now where guest_id = :guest and revoked_at is null")
         .param("guest", guestId)

@@ -17,4 +17,7 @@ public interface SessionRepositoryPort {
   void revoke(byte[] tokenSha256, Instant now);
 
   void revokeGuestSessions(UUID guestId, Instant now);
+
+  /** Records that the guest was folded into the account (first merge wins). */
+  void markGuestMerged(UUID guestId, UUID accountId);
 }

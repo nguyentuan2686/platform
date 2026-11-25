@@ -24,6 +24,7 @@ class ArchitectureTest {
               "jakarta..",
               "java.sql..",
               "javax.sql..",
+              "javax.crypto..",
               "tools.jackson..",
               "com.fasterxml..",
               "..adapter..",

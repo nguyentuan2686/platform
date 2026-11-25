@@ -3,7 +3,10 @@ package dev.platform.identity.adapter.in.web;
 import dev.platform.identity.application.InvalidRedirectUriException;
 import dev.platform.identity.application.MailDeliveryException;
 import dev.platform.identity.application.OidcUnavailableException;
+import dev.platform.identity.application.ProfileNotFoundException;
 import dev.platform.identity.application.UnauthenticatedException;
+import dev.platform.identity.domain.ProfileLockedException;
+import dev.platform.identity.domain.ProfileValidationException;
 import dev.platform.starter.web.PlatformProblemHandler;
 import java.net.URI;
 import java.util.List;
@@ -65,6 +68,37 @@ public class IdentityExceptionHandler {
     detail.setType(URI.create("urn:problem:upstream-unavailable"));
     return platform.handleException(
         new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE, detail, null), request);
+  }
+
+  @ExceptionHandler(ProfileLockedException.class)
+  ResponseEntity<Object> profileLocked(ProfileLockedException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Birth data is locked");
+    detail.setType(URI.create("urn:problem:conflict"));
+    detail.setProperty("reason", "profile_locked");
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.CONFLICT, detail, null), request);
+  }
+
+  /** Never echoes the offending value: only the field name and a fixed rule. */
+  @ExceptionHandler(ProfileValidationException.class)
+  ResponseEntity<Object> invalidProfile(ProfileValidationException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
+    detail.setProperty("errors", List.of(Map.of("field", ex.field(), "message", ex.getMessage())));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.BAD_REQUEST, detail, null), request);
+  }
+
+  @ExceptionHandler(ProfileNotFoundException.class)
+  ResponseEntity<Object> profileNotFound(ProfileNotFoundException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Profile not found");
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.NOT_FOUND, detail, null), request);
   }
 
   @ExceptionHandler(MailDeliveryException.class)
