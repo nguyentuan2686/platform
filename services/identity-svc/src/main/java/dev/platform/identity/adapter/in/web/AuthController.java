@@ -3,9 +3,7 @@ package dev.platform.identity.adapter.in.web;
 import dev.platform.identity.application.GuestUseCase;
 import dev.platform.identity.application.MagicLinkUseCase;
 import dev.platform.identity.application.SessionUseCase;
-import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.identity.domain.Email;
-import dev.platform.identity.domain.Subject;
 import jakarta.validation.Valid;
 import java.util.Map;
 import java.util.Optional;
@@ -51,18 +49,7 @@ public class AuthController {
     return LoginSessionResponse.of(magicLinks.verify(request.token(), guestOf(authorization)));
   }
 
-  /** The guest behind an optional bearer; a missing or stale bearer is simply no guest. */
   private Optional<UUID> guestOf(String authorization) {
-    return Bearer.parse(authorization)
-        .flatMap(
-            token -> {
-              try {
-                return sessions.resolve(token) instanceof Subject.Guest g
-                    ? Optional.of(g.id())
-                    : Optional.<UUID>empty();
-              } catch (UnauthenticatedException e) {
-                return Optional.empty();
-              }
-            });
+    return GuestBearer.of(sessions, authorization);
   }
 }

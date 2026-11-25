@@ -9,18 +9,24 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import dev.platform.identity.adapter.in.web.AuthController;
+import dev.platform.identity.adapter.in.web.GoogleAuthController;
 import dev.platform.identity.adapter.in.web.IdentityExceptionHandler;
 import dev.platform.identity.adapter.in.web.MeController;
+import dev.platform.identity.application.AuthorizationStart;
 import dev.platform.identity.application.GuestUseCase;
+import dev.platform.identity.application.InvalidRedirectUriException;
 import dev.platform.identity.application.IssuedSession;
 import dev.platform.identity.application.LoginResult;
 import dev.platform.identity.application.MagicLinkUseCase;
+import dev.platform.identity.application.OidcLoginUseCase;
+import dev.platform.identity.application.OidcUnavailableException;
 import dev.platform.identity.application.SessionUseCase;
 import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.identity.domain.Email;
 import dev.platform.identity.domain.SessionToken;
 import dev.platform.identity.domain.Subject;
 import dev.platform.starter.web.PlatformWebAutoConfiguration;
+import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.HashSet;
@@ -44,7 +50,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@WebMvcTest({AuthController.class, MeController.class})
+@WebMvcTest({AuthController.class, MeController.class, GoogleAuthController.class})
 @Import({PlatformWebAutoConfiguration.class, IdentityExceptionHandler.class})
 class ContractTest {
 
@@ -55,6 +61,7 @@ class ContractTest {
   @MockitoBean GuestUseCase guests;
   @MockitoBean MagicLinkUseCase magicLinks;
   @MockitoBean SessionUseCase sessions;
+  @MockitoBean OidcLoginUseCase oidc;
 
   private static IssuedSession issued(Subject subject) {
     return new IssuedSession(SessionToken.generate(new SecureRandom()), subject, EXPIRES);
@@ -84,6 +91,8 @@ class ContractTest {
             "POST /guests",
             "POST /auth/magic-links",
             "POST /auth/magic-links/verify",
+            "GET /auth/google/authorization",
+            "POST /auth/google/callback",
             "GET /me",
             "DELETE /sessions/current");
     assertThat(served).containsAll(declared);
@@ -113,6 +122,55 @@ class ContractTest {
     JsonNode json = body(mvc.perform(json("/auth/magic-links/verify", "{\"token\":\"tok\"}")), 200);
 
     assertThat(ContractSupport.componentSchema("LoginSession").validate(json)).isEmpty();
+  }
+
+  @Test
+  void google_responses_match_the_spec() throws Exception {
+    URI redirect = URI.create("http://localhost:3001/vi/dang-nhap/google");
+    when(oidc.start(eq(redirect), any()))
+        .thenReturn(
+            new AuthorizationStart(
+                URI.create("https://accounts.google.com/o/oauth2/v2/auth?x=1"),
+                SessionToken.generate(new SecureRandom()).value()));
+    when(oidc.callback(eq("c"), eq("s"), any()))
+        .thenReturn(new LoginResult(issued(new Subject.Account(UUID.randomUUID())), true));
+
+    JsonNode authorization =
+        body(
+            mvc.perform(
+                get("/auth/google/authorization").param("redirect_uri", redirect.toString())),
+            200);
+    JsonNode login =
+        body(mvc.perform(json("/auth/google/callback", "{\"code\":\"c\",\"state\":\"s\"}")), 200);
+
+    assertThat(ContractSupport.componentSchema("GoogleAuthorization").validate(authorization))
+        .isEmpty();
+    assertThat(ContractSupport.componentSchema("LoginSession").validate(login)).isEmpty();
+  }
+
+  @Test
+  void google_problems_match_the_spec() throws Exception {
+    org.mockito.Mockito.doThrow(new InvalidRedirectUriException()).when(oidc).start(any(), any());
+    JsonNode badRedirect =
+        body(
+            mvc.perform(get("/auth/google/authorization").param("redirect_uri", "https://x.y/")),
+            400);
+    when(oidc.callback(any(), any(), any())).thenThrow(new UnauthenticatedException());
+    JsonNode rejected =
+        body(mvc.perform(json("/auth/google/callback", "{\"code\":\"c\",\"state\":\"s\"}")), 401);
+    org.mockito.Mockito.doThrow(OidcUnavailableException.notConfigured())
+        .when(oidc)
+        .start(any(), any());
+    JsonNode disabled =
+        body(
+            mvc.perform(get("/auth/google/authorization").param("redirect_uri", "https://x.y/")),
+            503);
+
+    for (JsonNode problem : new JsonNode[] {badRedirect, rejected, disabled}) {
+      assertThat(ContractSupport.componentSchema("Problem").validate(problem)).isEmpty();
+    }
+    assertThat(badRedirect.get("errors").get(0).get("field").asString()).isEqualTo("redirect_uri");
+    assertThat(disabled.get("detail").asString()).isEqualTo("Google login is not configured");
   }
 
   @Test

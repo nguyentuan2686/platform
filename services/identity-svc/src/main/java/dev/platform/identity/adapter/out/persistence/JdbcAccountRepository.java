@@ -45,4 +45,24 @@ public class JdbcAccountRepository implements AccountRepositoryPort {
         .optional()
         .map(Email::new);
   }
+
+  @Override
+  public Optional<UUID> findByGoogleSub(String sub) {
+    return jdbc.sql("select id from account where google_sub = :sub")
+        .param("sub", sub)
+        .query(UUID.class)
+        .optional();
+  }
+
+  @Override
+  public boolean linkGoogleSub(UUID accountId, String sub) {
+    return jdbc.sql(
+                "update account set google_sub = :sub"
+                    + " where id = :id and google_sub is null"
+                    + " and not exists (select 1 from account where google_sub = :sub)")
+            .param("sub", sub)
+            .param("id", accountId)
+            .update()
+        == 1;
+  }
 }

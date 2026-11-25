@@ -40,6 +40,80 @@ final class InMemoryPorts {
           .findFirst()
           .map(e -> new Email(e.getKey()));
     }
+
+    final Map<String, UUID> byGoogleSub = new HashMap<>();
+
+    @Override
+    public Optional<UUID> findByGoogleSub(String sub) {
+      return Optional.ofNullable(byGoogleSub.get(sub));
+    }
+
+    @Override
+    public boolean linkGoogleSub(UUID accountId, String sub) {
+      if (byGoogleSub.containsValue(accountId) || byGoogleSub.containsKey(sub)) {
+        return false;
+      }
+      byGoogleSub.put(sub, accountId);
+      return true;
+    }
+  }
+
+  static final class OidcLogins implements OidcLoginRepositoryPort {
+    final Map<String, PendingOidcLogin> saved = new HashMap<>();
+    final Set<String> used = new HashSet<>();
+
+    @Override
+    public void save(PendingOidcLogin login) {
+      saved.put(login.state(), login);
+    }
+
+    @Override
+    public Optional<PendingOidcLogin> consume(String state, Instant now) {
+      PendingOidcLogin login = saved.get(state);
+      if (login == null || used.contains(state) || !login.expiresAt().isAfter(now)) {
+        return Optional.empty();
+      }
+      used.add(state);
+      return Optional.of(login);
+    }
+  }
+
+  static final class FakeOidc implements OidcPort {
+    IdTokenClaims claims;
+    RuntimeException failure;
+    final List<String> exchangedCodes = new ArrayList<>();
+    final List<String> exchangedVerifiers = new ArrayList<>();
+    final List<URI> exchangedRedirects = new ArrayList<>();
+    String lastState;
+    String lastNonce;
+    String lastChallenge;
+    URI lastRedirect;
+    boolean enabled = true;
+
+    @Override
+    public boolean enabled() {
+      return enabled;
+    }
+
+    @Override
+    public URI authorizationUri(String state, String nonce, String codeChallenge, URI redirectUri) {
+      lastState = state;
+      lastNonce = nonce;
+      lastChallenge = codeChallenge;
+      lastRedirect = redirectUri;
+      return URI.create("https://idp.example/authorize?state=" + state);
+    }
+
+    @Override
+    public IdTokenClaims exchange(String code, String codeVerifier, URI redirectUri) {
+      exchangedCodes.add(code);
+      exchangedVerifiers.add(codeVerifier);
+      exchangedRedirects.add(redirectUri);
+      if (failure != null) {
+        throw failure;
+      }
+      return claims;
+    }
   }
 
   static final class Sessions implements SessionRepositoryPort {

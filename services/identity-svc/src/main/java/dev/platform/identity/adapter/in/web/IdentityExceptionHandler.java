@@ -1,6 +1,8 @@
 package dev.platform.identity.adapter.in.web;
 
+import dev.platform.identity.application.InvalidRedirectUriException;
 import dev.platform.identity.application.MailDeliveryException;
+import dev.platform.identity.application.OidcUnavailableException;
 import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.starter.web.PlatformProblemHandler;
 import java.net.URI;
@@ -43,7 +45,28 @@ public class IdentityExceptionHandler {
         new ErrorResponseException(HttpStatus.UNAUTHORIZED, detail, null), request);
   }
 
-  /** Malformed JSON or a value of the wrong type is reported on {@code body}. */
+  @ExceptionHandler(InvalidRedirectUriException.class)
+  ResponseEntity<Object> invalidRedirect(InvalidRedirectUriException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
+    detail.setProperty(
+        "errors",
+        List.of(Map.of("field", "redirect_uri", "message", "redirect_uri is not allowed")));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.BAD_REQUEST, detail, null), request);
+  }
+
+  @ExceptionHandler(OidcUnavailableException.class)
+  ResponseEntity<Object> oidcUnavailable(OidcUnavailableException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    detail.setType(URI.create("urn:problem:upstream-unavailable"));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE, detail, null), request);
+  }
+
   @ExceptionHandler(MailDeliveryException.class)
   ResponseEntity<Object> mailFailed(MailDeliveryException ex, WebRequest request) throws Exception {
     ProblemDetail detail =

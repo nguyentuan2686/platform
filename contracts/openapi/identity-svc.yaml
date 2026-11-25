@@ -100,6 +100,79 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /auth/google/authorization:
+    get:
+      operationId: googleAuthorization
+      summary: Start Google login (OIDC authorization code with PKCE S256).
+      description: >-
+        Stores state, nonce and PKCE verifier (valid 10 minutes, single use) and returns the
+        Google URL to send the browser to. With a guest bearer, the guest is merged into the
+        account on callback.
+      security:
+        - internalToken: []
+        - internalToken: []
+          guestBearer: []
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: true
+          description: Must exactly match one of the configured OIDC_REDIRECT_URIS.
+          schema: {type: string}
+      responses:
+        '200':
+          description: Where to redirect the browser.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GoogleAuthorization'}
+        '400':
+          description: Missing or not allowed redirect URI (`errors[].field` is `redirect_uri`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '503':
+          description: Google login is not configured or Google is unreachable.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /auth/google/callback:
+    post:
+      operationId: googleCallback
+      summary: Complete Google login and open a 30-day account session.
+      description: >-
+        Finds the account by Google subject, else by verified email (linking the subject), else
+        creates it (signup bonus). The state is burned by any attempt.
+      security:
+        - internalToken: []
+        - internalToken: []
+          guestBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GoogleCallbackRequest'}
+      responses:
+        '200':
+          description: Logged in; same body as magic-link verification.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginSession'}
+        '400':
+          description: Missing code or state.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '401':
+          description: >-
+            Unknown, used or expired state; the ID token or email verification was rejected; or
+            Google refused the code.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '503':
+          description: Google login is not configured or Google is unreachable.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /me:
     get:
       operationId: me
@@ -170,6 +243,18 @@ components:
       required: [token]
       properties:
         token: {type: string}
+    GoogleAuthorization:
+      type: object
+      required: [authorization_url, state]
+      properties:
+        authorization_url: {type: string, format: uri}
+        state: {type: string, minLength: 43, maxLength: 43}
+    GoogleCallbackRequest:
+      type: object
+      required: [code, state]
+      properties:
+        code: {type: string, maxLength: 2048}
+        state: {type: string, maxLength: 128}
     LoginSession:
       type: object
       required: [session_token, account_id, expires_at, created]

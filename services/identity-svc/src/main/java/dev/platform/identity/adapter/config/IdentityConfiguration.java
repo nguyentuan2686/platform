@@ -1,8 +1,11 @@
 package dev.platform.identity.adapter.config;
 
 import dev.platform.identity.adapter.out.mail.SmtpMailerAdapter;
+import dev.platform.identity.adapter.out.oidc.DisabledOidcAdapter;
+import dev.platform.identity.adapter.out.oidc.NimbusOidcAdapter;
 import dev.platform.identity.adapter.out.persistence.JdbcAccountRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcMagicLinkRepository;
+import dev.platform.identity.adapter.out.persistence.JdbcOidcLoginRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcSessionRepository;
 import dev.platform.identity.application.AccountMergePort;
 import dev.platform.identity.application.AccountRepositoryPort;
@@ -11,11 +14,17 @@ import dev.platform.identity.application.GuestUseCase;
 import dev.platform.identity.application.MagicLinkRepositoryPort;
 import dev.platform.identity.application.MagicLinkUseCase;
 import dev.platform.identity.application.MailerPort;
+import dev.platform.identity.application.OidcLoginRepositoryPort;
+import dev.platform.identity.application.OidcLoginUseCase;
+import dev.platform.identity.application.OidcPort;
 import dev.platform.identity.application.SessionRepositoryPort;
 import dev.platform.identity.application.SessionUseCase;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -66,6 +75,45 @@ class IdentityConfiguration {
   @Bean
   EntitlementGrantPort entitlementGrant() {
     return accountId -> {};
+  }
+
+  @Bean
+  OidcLoginRepositoryPort oidcLoginRepository(JdbcClient jdbc) {
+    return new JdbcOidcLoginRepository(jdbc);
+  }
+
+  /** Google when a client id is configured; otherwise a port that answers "not configured". */
+  @Bean
+  OidcPort oidcPort(
+      @Value("${identity.oidc.google.issuer}") String issuer,
+      @Value("${identity.oidc.google.client-id}") String clientId,
+      @Value("${identity.oidc.google.client-secret}") String clientSecret,
+      Clock clock) {
+    if (clientId.isBlank()) {
+      return new DisabledOidcAdapter();
+    }
+    return new NimbusOidcAdapter(URI.create(issuer), clientId, clientSecret, clock);
+  }
+
+  @Bean
+  OidcLoginUseCase oidcLoginUseCase(
+      AccountRepositoryPort accounts,
+      SessionRepositoryPort sessions,
+      OidcLoginRepositoryPort logins,
+      OidcPort oidc,
+      AccountMergePort merges,
+      EntitlementGrantPort grants,
+      Clock clock,
+      SecureRandom random,
+      @Value("${identity.oidc.google.redirect-uris}") String redirectUris) {
+    Set<URI> allowed =
+        Arrays.stream(redirectUris.split(","))
+            .map(String::strip)
+            .filter(s -> !s.isEmpty())
+            .map(URI::create)
+            .collect(Collectors.toUnmodifiableSet());
+    return new OidcLoginUseCase(
+        accounts, sessions, logins, oidc, merges, grants, clock, random, allowed);
   }
 
   @Bean

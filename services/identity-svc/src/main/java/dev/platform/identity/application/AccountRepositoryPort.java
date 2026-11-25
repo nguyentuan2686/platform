@@ -12,5 +12,13 @@ public interface AccountRepositoryPort {
 
   Optional<Email> findEmail(UUID accountId);
 
+  Optional<UUID> findByGoogleSub(String sub);
+
+  /**
+   * Attaches a Google subject to an account that has none. False when the account is already linked
+   * (to this or another subject) or the subject belongs to another account.
+   */
+  boolean linkGoogleSub(UUID accountId, String sub);
+
   record Upserted(UUID id, boolean created) {}
 }

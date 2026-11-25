@@ -29,3 +29,11 @@ identity:
   web-base-url: ${WEB_BASE_URL:http://localhost:3001}
   mail:
     from: ${MAIL_FROM:no-reply@localhost}
+  oidc:
+    google:
+      issuer: ${OIDC_GOOGLE_ISSUER:https://accounts.google.com}
+      # Empty client id = Google login disabled (503).
+      client-id: ${OIDC_GOOGLE_CLIENT_ID:}
+      client-secret: ${OIDC_GOOGLE_CLIENT_SECRET:}
+      # Comma-separated exact redirect URIs the web app may use.
+      redirect-uris: ${OIDC_REDIRECT_URIS:}
