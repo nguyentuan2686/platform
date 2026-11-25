@@ -16,6 +16,7 @@ import dev.platform.identity.adapter.in.web.IdentityExceptionHandler;
 import dev.platform.identity.adapter.in.web.InternalCreditController;
 import dev.platform.identity.adapter.in.web.MeController;
 import dev.platform.identity.adapter.in.web.ProfileController;
+import dev.platform.identity.adapter.in.web.ShareController;
 import dev.platform.identity.application.AuthorizationStart;
 import dev.platform.identity.application.ConsumeResult;
 import dev.platform.identity.application.ConsumptionNotFoundException;
@@ -29,11 +30,15 @@ import dev.platform.identity.application.IssuedSession;
 import dev.platform.identity.application.LedgerEntryView;
 import dev.platform.identity.application.LoginResult;
 import dev.platform.identity.application.MagicLinkUseCase;
+import dev.platform.identity.application.NoProfileException;
 import dev.platform.identity.application.OidcLoginUseCase;
 import dev.platform.identity.application.OidcUnavailableException;
 import dev.platform.identity.application.ProfileUseCase;
 import dev.platform.identity.application.ProfileView;
 import dev.platform.identity.application.SessionUseCase;
+import dev.platform.identity.application.ShareLink;
+import dev.platform.identity.application.ShareUseCase;
+import dev.platform.identity.application.SharedProfile;
 import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.identity.domain.BirthData;
 import dev.platform.identity.domain.Calendar;
@@ -43,6 +48,7 @@ import dev.platform.identity.domain.Email;
 import dev.platform.identity.domain.PassKind;
 import dev.platform.identity.domain.ProfileLockedException;
 import dev.platform.identity.domain.SessionToken;
+import dev.platform.identity.domain.ShareId;
 import dev.platform.identity.domain.Subject;
 import dev.platform.identity.domain.Topic;
 import dev.platform.starter.web.PlatformWebAutoConfiguration;
@@ -75,6 +81,7 @@ import tools.jackson.databind.json.JsonMapper;
   MeController.class,
   GoogleAuthController.class,
   ProfileController.class,
+  ShareController.class,
   EntitlementController.class,
   InternalCreditController.class
 })
@@ -90,6 +97,7 @@ class ContractTest {
   @MockitoBean SessionUseCase sessions;
   @MockitoBean OidcLoginUseCase oidc;
   @MockitoBean ProfileUseCase profiles;
+  @MockitoBean ShareUseCase shares;
   @MockitoBean EntitlementUseCase entitlements;
 
   private static IssuedSession issued(Subject subject) {
@@ -126,6 +134,10 @@ class ContractTest {
             "GET /me/profile",
             "PUT /me/profile",
             "DELETE /me/profile",
+            "PUT /me/profile/share",
+            "GET /me/profile/share",
+            "DELETE /me/profile/share",
+            "GET /shares/{share_id}",
             "GET /me/entitlements",
             "GET /me/ledger",
             "POST /internal/credits/consume",
@@ -333,6 +345,54 @@ class ContractTest {
                 .getResponse()
                 .getStatus())
         .isEqualTo(204);
+  }
+
+  @Test
+  void share_responses_match_the_spec() throws Exception {
+    when(sessions.resolve("a")).thenReturn(new Subject.Account(UUID.randomUUID()));
+    ShareLink link = new ShareLink(ShareId.random(new SecureRandom()), EXPIRES);
+    when(shares.create(any())).thenReturn(link);
+    when(shares.get(any())).thenReturn(Optional.of(link));
+    when(shares.resolve(link.id().value()))
+        .thenReturn(
+            Optional.of(
+                new SharedProfile(new BirthData("1994-03-12T05:30", null, "female"), Calendar.VN)));
+
+    JsonNode put =
+        body(mvc.perform(put("/me/profile/share").header("Authorization", "Bearer a")), 200);
+    JsonNode got =
+        body(mvc.perform(get("/me/profile/share").header("Authorization", "Bearer a")), 200);
+    JsonNode shared = body(mvc.perform(get("/shares/" + link.id().value())), 200);
+
+    assertThat(ContractSupport.componentSchema("ShareLink").validate(put)).isEmpty();
+    assertThat(ContractSupport.componentSchema("ShareLink").validate(got)).isEmpty();
+    assertThat(ContractSupport.componentSchema("SharedProfile").validate(shared)).isEmpty();
+    assertThat(
+            mvc.perform(delete("/me/profile/share").header("Authorization", "Bearer a"))
+                .andReturn()
+                .getResponse()
+                .getStatus())
+        .isEqualTo(204);
+  }
+
+  @Test
+  void share_problems_match_the_spec() throws Exception {
+    when(sessions.resolve("a")).thenReturn(new Subject.Account(UUID.randomUUID()));
+    when(shares.create(any())).thenThrow(new NoProfileException());
+    when(shares.get(any())).thenReturn(Optional.empty());
+    when(shares.resolve(any())).thenReturn(Optional.empty());
+
+    JsonNode noProfile =
+        body(mvc.perform(put("/me/profile/share").header("Authorization", "Bearer a")), 409);
+    JsonNode none =
+        body(mvc.perform(get("/me/profile/share").header("Authorization", "Bearer a")), 404);
+    JsonNode unknown = body(mvc.perform(get("/shares/bad")), 404);
+    JsonNode noAuth = body(mvc.perform(put("/me/profile/share")), 401);
+
+    for (JsonNode problem : new JsonNode[] {noProfile, none, unknown, noAuth}) {
+      assertThat(ContractSupport.componentSchema("Problem").validate(problem)).isEmpty();
+    }
+    assertThat(noProfile.get("reason").asString()).isEqualTo("no_profile");
   }
 
   private static final UUID READING = UUID.randomUUID();

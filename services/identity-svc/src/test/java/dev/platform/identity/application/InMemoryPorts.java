@@ -1,6 +1,7 @@
 package dev.platform.identity.application;
 
 import dev.platform.identity.domain.Email;
+import dev.platform.identity.domain.ShareId;
 import dev.platform.identity.domain.Subject;
 import java.net.URI;
 import java.time.Instant;
@@ -287,6 +288,59 @@ final class InMemoryPorts {
       Optional<UUID> id = idOf(new Subject.Guest(guestId));
       id.ifPresent(i -> owners.put(i, new Subject.Account(accountId)));
       return id.isPresent();
+    }
+  }
+
+  static final class Shares implements ShareRepositoryPort {
+    record Row(ShareId id, UUID profileId, Instant createdAt, boolean revoked) {}
+
+    final List<Row> rows = new ArrayList<>();
+    private final Profiles profiles;
+
+    Shares(Profiles profiles) {
+      this.profiles = profiles;
+    }
+
+    private Optional<Row> active(UUID profileId) {
+      return rows.stream().filter(r -> r.profileId().equals(profileId) && !r.revoked()).findFirst();
+    }
+
+    @Override
+    public Optional<ShareLink> findActive(Subject owner) {
+      return profiles
+          .find(owner)
+          .flatMap(p -> active(p.id()))
+          .map(r -> new ShareLink(r.id(), r.createdAt()));
+    }
+
+    @Override
+    public boolean insertActive(ShareId id, Subject owner, Instant now) {
+      Optional<StoredProfile> profile = profiles.find(owner);
+      if (profile.isEmpty() || active(profile.get().id()).isPresent()) {
+        return false;
+      }
+      rows.add(new Row(id, profile.get().id(), now, false));
+      return true;
+    }
+
+    @Override
+    public void revokeActive(Subject owner, Instant now) {
+      profiles
+          .find(owner)
+          .flatMap(p -> active(p.id()))
+          .ifPresent(
+              r -> {
+                rows.remove(r);
+                rows.add(new Row(r.id(), r.profileId(), r.createdAt(), true));
+              });
+    }
+
+    @Override
+    public Optional<StoredProfile> findProfileByActiveShare(ShareId id) {
+      return rows.stream()
+          .filter(r -> r.id().equals(id) && !r.revoked())
+          .findFirst()
+          .map(r -> profiles.byId.get(r.profileId()));
     }
   }
 

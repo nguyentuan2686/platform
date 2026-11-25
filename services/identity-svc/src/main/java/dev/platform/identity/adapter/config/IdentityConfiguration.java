@@ -10,6 +10,7 @@ import dev.platform.identity.adapter.out.persistence.JdbcMagicLinkRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcOidcLoginRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcProfileRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcSessionRepository;
+import dev.platform.identity.adapter.out.persistence.JdbcShareRepository;
 import dev.platform.identity.application.AccountMergePort;
 import dev.platform.identity.application.AccountNotFoundException;
 import dev.platform.identity.application.AccountRepositoryPort;
@@ -30,6 +31,8 @@ import dev.platform.identity.application.ProfileRepositoryPort;
 import dev.platform.identity.application.ProfileUseCase;
 import dev.platform.identity.application.SessionRepositoryPort;
 import dev.platform.identity.application.SessionUseCase;
+import dev.platform.identity.application.ShareRepositoryPort;
+import dev.platform.identity.application.ShareUseCase;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -105,6 +108,21 @@ class IdentityConfiguration {
       Clock clock,
       TransactionOperations tx) {
     return new ProfileUseCase(profiles, sessions, cipher, clock, tx);
+  }
+
+  @Bean
+  ShareRepositoryPort shareRepository(JdbcClient jdbc) {
+    return new JdbcShareRepository(jdbc);
+  }
+
+  @Bean
+  ShareUseCase shareUseCase(
+      ShareRepositoryPort shares,
+      BirthCipherPort cipher,
+      Clock clock,
+      SecureRandom random,
+      TransactionOperations tx) {
+    return new ShareUseCase(shares, cipher, clock, random, tx);
   }
 
   @Bean

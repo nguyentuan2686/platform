@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import dev.platform.reading.tuvi.adapter.in.web.QaController;
+import dev.platform.reading.tuvi.adapter.in.web.QaMergeController;
 import dev.platform.reading.tuvi.adapter.in.web.ReadingController;
 import dev.platform.reading.tuvi.application.BasicReading;
 import dev.platform.reading.tuvi.application.BasicReadingUseCase;
@@ -18,6 +19,7 @@ import dev.platform.reading.tuvi.application.UpstreamValidationException;
 import dev.platform.reading.tuvi.application.qa.FreeQuota;
 import dev.platform.reading.tuvi.application.qa.QaConflictException;
 import dev.platform.reading.tuvi.application.qa.QaKind;
+import dev.platform.reading.tuvi.application.qa.QaMergeUseCase;
 import dev.platform.reading.tuvi.application.qa.QaService;
 import dev.platform.reading.tuvi.application.qa.QaStatus;
 import dev.platform.reading.tuvi.application.qa.ReadingDetail;
@@ -49,7 +51,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@WebMvcTest({ReadingController.class, QaController.class})
+@WebMvcTest({ReadingController.class, QaController.class, QaMergeController.class})
 @Import({
   PlatformWebAutoConfiguration.class,
   dev.platform.reading.tuvi.adapter.in.web.ReadingExceptionHandler.class,
@@ -61,6 +63,7 @@ class ContractTest {
   static final UUID QA_ID = UUID.fromString("55555555-5555-5555-5555-555555555555");
 
   @MockitoBean QaService qa;
+  @MockitoBean QaMergeUseCase qaMerge;
 
   private ResultActions qaGet(String path) throws Exception {
     return mvc.perform(
@@ -141,6 +144,41 @@ class ContractTest {
   }
 
   @Test
+  void qa_merge_matches_the_spec_schema() throws Exception {
+    UUID guest = UUID.randomUUID();
+    UUID account = UUID.randomUUID();
+    when(qaMerge.merge(guest, account)).thenReturn(2);
+    String body = "{\"guest_id\":\"" + guest + "\",\"account_id\":\"" + account + "\"}";
+
+    JsonNode json =
+        JsonMapper.shared()
+            .readTree(
+                okBody(
+                    mvc.perform(
+                        post("/internal/qa/merge")
+                            .header("X-Internal-Token", INTERNAL)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))));
+
+    assertThat(ContractSupport.componentSchema("MergeResult").validate(json)).isEmpty();
+    assertThat(json.get("moved").asInt()).isEqualTo(2);
+    assertThat(
+            ContractSupport.componentSchema("MergeRequest")
+                .validate(JsonMapper.shared().readTree(body)))
+        .isEmpty();
+    JsonNode bad =
+        problem(
+            mvc.perform(
+                post("/internal/qa/merge")
+                    .header("X-Internal-Token", INTERNAL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"guest_id\":\"x\",\"account_id\":\"" + account + "\"}")),
+            400);
+    assertThat(ContractSupport.componentSchema("Problem").validate(bad)).isEmpty();
+    assertThat(bad.get("errors").get(0).get("field").asString()).isEqualTo("guest_id");
+  }
+
+  @Test
   void qa_schemas_are_not_vacuous() {
     JsonNode bad = JsonMapper.shared().readTree("{\"readings\":[{}],\"limit\":-1}");
     for (String s : List.of("QaReadingList", "QaReading", "QaFreeQuota", "QaAskRequest")) {
@@ -196,7 +234,8 @@ class ContractTest {
             "DELETE /tuvi/qa/readings",
             "GET /tuvi/qa/readings/{id}",
             "POST /tuvi/qa/readings/{id}/follow-ups",
-            "GET /tuvi/qa/free-quota");
+            "GET /tuvi/qa/free-quota",
+            "POST /internal/qa/merge");
     assertThat(served).containsAll(declared);
   }
 

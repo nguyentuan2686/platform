@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: identity-svc
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     Identity service (guests, accounts, sessions, magic link, Google OIDC). Sessions are opaque
     bearer tokens (`Authorization: Bearer <session_token>`); only their SHA-256 is stored. Every
@@ -260,6 +260,88 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /me/profile/share:
+    put:
+      operationId: putProfileShare
+      summary: Create the public share link of the caller's profile (idempotent; returns the active one).
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: The active share link.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShareLink'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '409':
+          description: The caller has no profile (`reason` is `no_profile`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    get:
+      operationId: getProfileShare
+      summary: The active share link of the caller's profile.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: The active share link.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ShareLink'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: No active share link.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    delete:
+      operationId: deleteProfileShare
+      summary: Revoke the share link. The old id never resolves again; a later PUT issues a new one.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '204':
+          description: Revoked, or there was none.
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /shares/{share_id}:
+    get:
+      operationId: getShare
+      summary: Resolve a share id to the decrypted profile birth data (service-to-service; the web reduces it to the public fields).
+      description: >-
+        Internal token only, no bearer. The response carries the full birth data, so only the web
+        BFF may call it and it must never forward more than gender, hour branch and year can chi.
+      parameters:
+        - name: share_id
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[A-Za-z0-9_-]{22}$'}
+      responses:
+        '200':
+          description: The shared profile.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SharedProfile'}
+        '404':
+          description: Unknown, malformed or revoked id, or the profile was deleted.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /me/entitlements:
     get:
       operationId: getEntitlements
@@ -498,6 +580,21 @@ components:
           required: [birth, zone, gender]
         calendar: {type: string, enum: [VN, CN]}
         locked: {type: boolean, description: True when the account's birth data can no longer change.}
+    ShareLink:
+      type: object
+      required: [share_id, created_at]
+      properties:
+        share_id: {type: string, pattern: '^[A-Za-z0-9_-]{22}$', description: 16 random bytes, base64url without padding.}
+        created_at: {type: string, format: date-time}
+    SharedProfile:
+      type: object
+      required: [birth, calendar]
+      properties:
+        birth:
+          allOf:
+            - $ref: '#/components/schemas/Birth'
+          required: [birth, zone, gender]
+        calendar: {type: string, enum: [VN, CN]}
     Entitlements:
       type: object
       required: [credits, pass, features]

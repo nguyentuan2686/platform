@@ -9,6 +9,7 @@ import dev.platform.reading.tuvi.application.llm.LlmGateway;
 import dev.platform.reading.tuvi.application.qa.IdentityPort;
 import dev.platform.reading.tuvi.application.qa.QaAnswerCachePort;
 import dev.platform.reading.tuvi.application.qa.QaFrames;
+import dev.platform.reading.tuvi.application.qa.QaMergeUseCase;
 import dev.platform.reading.tuvi.application.qa.QaRepositoryPort;
 import dev.platform.reading.tuvi.application.qa.QaRetentionUseCase;
 import dev.platform.reading.tuvi.application.qa.QaRetryUseCase;
@@ -94,6 +95,11 @@ class QaConfiguration {
   QaRetentionUseCase qaRetentionUseCase(
       QaRepositoryPort repo, @Value("${qa.free-retention:P90D}") Duration retention) {
     return new QaRetentionUseCase(repo, retention);
+  }
+
+  @Bean
+  QaMergeUseCase qaMergeUseCase(QaRepositoryPort repo) {
+    return new QaMergeUseCase(repo);
   }
 
   /** Retry/refund/recovery every {@code QA_JOB_INTERVAL}, retention every 6 h. */

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: reading-tuvi
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Tu Vi reading service. Turns chart-svc facts into Vietnamese text spoken by the character
     Lão Thiên Cơ (he says "ta", calls the reader "con"). Text comes only from the knowledge
@@ -337,6 +337,41 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '503':
           description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /internal/qa/merge:
+    post:
+      operationId: mergeGuestQa
+      summary: Move a guest's Q&A history to the account the guest logged into (service-to-service).
+      description: >-
+        Internal token only, no bearer. Moves every reading of the guest to the account; status,
+        credit source and refund state are untouched. Idempotent: a repeat moves 0. Readings of
+        any other subject are never touched.
+      security:
+        - internalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeRequest'
+      responses:
+        '200':
+          description: The number of readings moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeResult'
+        '400':
+          description: A malformed or missing guest_id or account_id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: Missing or invalid internal token.
           content:
             application/problem+json:
               schema:
@@ -721,6 +756,17 @@ components:
             $ref: '#/components/schemas/TodayArea'
         closing:
           type: string
+    MergeRequest:
+      type: object
+      required: [guest_id, account_id]
+      properties:
+        guest_id: {type: string, format: uuid}
+        account_id: {type: string, format: uuid}
+    MergeResult:
+      type: object
+      required: [moved]
+      properties:
+        moved: {type: integer, minimum: 0}
     Problem:
       type: object
       description: >-
