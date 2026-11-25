@@ -6,7 +6,7 @@ info:
     Identity service (guests, accounts, sessions, magic link, Google OIDC). Sessions are opaque
     bearer tokens (`Authorization: Bearer <session_token>`); only their SHA-256 is stored. Every
     path except /health/** requires the X-Internal-Token header when INTERNAL_API_TOKEN is set.
-    Google OIDC arrives in a later F1.3 task.
+    The /internal/credits/* operations are for other services (same token).
 security:
   - internalToken: []
 paths:
@@ -260,6 +260,133 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /me/entitlements:
+    get:
+      operationId: getEntitlements
+      summary: The account's credits, active pass and unlocked features (guest bearer is 403).
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: Current entitlements.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Entitlements'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '403':
+          description: A guest session has no entitlements.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /me/ledger:
+    get:
+      operationId: getLedger
+      summary: The last 50 ledger entries, newest first.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: Ledger entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items: {$ref: '#/components/schemas/LedgerEntry'}
+        '401':
+          description: No valid session.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '403':
+          description: A guest session has no ledger.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /internal/credits/consume:
+    post:
+      operationId: consumeCredit
+      summary: Spend one unit (year pass, month pass, then credits) for a reading. Idempotent on reading_id.
+      description: >-
+        For reading-svc. The account needs a chart profile. The first success locks the account's
+        birth data. A repeated reading_id answers the same 200 without a second charge.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumeRequest'}
+      responses:
+        '200':
+          description: Spent (or already spent for this reading).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsumeResult'}
+        '400':
+          description: Invalid body.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '404':
+          description: Unknown account.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '409':
+          description: Refused; `reason` is `no_credits`, `daily_cap`, `no_profile` or `reading_conflict`.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /internal/credits/refund:
+    post:
+      operationId: refundCredit
+      summary: Return the unit spent for a reading to the source it came from. Repeats are no-ops.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefundRequest'}
+      responses:
+        '200':
+          description: Refunded (or already refunded).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RefundResult'}
+        '404':
+          description: No consume was recorded for this reading.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /internal/credits/reversals:
+    post:
+      operationId: reverseCredits
+      summary: Take back the credits of a refunded purchase. Idempotent on order_id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReversalRequest'}
+      responses:
+        '200':
+          description: Reversed (or already reversed).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReversalResult'}
+        '404':
+          description: Unknown account.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '409':
+          description: The balance is below the credits to reverse (`reason` is `insufficient_credits`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /sessions/current:
     delete:
       operationId: logout
@@ -371,6 +498,65 @@ components:
           required: [birth, zone, gender]
         calendar: {type: string, enum: [VN, CN]}
         locked: {type: boolean, description: True when the account's birth data can no longer change.}
+    Entitlements:
+      type: object
+      required: [credits, pass, features]
+      properties:
+        credits: {type: integer, minimum: 0}
+        pass:
+          type: [object, 'null']
+          required: [kind, ends_at, questions_left]
+          properties:
+            kind: {type: string, enum: [MONTH, YEAR]}
+            ends_at: {type: string, format: date-time}
+            questions_left: {type: [integer, 'null'], description: Null means unlimited.}
+        features:
+          type: array
+          items: {type: string, enum: [daily_detail, yearly_reading]}
+    LedgerEntry:
+      type: object
+      required: [delta, source, reason, created_at]
+      properties:
+        delta: {type: integer}
+        source: {type: string, enum: [CREDIT, PASS]}
+        reason: {type: string, enum: [signup_bonus, purchase, consume, refund, reversal]}
+        topic: {type: [string, 'null'], enum: [TinhDuyen, SuNghiep, TaiLoc, SucKhoe, GiaDao, VanNam, null]}
+        created_at: {type: string, format: date-time}
+    ConsumeRequest:
+      type: object
+      required: [account_id, reading_id, topic]
+      properties:
+        account_id: {type: string, format: uuid}
+        reading_id: {type: string, format: uuid}
+        topic: {type: string, enum: [TinhDuyen, SuNghiep, TaiLoc, SucKhoe, GiaDao, VanNam]}
+    ConsumeResult:
+      type: object
+      required: [source, credits_left]
+      properties:
+        source: {type: string, enum: [CREDIT, PASS]}
+        credits_left: {type: integer, minimum: 0}
+    RefundRequest:
+      type: object
+      required: [reading_id]
+      properties:
+        reading_id: {type: string, format: uuid}
+    RefundResult:
+      type: object
+      required: [refunded]
+      properties:
+        refunded: {type: boolean}
+    ReversalRequest:
+      type: object
+      required: [account_id, order_id, credits]
+      properties:
+        account_id: {type: string, format: uuid}
+        order_id: {type: string, format: uuid}
+        credits: {type: integer, minimum: 1}
+    ReversalResult:
+      type: object
+      required: [ok]
+      properties:
+        ok: {type: boolean}
     Problem:
       type: object
       required: [type, title, status, trace_id]

@@ -12,12 +12,16 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: identity-svc
+      auto-offset-reset: earliest
+      enable-auto-commit: false
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
 
 platform:
-  # identity-svc publishes no events.
+  # identity-svc publishes no events (it only consumes PaymentSucceeded).
   outbox:
     enabled: false
   # Empty = internal-token filter off (local use only); set INTERNAL_API_TOKEN everywhere else.

@@ -1,5 +1,9 @@
 package dev.platform.identity.adapter.in.web;
 
+import dev.platform.identity.application.AccountNotFoundException;
+import dev.platform.identity.application.ConsumptionNotFoundException;
+import dev.platform.identity.application.CreditConflictException;
+import dev.platform.identity.application.ForbiddenException;
 import dev.platform.identity.application.InvalidRedirectUriException;
 import dev.platform.identity.application.MailDeliveryException;
 import dev.platform.identity.application.OidcUnavailableException;
@@ -97,6 +101,33 @@ public class IdentityExceptionHandler {
       throws Exception {
     ProblemDetail detail =
         ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Profile not found");
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.NOT_FOUND, detail, null), request);
+  }
+
+  @ExceptionHandler(ForbiddenException.class)
+  ResponseEntity<Object> forbidden(ForbiddenException ex, WebRequest request) throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, "Not allowed for this session");
+    detail.setType(URI.create("urn:problem:forbidden"));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.FORBIDDEN, detail, null), request);
+  }
+
+  @ExceptionHandler(CreditConflictException.class)
+  ResponseEntity<Object> creditConflict(CreditConflictException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Credit operation refused");
+    detail.setType(URI.create("urn:problem:conflict"));
+    detail.setProperty("reason", ex.reason());
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.CONFLICT, detail, null), request);
+  }
+
+  @ExceptionHandler({AccountNotFoundException.class, ConsumptionNotFoundException.class})
+  ResponseEntity<Object> creditNotFound(RuntimeException ex, WebRequest request) throws Exception {
+    ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     return platform.handleException(
         new ErrorResponseException(HttpStatus.NOT_FOUND, detail, null), request);
   }

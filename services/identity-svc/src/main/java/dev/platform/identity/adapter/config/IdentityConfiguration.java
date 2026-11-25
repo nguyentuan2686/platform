@@ -5,6 +5,7 @@ import dev.platform.identity.adapter.out.mail.SmtpMailerAdapter;
 import dev.platform.identity.adapter.out.oidc.DisabledOidcAdapter;
 import dev.platform.identity.adapter.out.oidc.NimbusOidcAdapter;
 import dev.platform.identity.adapter.out.persistence.JdbcAccountRepository;
+import dev.platform.identity.adapter.out.persistence.JdbcLedgerRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcMagicLinkRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcOidcLoginRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcProfileRepository;
@@ -13,13 +14,17 @@ import dev.platform.identity.application.AccountMergePort;
 import dev.platform.identity.application.AccountRepositoryPort;
 import dev.platform.identity.application.BirthCipherPort;
 import dev.platform.identity.application.EntitlementGrantPort;
+import dev.platform.identity.application.EntitlementUseCase;
 import dev.platform.identity.application.GuestUseCase;
+import dev.platform.identity.application.LedgerPort;
 import dev.platform.identity.application.MagicLinkRepositoryPort;
 import dev.platform.identity.application.MagicLinkUseCase;
 import dev.platform.identity.application.MailerPort;
 import dev.platform.identity.application.OidcLoginRepositoryPort;
 import dev.platform.identity.application.OidcLoginUseCase;
 import dev.platform.identity.application.OidcPort;
+import dev.platform.identity.application.PaymentGrantUseCase;
+import dev.platform.identity.application.ProcessedEventPort;
 import dev.platform.identity.application.ProfileRepositoryPort;
 import dev.platform.identity.application.ProfileUseCase;
 import dev.platform.identity.application.SessionRepositoryPort;
@@ -30,12 +35,18 @@ import java.time.Clock;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.util.backoff.FixedBackOff;
 
 /** Wires the framework-free application services to their adapters. */
 @Configuration(proxyBeanMethods = false)
@@ -94,10 +105,31 @@ class IdentityConfiguration {
     return new ProfileUseCase(profiles, sessions, cipher, clock, tx);
   }
 
-  /** Replaced by the real grant in a later task. */
   @Bean
-  EntitlementGrantPort entitlementGrant() {
-    return accountId -> {};
+  JdbcLedgerRepository ledgerRepository(JdbcClient jdbc) {
+    return new JdbcLedgerRepository(jdbc);
+  }
+
+  /** Also the {@code EntitlementGrantPort}: the one-time signup bonus is a ledger entry. */
+  @Bean
+  EntitlementUseCase entitlementUseCase(
+      LedgerPort ledger, ProfileRepositoryPort profiles, Clock clock, TransactionOperations tx) {
+    return new EntitlementUseCase(ledger, profiles, clock, tx);
+  }
+
+  @Bean
+  PaymentGrantUseCase paymentGrantUseCase(
+      LedgerPort ledger, ProcessedEventPort processed, Clock clock, TransactionOperations tx) {
+    return new PaymentGrantUseCase(ledger, processed, clock, tx);
+  }
+
+  /** Three retries one second apart, then the record goes to {@code <topic>.DLT}. */
+  @Bean
+  CommonErrorHandler kafkaErrorHandler(KafkaTemplate<?, ?> template) {
+    DeadLetterPublishingRecoverer recoverer =
+        new DeadLetterPublishingRecoverer(
+            template, (record, ex) -> new TopicPartition(record.topic() + ".DLT", -1));
+    return new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3L));
   }
 
   @Bean

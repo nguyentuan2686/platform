@@ -10,14 +10,23 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import dev.platform.identity.adapter.in.web.AuthController;
+import dev.platform.identity.adapter.in.web.EntitlementController;
 import dev.platform.identity.adapter.in.web.GoogleAuthController;
 import dev.platform.identity.adapter.in.web.IdentityExceptionHandler;
+import dev.platform.identity.adapter.in.web.InternalCreditController;
 import dev.platform.identity.adapter.in.web.MeController;
 import dev.platform.identity.adapter.in.web.ProfileController;
 import dev.platform.identity.application.AuthorizationStart;
+import dev.platform.identity.application.ConsumeResult;
+import dev.platform.identity.application.ConsumptionNotFoundException;
+import dev.platform.identity.application.CreditConflictException;
+import dev.platform.identity.application.EntitlementUseCase;
+import dev.platform.identity.application.EntitlementView;
+import dev.platform.identity.application.ForbiddenException;
 import dev.platform.identity.application.GuestUseCase;
 import dev.platform.identity.application.InvalidRedirectUriException;
 import dev.platform.identity.application.IssuedSession;
+import dev.platform.identity.application.LedgerEntryView;
 import dev.platform.identity.application.LoginResult;
 import dev.platform.identity.application.MagicLinkUseCase;
 import dev.platform.identity.application.OidcLoginUseCase;
@@ -29,10 +38,13 @@ import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.identity.domain.BirthData;
 import dev.platform.identity.domain.Calendar;
 import dev.platform.identity.domain.ChartProfile;
+import dev.platform.identity.domain.CreditSource;
 import dev.platform.identity.domain.Email;
+import dev.platform.identity.domain.PassKind;
 import dev.platform.identity.domain.ProfileLockedException;
 import dev.platform.identity.domain.SessionToken;
 import dev.platform.identity.domain.Subject;
+import dev.platform.identity.domain.Topic;
 import dev.platform.starter.web.PlatformWebAutoConfiguration;
 import java.net.URI;
 import java.security.SecureRandom;
@@ -62,7 +74,9 @@ import tools.jackson.databind.json.JsonMapper;
   AuthController.class,
   MeController.class,
   GoogleAuthController.class,
-  ProfileController.class
+  ProfileController.class,
+  EntitlementController.class,
+  InternalCreditController.class
 })
 @Import({PlatformWebAutoConfiguration.class, IdentityExceptionHandler.class})
 class ContractTest {
@@ -76,6 +90,7 @@ class ContractTest {
   @MockitoBean SessionUseCase sessions;
   @MockitoBean OidcLoginUseCase oidc;
   @MockitoBean ProfileUseCase profiles;
+  @MockitoBean EntitlementUseCase entitlements;
 
   private static IssuedSession issued(Subject subject) {
     return new IssuedSession(SessionToken.generate(new SecureRandom()), subject, EXPIRES);
@@ -111,6 +126,11 @@ class ContractTest {
             "GET /me/profile",
             "PUT /me/profile",
             "DELETE /me/profile",
+            "GET /me/entitlements",
+            "GET /me/ledger",
+            "POST /internal/credits/consume",
+            "POST /internal/credits/refund",
+            "POST /internal/credits/reversals",
             "DELETE /sessions/current");
     assertThat(served).containsAll(declared);
   }
@@ -313,6 +333,132 @@ class ContractTest {
                 .getResponse()
                 .getStatus())
         .isEqualTo(204);
+  }
+
+  private static final UUID READING = UUID.randomUUID();
+  private static final String CONSUME_BODY =
+      "{\"account_id\":\""
+          + UUID.randomUUID()
+          + "\",\"reading_id\":\""
+          + READING
+          + "\",\"topic\":\"TaiLoc\"}";
+
+  private static String reversalBody(int credits) {
+    return "{\"account_id\":\""
+        + UUID.randomUUID()
+        + "\",\"order_id\":\""
+        + UUID.randomUUID()
+        + "\",\"credits\":"
+        + credits
+        + "}";
+  }
+
+  @Test
+  void entitlements_and_ledger_match_the_spec() throws Exception {
+    when(sessions.resolve("a")).thenReturn(new Subject.Account(UUID.randomUUID()));
+    when(entitlements.view(any()))
+        .thenReturn(
+            new EntitlementView(
+                2,
+                new EntitlementView.PassView(PassKind.MONTH, EXPIRES, 1),
+                java.util.List.of("daily_detail")),
+            new EntitlementView(0, null, java.util.List.of()),
+            new EntitlementView(
+                0,
+                new EntitlementView.PassView(PassKind.YEAR, EXPIRES, null),
+                java.util.List.of("daily_detail", "yearly_reading")));
+    when(entitlements.ledger(any()))
+        .thenReturn(
+            java.util.List.of(
+                new LedgerEntryView(-1, CreditSource.CREDIT, "consume", "TaiLoc", EXPIRES),
+                new LedgerEntryView(1, CreditSource.CREDIT, "signup_bonus", null, EXPIRES)));
+
+    for (int i = 0; i < 3; i++) {
+      JsonNode view =
+          body(mvc.perform(get("/me/entitlements").header("Authorization", "Bearer a")), 200);
+      assertThat(ContractSupport.componentSchema("Entitlements").validate(view)).isEmpty();
+      if (i == 0) {
+        assertThat(view.get("pass").get("questions_left").asInt()).isEqualTo(1);
+      }
+    }
+    JsonNode ledger = body(mvc.perform(get("/me/ledger").header("Authorization", "Bearer a")), 200);
+    assertThat(ledger).hasSize(2);
+    for (JsonNode entry : ledger) {
+      assertThat(ContractSupport.componentSchema("LedgerEntry").validate(entry)).isEmpty();
+    }
+  }
+
+  @Test
+  void a_guest_gets_403_on_entitlements() throws Exception {
+    when(sessions.resolve("g")).thenReturn(new Subject.Guest(UUID.randomUUID()));
+    when(entitlements.view(any())).thenThrow(new ForbiddenException());
+
+    JsonNode problem =
+        body(mvc.perform(get("/me/entitlements").header("Authorization", "Bearer g")), 403);
+
+    assertThat(ContractSupport.componentSchema("Problem").validate(problem)).isEmpty();
+    assertThat(problem.get("type").asString()).isEqualTo("urn:problem:forbidden");
+    assertThat(body(mvc.perform(get("/me/entitlements")), 401).get("status").asInt())
+        .isEqualTo(401);
+  }
+
+  @Test
+  void internal_credit_operations_match_the_spec() throws Exception {
+    when(entitlements.consume(any(), eq(READING), eq(Topic.TaiLoc)))
+        .thenReturn(new ConsumeResult(CreditSource.CREDIT, 3));
+
+    JsonNode consumed = body(mvc.perform(json("/internal/credits/consume", CONSUME_BODY)), 200);
+    JsonNode refunded =
+        body(
+            mvc.perform(json("/internal/credits/refund", "{\"reading_id\":\"" + READING + "\"}")),
+            200);
+    JsonNode reversed =
+        body(mvc.perform(json("/internal/credits/reversals", reversalBody(5))), 200);
+
+    assertThat(ContractSupport.componentSchema("ConsumeResult").validate(consumed)).isEmpty();
+    assertThat(ContractSupport.componentSchema("RefundResult").validate(refunded)).isEmpty();
+    assertThat(ContractSupport.componentSchema("ReversalResult").validate(reversed)).isEmpty();
+    assertThat(consumed.get("credits_left").asInt()).isEqualTo(3);
+    assertThat(
+            ContractSupport.componentSchema("ConsumeRequest")
+                .validate(JsonMapper.shared().readTree(CONSUME_BODY)))
+        .isEmpty();
+    assertThat(
+            ContractSupport.componentSchema("ConsumeRequest")
+                .validate(JsonMapper.shared().readTree("{}")))
+        .isNotEmpty();
+  }
+
+  @Test
+  void internal_credit_problems_match_the_spec() throws Exception {
+    when(entitlements.consume(any(), any(), any()))
+        .thenThrow(new CreditConflictException("no_credits"));
+    org.mockito.Mockito.doThrow(new ConsumptionNotFoundException())
+        .when(entitlements)
+        .refund(any());
+    org.mockito.Mockito.doThrow(new CreditConflictException("insufficient_credits"))
+        .when(entitlements)
+        .reverse(any(), any(), org.mockito.ArgumentMatchers.anyInt());
+
+    JsonNode conflict = body(mvc.perform(json("/internal/credits/consume", CONSUME_BODY)), 409);
+    JsonNode missing =
+        body(
+            mvc.perform(
+                json("/internal/credits/refund", "{\"reading_id\":\"" + UUID.randomUUID() + "\"}")),
+            404);
+    JsonNode spent = body(mvc.perform(json("/internal/credits/reversals", reversalBody(5))), 409);
+    JsonNode invalid =
+        body(
+            mvc.perform(json("/internal/credits/consume", CONSUME_BODY.replace("TaiLoc", "Nope"))),
+            400);
+    JsonNode zero = body(mvc.perform(json("/internal/credits/reversals", reversalBody(0))), 400);
+
+    for (JsonNode problem : new JsonNode[] {conflict, missing, spent, invalid, zero}) {
+      assertThat(ContractSupport.componentSchema("Problem").validate(problem)).isEmpty();
+    }
+    assertThat(conflict.get("reason").asString()).isEqualTo("no_credits");
+    assertThat(conflict.get("type").asString()).isEqualTo("urn:problem:conflict");
+    assertThat(spent.get("reason").asString()).isEqualTo("insufficient_credits");
   }
 
   @Test
