@@ -29,13 +29,13 @@ class QaJobsTest {
     jobs.runRetries();
     jobs.runRetention();
 
-    verify(retry).runOnce(NOW);
+    verify(retry).runOnce();
     verify(retention).purge(NOW);
   }
 
   @Test
   void a_failed_run_never_throws() {
-    doThrow(new IllegalStateException("db down")).when(retry).runOnce(any());
+    doThrow(new IllegalStateException("db down")).when(retry).runOnce();
     doThrow(new IllegalStateException("db down")).when(retention).purge(any());
 
     assertThatCode(jobs::runRetries).doesNotThrowAnyException();

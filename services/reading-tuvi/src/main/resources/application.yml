@@ -33,6 +33,8 @@ qa:
   free-daily-per-subject: ${QA_FREE_DAILY_PER_SUBJECT:3}
   free-global-daily-cap: ${QA_FREE_GLOBAL_DAILY_CAP:500}
   retry-window: ${QA_RETRY_WINDOW:PT24H}
+  # wait before refunding a question whose credit consume failed (identity may still commit it).
+  consume-refund-grace: ${QA_CONSUME_REFUND_GRACE:PT2M}
   workers: ${QA_WORKERS:2}
   stream-timeout: ${QA_STREAM_TIMEOUT:PT90S}
   # retry/refund/recovery every job-interval and free-chat retention every 6 h (one thread).

@@ -18,6 +18,9 @@ CREATE TABLE qa_reading (
   retry_until timestamptz NULL,
   -- a code only: all_providers_exhausted, filter:<rule>, executor_full, ...
   last_error text NULL,
+  -- the retry job's claim: set when a replica claims the row (with next_attempt_at as the lease
+  -- end); every job write after an outbound call compares it, every status change clears it
+  claim_token uuid NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   answered_at timestamptz NULL,
   refunded_at timestamptz NULL

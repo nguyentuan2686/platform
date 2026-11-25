@@ -195,7 +195,8 @@ public class QaService {
       outcome = identity.consume(subject.id(), id, topic);
     } catch (RuntimeException e) {
       // a timeout may still have charged: compensate with a refund (retry job)
-      if (repo.markRefundPending(id, "consume_unavailable")) {
+      if (repo.markRefundPending(
+          id, "consume_unavailable", clock.instant().plus(settings.consumeRefundGrace()))) {
         LOG.warn("qa consume failed, refund pending reading_id={}", id);
       } else {
         skipped(id, "REFUND_PENDING");
@@ -484,9 +485,10 @@ public class QaService {
 
   /**
    * One more model attempt for a {@code RETRYING} reading, from its stored encrypted prompt (no
-   * bearer, birth data or chart call needed). Never charges or refunds.
+   * bearer, birth data or chart call needed). The answer is stored only while the job still holds
+   * {@code claim}. Never charges or refunds.
    */
-  Regeneration regenerate(UUID readingId) {
+  Regeneration regenerate(UUID readingId, UUID claim) {
     Optional<QaReading> found = repo.find(readingId).filter(r -> r.status() == QaStatus.RETRYING);
     if (found.isEmpty()) {
       return new Regeneration.Settled();
@@ -505,14 +507,13 @@ public class QaService {
             readingId, r.kind(), r.topic(), followUps, 0, r.createdAt(), prompt, List.of(), null);
     return switch (attempt(job)) {
       case Attempt.Text text -> {
-        if (!store.answer(
+        if (!store.answerClaimed(
             readingId,
-            0,
+            claim,
             cipher.encrypt(aad(readingId, 0), text.text()),
             text.provider(),
-            List.of(),
             clock.instant())) {
-          skipped(readingId, "ANSWERED");
+          skipped(readingId, "ANSWERED (claim lost)");
           yield new Regeneration.Settled();
         }
         yield new Regeneration.Answered(text.provider());

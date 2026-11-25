@@ -11,6 +11,7 @@ import dev.platform.reading.tuvi.domain.qa.QaTopic;
 import dev.platform.reading.tuvi.domain.qa.RefusalReason;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -227,55 +228,106 @@ class JdbcQaRepositoryIT {
         "select prompt_enc from qa_message where reading_id = ? and seq = 0", byte[].class, id);
   }
 
+  UUID claimToken(UUID id) {
+    return jdbc.queryForObject("select claim_token from qa_reading where id = ?", UUID.class, id);
+  }
+
   @Test
-  void claim_due_leases_each_row_once() {
+  void claim_next_due_leases_one_row_at_a_time() {
     UUID due = insert(QaStatus.PENDING);
     repo.markRetrying(due, 1, NOW, NOW.plusSeconds(86_400), "x");
     UUID later = insert(QaStatus.PENDING);
     repo.markRetrying(later, 1, NOW.plusSeconds(60), NOW.plusSeconds(86_400), "x");
     Instant lease = NOW.plusSeconds(600);
+    UUID token = UUID.randomUUID();
 
-    List<QaReading> first = repo.claimDue(NOW, lease, 10);
-    List<QaReading> second = repo.claimDue(NOW, lease, 10);
+    Optional<QaReading> first = repo.claimNextDue(NOW, lease, token);
+    Optional<QaReading> second = repo.claimNextDue(NOW, lease, UUID.randomUUID());
 
-    assertThat(first).extracting(QaReading::id).containsExactly(due);
-    assertThat(first.getFirst().nextAttemptAt()).isEqualTo(lease);
-    assertThat(first.getFirst().attempts()).isEqualTo(1);
+    assertThat(first).map(QaReading::id).contains(due);
+    assertThat(first.orElseThrow().nextAttemptAt()).isEqualTo(lease);
+    assertThat(first.orElseThrow().attempts()).isEqualTo(1);
+    assertThat(claimToken(due)).isEqualTo(token);
     assertThat(second).isEmpty();
-    assertThat(repo.claimDue(lease, lease.plusSeconds(600), 10)).hasSize(2);
+    // after the lease: the earliest due first, then the other
+    assertThat(repo.claimNextDue(lease, lease.plusSeconds(600), UUID.randomUUID()))
+        .map(QaReading::id)
+        .contains(later);
+    assertThat(repo.claimNextDue(lease, lease.plusSeconds(600), UUID.randomUUID()))
+        .map(QaReading::id)
+        .contains(due);
   }
 
   @Test
-  void claim_refunds_takes_pending_refunds_and_honours_the_lease() {
+  void claimed_writes_apply_only_for_the_current_claim() {
+    UUID id = insert(QaStatus.PENDING);
+    repo.markRetrying(id, 1, NOW, NOW.plusSeconds(86_400), "x");
+    UUID stale = UUID.randomUUID();
+    repo.claimNextDue(NOW, NOW.plusSeconds(600), stale);
+    UUID current = UUID.randomUUID();
+    repo.claimNextDue(NOW.plusSeconds(601), NOW.plusSeconds(1200), current);
+
+    assertThat(repo.markAnsweredClaimed(id, stale, NOW)).isFalse();
+    assertThat(repo.markRetryingClaimed(id, stale, 2, NOW, NOW, "x")).isFalse();
+    assertThat(repo.markRefundPendingClaimed(id, stale, "x")).isFalse();
+    assertThat(status(id)).isEqualTo(QaStatus.RETRYING);
+
+    assertThat(repo.markRetryingClaimed(id, current, 2, NOW, NOW.plusSeconds(86_400), "x"))
+        .isTrue();
+    // every status change ends the claim: the same token cannot write twice
+    assertThat(claimToken(id)).isNull();
+    assertThat(repo.markAnsweredClaimed(id, current, NOW)).isFalse();
+
+    UUID refund = UUID.randomUUID();
+    repo.markRefundPending(id, "x");
+    repo.claimNextRefund(NOW, NOW.plusSeconds(60), refund);
+    assertThat(repo.markRefunded(id, stale, NOW)).isFalse();
+    assertThat(repo.markFailedClaimed(id, stale, "x")).isFalse();
+    assertThat(repo.markRefunded(id, refund, NOW)).isTrue();
+    assertThat(status(id)).isEqualTo(QaStatus.REFUNDED);
+  }
+
+  @Test
+  void claim_next_refund_honours_the_lease_and_a_grace_period() {
     UUID a = insert(QaStatus.PENDING);
-    assertThat(repo.markRefundPending(a, "consume_unavailable")).isTrue();
+    assertThat(repo.markRefundPending(a, "refund_unavailable")).isTrue();
+    UUID deferred = insert(QaStatus.PENDING);
+    assertThat(repo.markRefundPending(deferred, "consume_unavailable", NOW.plusSeconds(120)))
+        .isTrue();
     insert(QaStatus.RETRYING);
 
-    List<QaReading> claimed = repo.claimRefunds(NOW, NOW.plusSeconds(60), 10);
-
-    assertThat(claimed).extracting(QaReading::id).containsExactly(a);
-    assertThat(repo.claimRefunds(NOW.plusSeconds(30), NOW.plusSeconds(90), 10)).isEmpty();
-    assertThat(repo.claimRefunds(NOW.plusSeconds(60), NOW.plusSeconds(120), 10)).hasSize(1);
+    assertThat(repo.claimNextRefund(NOW, NOW.plusSeconds(60), UUID.randomUUID()))
+        .map(QaReading::id)
+        .contains(a);
+    assertThat(repo.claimNextRefund(NOW.plusSeconds(30), NOW.plusSeconds(90), UUID.randomUUID()))
+        .isEmpty();
+    assertThat(repo.claimNextRefund(NOW.plusSeconds(120), NOW.plusSeconds(180), UUID.randomUUID()))
+        .isPresent();
+    assertThat(repo.claimNextRefund(NOW.plusSeconds(120), NOW.plusSeconds(180), UUID.randomUUID()))
+        .isPresent();
   }
 
   @Test
-  void mark_refund_pending_clears_a_retry_lease() {
+  void mark_refund_pending_clears_a_retry_lease_and_the_prompt() {
     UUID id = insert(QaStatus.PENDING);
     repo.markRetrying(id, 3, NOW.plusSeconds(600), NOW, "x");
 
     assertThat(repo.markRefundPending(id, "retry_window_elapsed")).isTrue();
 
     assertThat(repo.find(id).orElseThrow().nextAttemptAt()).isNull();
-    assertThat(repo.claimRefunds(NOW, NOW.plusSeconds(60), 10)).hasSize(1);
+    assertThat(prompt(id)).isNull();
+    assertThat(repo.claimNextRefund(NOW, NOW.plusSeconds(60), UUID.randomUUID())).isPresent();
   }
 
   @Test
   void refunded_and_failed_drop_the_prompt() {
     UUID refunded = insert(QaStatus.REFUND_PENDING);
     UUID failed = insert(QaStatus.REFUND_PENDING);
+    UUID claim = UUID.randomUUID();
+    jdbc.update("update qa_reading set claim_token = ? where id = ?", claim, refunded);
 
-    assertThat(repo.markRefunded(refunded, NOW)).isTrue();
-    assertThat(repo.markRefunded(refunded, NOW)).isFalse();
+    assertThat(repo.markRefunded(refunded, claim, NOW)).isTrue();
+    assertThat(repo.markRefunded(refunded, claim, NOW)).isFalse();
     assertThat(repo.markFailed(failed, "refund:not_charged")).isTrue();
 
     QaReading r = repo.find(refunded).orElseThrow();
@@ -283,7 +335,7 @@ class JdbcQaRepositoryIT {
     assertThat(r.refundedAt()).isEqualTo(NOW);
     assertThat(prompt(refunded)).isNull();
     assertThat(prompt(failed)).isNull();
-    assertThat(repo.markRefunded(insert(QaStatus.RETRYING), NOW)).isFalse();
+    assertThat(repo.markRefunded(insert(QaStatus.RETRYING), null, NOW)).isFalse();
   }
 
   @Test

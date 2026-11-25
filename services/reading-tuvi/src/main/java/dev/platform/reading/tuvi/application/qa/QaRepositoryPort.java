@@ -50,8 +50,22 @@ public interface QaRepositoryPort {
   /** Records the credit source on a {@code PENDING} reading. */
   boolean markCharged(UUID id, String creditSource);
 
-  /** Status {@code REFUND_PENDING}; clears any retry lease so the refund is due at once. */
+  // Every status change also clears the job claim token. The *Claimed variants are the job writes
+  // made after an outbound call: they apply only while the caller still holds its claim
+  // (claim_token = claim), so a row re-claimed by another replica after the lease ended is never
+  // overwritten by the earlier holder.
+
+  /** Status {@code REFUND_PENDING}, due at once; the stored prompt is dropped. */
   boolean markRefundPending(UUID id, String lastError);
+
+  /**
+   * As {@link #markRefundPending(UUID, String)}, but the first refund attempt waits until {@code
+   * notBefore} (null: at once).
+   */
+  boolean markRefundPending(UUID id, String lastError, Instant notBefore);
+
+  /** {@link #markRefundPending(UUID, String)} by the holder of {@code claim}. */
+  boolean markRefundPendingClaimed(UUID id, UUID claim, String lastError);
 
   /** Status {@code REFUSED} with the reason; the stored prompt is dropped. */
   boolean markRefused(UUID id, RefusalReason reason);
@@ -69,10 +83,25 @@ public interface QaRepositoryPort {
   boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError);
 
+  /** {@link #markRetrying} by the holder of {@code claim}. */
+  boolean markRetryingClaimed(
+      UUID id,
+      UUID claim,
+      int attempts,
+      Instant nextAttemptAt,
+      Instant retryUntil,
+      String lastError);
+
   /** Status {@code FAILED}; the stored prompt is dropped. */
   boolean markFailed(UUID id, String lastError);
 
+  /** {@link #markFailed} by the holder of {@code claim}. */
+  boolean markFailedClaimed(UUID id, UUID claim, String lastError);
+
   boolean markAnswered(UUID id, Instant at);
+
+  /** {@link #markAnswered} by the holder of {@code claim}. */
+  boolean markAnsweredClaimed(UUID id, UUID claim, Instant at);
 
   /** Stores the answer of one unanswered message and drops its prompt. */
   boolean answerMessage(
@@ -121,15 +150,18 @@ public interface QaRepositoryPort {
   int deleteSettledBySubject(UUID subjectId);
 
   // Jobs (retry, refund, recovery, retention). Safe with several replicas: a claim is one
-  // statement (FOR UPDATE SKIP LOCKED) that leases the rows by moving next_attempt_at to
-  // leaseUntil, so the outbound call runs after the commit and no other replica takes the row
-  // until the lease ends.
+  // statement (FOR UPDATE SKIP LOCKED) that takes one row, moves next_attempt_at to leaseUntil and
+  // stores the claim token, so the outbound call runs after the commit, no other replica takes the
+  // row until the lease ends, and the holder's later writes are fenced on the token.
 
-  /** Claims up to {@code limit} {@code RETRYING} readings due at {@code now}, oldest first. */
-  List<QaReading> claimDue(Instant now, Instant leaseUntil, int limit);
+  /**
+   * Claims the {@code RETRYING} reading due at {@code now} that has waited longest: lease end
+   * {@code leaseUntil}, claim token {@code claim}.
+   */
+  Optional<QaReading> claimNextDue(Instant now, Instant leaseUntil, UUID claim);
 
-  /** Claims up to {@code limit} {@code REFUND_PENDING} readings not leased at {@code now}. */
-  List<QaReading> claimRefunds(Instant now, Instant leaseUntil, int limit);
+  /** Claims the oldest {@code REFUND_PENDING} reading not leased or deferred at {@code now}. */
+  Optional<QaReading> claimNextRefund(Instant now, Instant leaseUntil, UUID claim);
 
   /**
    * Charged PAID {@code PENDING} readings created before {@code olderThan} (the process died
@@ -147,8 +179,11 @@ public interface QaRepositoryPort {
   /** Uncharged {@code PENDING} readings created before {@code olderThan} (abandoned). */
   List<QaReading> staleUncharged(Instant olderThan, int limit);
 
-  /** {@code REFUND_PENDING} to {@code REFUNDED} with {@code refunded_at}; drops the prompt. */
-  boolean markRefunded(UUID id, Instant at);
+  /**
+   * {@code REFUND_PENDING} to {@code REFUNDED} with {@code refunded_at} by the holder of {@code
+   * claim}; drops the prompt.
+   */
+  boolean markRefunded(UUID id, UUID claim, Instant at);
 
   /** Deletes FREE readings created before {@code before} that are not owed; cascades. */
   int purgeFree(Instant before);

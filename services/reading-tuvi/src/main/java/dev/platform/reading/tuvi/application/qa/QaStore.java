@@ -133,6 +133,22 @@ public class QaStore {
   }
 
   /**
+   * The retry job's answer to a first message: {@code RETRYING -> ANSWERED} only while the job
+   * still holds {@code claim}, then the answer. False, with nothing written, otherwise.
+   */
+  @Transactional
+  public boolean answerClaimed(
+      UUID readingId, UUID claim, byte[] answerEnc, String provider, Instant now) {
+    if (!repo.markAnsweredClaimed(readingId, claim, now)) {
+      return false;
+    }
+    if (!repo.answerMessage(readingId, 0, answerEnc, provider, List.of(), now)) {
+      throw new IllegalStateException("first message cannot be answered");
+    }
+    return true;
+  }
+
+  /**
    * Deletes the subject's settled readings. 409 {@code reading_in_progress} when any reading still
    * waits for an answer or refund; the delete itself also skips such readings, so one that becomes
    * in progress concurrently (a paid question being charged) is never deleted.

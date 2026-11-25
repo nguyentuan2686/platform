@@ -341,7 +341,20 @@ final class QaFakes {
         return false;
       }
       readings.put(id, f.apply(r));
+      claims.remove(id);
       return true;
+    }
+
+    /** Job claim tokens by reading (the claim_token column). */
+    final Map<UUID, UUID> claims = new HashMap<>();
+
+    /** A write by the holder of {@code claim}: applies only while the claim is current. */
+    private synchronized boolean claimed(
+        UUID id, UUID claim, java.util.function.BooleanSupplier write) {
+      if (!claim.equals(claims.get(id))) {
+        return false;
+      }
+      return write.getAsBoolean();
     }
 
     @Override
@@ -357,14 +370,47 @@ final class QaFakes {
 
     @Override
     public boolean markRefundPending(UUID id, String lastError) {
+      return markRefundPending(id, lastError, null);
+    }
+
+    @Override
+    public boolean markRefundPendingClaimed(UUID id, UUID claim, String lastError) {
+      return claimed(id, claim, () -> markRefundPending(id, lastError));
+    }
+
+    @Override
+    public boolean markRetryingClaimed(
+        UUID id, UUID claim, int attempts, Instant next, Instant until, String lastError) {
+      return claimed(id, claim, () -> markRetrying(id, attempts, next, until, lastError));
+    }
+
+    @Override
+    public boolean markFailedClaimed(UUID id, UUID claim, String lastError) {
+      return claimed(id, claim, () -> markFailed(id, lastError));
+    }
+
+    @Override
+    public boolean markAnsweredClaimed(UUID id, UUID claim, Instant at) {
+      return claimed(id, claim, () -> markAnswered(id, at));
+    }
+
+    @Override
+    public boolean markRefundPending(UUID id, String lastError, Instant notBefore) {
       QaReading current = readings.get(id);
       if (current != null && current.status() == QaStatus.REFUSED && current.refundedAt() != null) {
         return false;
       }
-      return transition(
-          id,
-          QaStatus.REFUND_PENDING,
-          r -> withNext(r.withStatus(QaStatus.REFUND_PENDING).withLastError(lastError), null));
+      boolean ok =
+          transition(
+              id,
+              QaStatus.REFUND_PENDING,
+              r ->
+                  withNext(
+                      r.withStatus(QaStatus.REFUND_PENDING).withLastError(lastError), notBefore));
+      if (ok) {
+        clearPrompt(id, 0);
+      }
+      return ok;
     }
 
     @Override
@@ -599,38 +645,40 @@ final class QaFakes {
           r.refundedAt());
     }
 
-    private synchronized List<QaReading> claim(
-        java.util.function.Predicate<QaReading> due, Instant leaseUntil, int limit) {
-      List<QaReading> claimed =
+    private synchronized Optional<QaReading> claim(
+        java.util.function.Predicate<QaReading> due, Instant leaseUntil, UUID claim) {
+      Optional<QaReading> next =
           readings.values().stream()
               .filter(due)
-              .sorted(Comparator.comparing(QaReading::createdAt))
-              .limit(limit)
-              .map(r -> withNext(r, leaseUntil))
-              .toList();
-      claimed.forEach(r -> readings.put(r.id(), r));
-      return claimed;
+              .min(Comparator.comparing(QaReading::createdAt))
+              .map(r -> withNext(r, leaseUntil));
+      next.ifPresent(
+          r -> {
+            readings.put(r.id(), r);
+            claims.put(r.id(), claim);
+          });
+      return next;
     }
 
     @Override
-    public List<QaReading> claimDue(Instant now, Instant leaseUntil, int limit) {
+    public Optional<QaReading> claimNextDue(Instant now, Instant leaseUntil, UUID claim) {
       return claim(
           r ->
               r.status() == QaStatus.RETRYING
                   && r.nextAttemptAt() != null
                   && !r.nextAttemptAt().isAfter(now),
           leaseUntil,
-          limit);
+          claim);
     }
 
     @Override
-    public List<QaReading> claimRefunds(Instant now, Instant leaseUntil, int limit) {
+    public Optional<QaReading> claimNextRefund(Instant now, Instant leaseUntil, UUID claim) {
       return claim(
           r ->
               r.status() == QaStatus.REFUND_PENDING
                   && (r.nextAttemptAt() == null || !r.nextAttemptAt().isAfter(now)),
           leaseUntil,
-          limit);
+          claim);
     }
 
     @Override
@@ -685,7 +733,10 @@ final class QaFakes {
     }
 
     @Override
-    public boolean markRefunded(UUID id, Instant at) {
+    public boolean markRefunded(UUID id, UUID claim, Instant at) {
+      if (!claim.equals(claims.get(id))) {
+        return false;
+      }
       boolean ok =
           transition(
               id,

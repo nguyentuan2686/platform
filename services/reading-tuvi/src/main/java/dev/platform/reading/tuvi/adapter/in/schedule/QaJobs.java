@@ -38,20 +38,24 @@ public class QaJobs implements SmartLifecycle {
     this.interval = interval;
   }
 
-  /** One retry run; never throws. */
+  /** One retry run; never throws (except a VM error), so the schedule never stops. */
   public void runRetries() {
     try {
-      retry.runOnce(clock.instant());
-    } catch (RuntimeException e) {
+      retry.runOnce();
+    } catch (VirtualMachineError e) {
+      throw e;
+    } catch (Throwable e) {
       LOG.warn("qa retry run failed: {}", e.getClass().getSimpleName());
     }
   }
 
-  /** One retention run; never throws. */
+  /** One retention run; never throws (except a VM error). */
   public void runRetention() {
     try {
       retention.purge(clock.instant());
-    } catch (RuntimeException e) {
+    } catch (VirtualMachineError e) {
+      throw e;
+    } catch (Throwable e) {
       LOG.warn("qa retention run failed: {}", e.getClass().getSimpleName());
     }
   }

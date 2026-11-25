@@ -156,28 +156,68 @@ public class JdbcQaRepository implements QaRepositoryPort {
 
   @Override
   public boolean markRefundPending(UUID id, String lastError) {
-    return jdbc.update(
-            "update qa_reading set status = 'REFUND_PENDING', last_error = ?,"
-                + " next_attempt_at = null where id = ?"
-                + from(QaStatus.REFUND_PENDING)
-                // a refusal whose refund is already recorded never goes back to pending
-                + " and (status <> 'REFUSED' or refunded_at is null)",
-            lastError,
-            id)
-        == 1;
+    return markRefundPending(id, lastError, null);
+  }
+
+  @Override
+  public boolean markRefundPending(UUID id, String lastError, Instant notBefore) {
+    return refundPending(id, lastError, notBefore, null);
+  }
+
+  @Override
+  public boolean markRefundPendingClaimed(UUID id, UUID claim, String lastError) {
+    return refundPending(id, lastError, null, claim);
+  }
+
+  /** {@code next_attempt_at} is when the refund may first be tried (null: at once). */
+  private boolean refundPending(UUID id, String lastError, Instant notBefore, UUID claim) {
+    boolean changed =
+        jdbc.update(
+                "update qa_reading set status = 'REFUND_PENDING', last_error = ?,"
+                    + " next_attempt_at = ?, claim_token = null where id = ?"
+                    + from(QaStatus.REFUND_PENDING)
+                    // a refusal whose refund is already recorded never goes back to pending
+                    + " and (status <> 'REFUSED' or refunded_at is null)"
+                    + fence(claim),
+                args(claim, lastError, ts(notBefore), id))
+            == 1;
+    if (changed) {
+      // a refund never needs the prompt
+      dropPrompt(id);
+    }
+    return changed;
+  }
+
+  /** {@code and claim_token = ?} when the write is made by a claim holder. */
+  private static String fence(UUID claim) {
+    return claim == null ? "" : " and claim_token = ?";
+  }
+
+  private static Object[] args(UUID claim, Object... args) {
+    if (claim == null) {
+      return args;
+    }
+    Object[] all = java.util.Arrays.copyOf(args, args.length + 1);
+    all[args.length] = claim;
+    return all;
+  }
+
+  private void dropPrompt(UUID id) {
+    jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
   }
 
   @Override
   public boolean markRefused(UUID id, RefusalReason reason) {
     boolean changed =
         jdbc.update(
-                "update qa_reading set status = 'REFUSED', refusal_reason = ? where id = ?"
+                "update qa_reading set status = 'REFUSED', refusal_reason = ?,"
+                    + " claim_token = null where id = ?"
                     + from(QaStatus.REFUSED),
                 reason.name(),
                 id)
             == 1;
     if (changed) {
-      jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+      dropPrompt(id);
     }
     return changed;
   }
@@ -204,41 +244,78 @@ public class JdbcQaRepository implements QaRepositoryPort {
   @Override
   public boolean markRetrying(
       UUID id, int attempts, Instant nextAttemptAt, Instant retryUntil, String lastError) {
+    return retrying(id, attempts, nextAttemptAt, retryUntil, lastError, null);
+  }
+
+  @Override
+  public boolean markRetryingClaimed(
+      UUID id,
+      UUID claim,
+      int attempts,
+      Instant nextAttemptAt,
+      Instant retryUntil,
+      String lastError) {
+    return retrying(id, attempts, nextAttemptAt, retryUntil, lastError, claim);
+  }
+
+  private boolean retrying(
+      UUID id,
+      int attempts,
+      Instant nextAttemptAt,
+      Instant retryUntil,
+      String lastError,
+      UUID claim) {
     return jdbc.update(
             "update qa_reading set status = 'RETRYING', attempts = ?, next_attempt_at = ?,"
-                + " retry_until = ?, last_error = ? where id = ?"
-                + from(QaStatus.RETRYING),
-            attempts,
-            ts(nextAttemptAt),
-            ts(retryUntil),
-            lastError,
-            id)
+                + " retry_until = ?, last_error = ?, claim_token = null where id = ?"
+                + from(QaStatus.RETRYING)
+                + fence(claim),
+            args(claim, attempts, ts(nextAttemptAt), ts(retryUntil), lastError, id))
         == 1;
   }
 
   @Override
   public boolean markFailed(UUID id, String lastError) {
+    return failed(id, lastError, null);
+  }
+
+  @Override
+  public boolean markFailedClaimed(UUID id, UUID claim, String lastError) {
+    return failed(id, lastError, claim);
+  }
+
+  private boolean failed(UUID id, String lastError, UUID claim) {
     boolean changed =
         jdbc.update(
-                "update qa_reading set status = 'FAILED', last_error = ? where id = ?"
-                    + from(QaStatus.FAILED),
-                lastError,
-                id)
+                "update qa_reading set status = 'FAILED', last_error = ?, claim_token = null"
+                    + " where id = ?"
+                    + from(QaStatus.FAILED)
+                    + fence(claim),
+                args(claim, lastError, id))
             == 1;
     if (changed) {
-      jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+      dropPrompt(id);
     }
     return changed;
   }
 
   @Override
   public boolean markAnswered(UUID id, Instant at) {
+    return answered(id, at, null);
+  }
+
+  @Override
+  public boolean markAnsweredClaimed(UUID id, UUID claim, Instant at) {
+    return answered(id, at, claim);
+  }
+
+  private boolean answered(UUID id, Instant at, UUID claim) {
     return jdbc.update(
-            "update qa_reading set status = 'ANSWERED', answered_at = ?, next_attempt_at = null"
-                + " where id = ?"
-                + from(QaStatus.ANSWERED),
-            ts(at),
-            id)
+            "update qa_reading set status = 'ANSWERED', answered_at = ?, next_attempt_at = null,"
+                + " claim_token = null where id = ?"
+                + from(QaStatus.ANSWERED)
+                + fence(claim),
+            args(claim, ts(at), id))
         == 1;
   }
 
@@ -378,45 +455,49 @@ public class JdbcQaRepository implements QaRepositoryPort {
   // ---------------------------------------------------------------- jobs
 
   @Override
-  public List<QaReading> claimDue(Instant now, Instant leaseUntil, int limit) {
+  public Optional<QaReading> claimNextDue(Instant now, Instant leaseUntil, UUID claim) {
     return claim(
-        QaStatus.RETRYING, "next_attempt_at <= ?", "next_attempt_at", now, leaseUntil, limit);
+        QaStatus.RETRYING, "next_attempt_at <= ?", "next_attempt_at", now, leaseUntil, claim);
   }
 
   @Override
-  public List<QaReading> claimRefunds(Instant now, Instant leaseUntil, int limit) {
+  public Optional<QaReading> claimNextRefund(Instant now, Instant leaseUntil, UUID claim) {
     return claim(
         QaStatus.REFUND_PENDING,
         "(next_attempt_at is null or next_attempt_at <= ?)",
         "created_at",
         now,
         leaseUntil,
-        limit);
+        claim);
   }
 
   /**
-   * One statement: lock the due rows other replicas have not locked ({@code SKIP LOCKED}), move
-   * their {@code next_attempt_at} to the lease end and return them. A concurrent claimer either
-   * skips the locked rows or, once this commits, no longer finds them due.
+   * One statement: lock the first due row no other replica has locked ({@code SKIP LOCKED}), set
+   * its lease end and claim token and return it. A concurrent claimer either skips the locked row
+   * or, once this commits, no longer finds it due; a later claimer (after the lease) replaces the
+   * token, so the earlier holder's fenced writes no longer apply.
    */
-  private List<QaReading> claim(
-      QaStatus status, String due, String order, Instant now, Instant leaseUntil, int limit) {
-    String inStatus = "status = '" + status.name() + "'";
-    return jdbc.query(
-        "update qa_reading set next_attempt_at = ? where id in (select id from qa_reading where "
-            + inStatus
-            + " and "
-            + due
-            + " order by "
-            + order
-            + " limit ? for update skip locked) and "
-            + inStatus
-            + " returning "
-            + READING_COLUMNS,
-        READING,
-        ts(leaseUntil),
-        ts(now),
-        limit);
+  private Optional<QaReading> claim(
+      QaStatus status, String due, String order, Instant now, Instant leaseUntil, UUID claim) {
+    // a MATERIALIZED CTE: the locking select runs exactly once. The "id in (subquery)" form can
+    // be re-run per outer row and then lock and lease a second row it never returns.
+    return jdbc
+        .query(
+            "with next as materialized (select id from qa_reading where status = '"
+                + status.name()
+                + "' and "
+                + due
+                + " order by "
+                + order
+                + " limit 1 for update skip locked)"
+                + " update qa_reading q set next_attempt_at = ?, claim_token = ?"
+                + " from next where q.id = next.id returning q.*",
+            READING,
+            ts(now),
+            ts(leaseUntil),
+            claim)
+        .stream()
+        .findFirst();
   }
 
   @Override
@@ -457,17 +538,17 @@ public class JdbcQaRepository implements QaRepositoryPort {
   }
 
   @Override
-  public boolean markRefunded(UUID id, Instant at) {
+  public boolean markRefunded(UUID id, UUID claim, Instant at) {
     boolean changed =
         jdbc.update(
                 "update qa_reading set status = 'REFUNDED', refunded_at = ?,"
-                    + " next_attempt_at = null where id = ?"
-                    + from(QaStatus.REFUNDED),
-                ts(at),
-                id)
+                    + " next_attempt_at = null, claim_token = null where id = ?"
+                    + from(QaStatus.REFUNDED)
+                    + fence(claim),
+                args(claim, ts(at), id))
             == 1;
     if (changed) {
-      jdbc.update("update qa_message set prompt_enc = null where reading_id = ?", id);
+      dropPrompt(id);
     }
     return changed;
   }

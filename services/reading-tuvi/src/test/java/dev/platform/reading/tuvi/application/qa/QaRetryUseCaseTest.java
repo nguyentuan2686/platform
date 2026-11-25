@@ -24,7 +24,9 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,7 +70,7 @@ class QaRetryUseCaseTest {
             new QaFrames(knowledge),
             clock,
             settings);
-    retry = new QaRetryUseCase(repo, qa, identity, settings);
+    retry = new QaRetryUseCase(repo, qa, identity, settings, clock);
   }
 
   void failModel() {
@@ -94,7 +96,7 @@ class QaRetryUseCaseTest {
 
   void runAt(Instant at) {
     clock.now = at;
-    retry.runOnce(at);
+    retry.runOnce();
   }
 
   QaReading reading(UUID id) {
@@ -272,10 +274,54 @@ class QaRetryUseCaseTest {
         .isInstanceOf(UpstreamUnavailableException.class);
     assertThat(reading(id).status()).isEqualTo(QaStatus.REFUND_PENDING);
 
+    // identity may still be committing the consume: no refund within the grace period
     runAt(T0.plus(Duration.ofMinutes(1)));
+    assertThat(identity.refunds).isEmpty();
+
+    runAt(T0.plus(QaSettings.DEFAULT_CONSUME_REFUND_GRACE));
 
     assertThat(identity.refunds).containsExactly(id);
     assertThat(reading(id).status()).isEqualTo(QaStatus.REFUNDED);
+  }
+
+  @Test
+  void consume_refund_grace_is_configurable() {
+    QaSettings slow = new QaSettings(3, 500, DAY, Duration.ofMinutes(10));
+    LlmGateway gateway =
+        new LlmGateway(
+            List.of(provider),
+            new MemoryUsage(),
+            new PaidPricing(BigDecimal.ONE, BigDecimal.ONE, BigDecimal.TEN),
+            clock);
+    QaService service =
+        new QaService(
+            identity,
+            new FakeCharts(),
+            knowledge,
+            gateway,
+            repo,
+            new QaStore(repo),
+            new MemoryCache(),
+            cipher,
+            new QaFrames(knowledge),
+            clock,
+            slow);
+    retry = new QaRetryUseCase(repo, service, identity, slow, clock);
+    identity.consume =
+        () -> {
+          throw new UpstreamUnavailableException("identity");
+        };
+    UUID id = UUID.randomUUID();
+    assertThatThrownBy(
+            () ->
+                service.prepare(new AskCommand("acc", id, QaKind.PAID, QaTopic.TinhDuyen, Q, "vi")))
+        .isInstanceOf(UpstreamUnavailableException.class);
+    assertThat(reading(id).nextAttemptAt()).isEqualTo(T0.plus(Duration.ofMinutes(10)));
+
+    runAt(T0.plus(Duration.ofMinutes(9)));
+    assertThat(identity.refunds).isEmpty();
+    runAt(T0.plus(Duration.ofMinutes(10)));
+    assertThat(identity.refunds).containsExactly(id);
   }
 
   @Test
@@ -381,35 +427,142 @@ class QaRetryUseCaseTest {
   void a_claimed_row_is_not_claimed_again_within_its_lease() {
     UUID id = retrying();
     Instant at = T0.plus(Duration.ofMinutes(5));
+    Instant lease = at.plus(QaRetryUseCase.CLAIM_LEASE);
 
-    List<QaReading> first = repo.claimDue(at, at.plus(QaRetryUseCase.CLAIM_LEASE), 10);
-    List<QaReading> second = repo.claimDue(at, at.plus(QaRetryUseCase.CLAIM_LEASE), 10);
+    Optional<QaReading> first = repo.claimNextDue(at, lease, UUID.randomUUID());
+    Optional<QaReading> second = repo.claimNextDue(at, lease, UUID.randomUUID());
 
-    assertThat(first).extracting(QaReading::id).containsExactly(id);
+    assertThat(first).map(QaReading::id).contains(id);
     assertThat(second).isEmpty();
+    assertThat(repo.claimNextDue(lease, lease.plusSeconds(60), UUID.randomUUID())).isPresent();
   }
 
   @Test
-  void refund_failure_of_one_row_does_not_stop_the_others() {
-    UUID a = retrying();
-    UUID b = retrying();
+  void stale_claim_cannot_store_an_answer() {
+    UUID id = retrying();
+    // while this run waits for the model, its lease ends and another replica claims the row
+    provider.fallback =
+        () -> {
+          repo.claimNextDue(T0.plus(DAY), T0.plus(DAY), UUID.randomUUID());
+          return GOOD;
+        };
+
+    runAt(T0.plus(Duration.ofMinutes(5)));
+
+    QaReading r = reading(id);
+    assertThat(r.status()).isEqualTo(QaStatus.RETRYING);
+    assertThat(r.attempts()).isEqualTo(1);
+    assertThat(repo.messages(id).getFirst().answerEnc()).isNull();
+  }
+
+  @Test
+  void stale_claim_cannot_record_a_failure() {
+    UUID id = retrying();
+    provider.fallback =
+        () -> {
+          repo.claimNextDue(T0.plus(DAY), T0.plus(DAY), UUID.randomUUID());
+          throw new LlmUnavailableException("down");
+        };
+
+    runAt(T0.plus(Duration.ofMinutes(5)));
+
+    // the other replica now owns the row: the attempt count and schedule are its to write
+    assertThat(reading(id).attempts()).isEqualTo(1);
+    assertThat(reading(id).nextAttemptAt()).isEqualTo(T0.plus(DAY));
+  }
+
+  @Test
+  void stale_claim_cannot_settle_a_refund() {
+    UUID id = retrying();
     identity.refund =
         () -> {
-          if (identity.refunds.isEmpty() && !failedOnce[0]) {
-            failedOnce[0] = true;
-            throw new IllegalStateException("boom");
-          }
+          repo.claimNextRefund(
+              T0.plus(DAY).plus(Duration.ofMinutes(2)),
+              T0.plus(Duration.ofHours(25)),
+              UUID.randomUUID());
           return RefundOutcome.REFUNDED;
         };
 
     runAt(T0.plus(DAY));
 
-    assertThat(identity.refunds).hasSize(1);
+    assertThat(identity.refunds).containsExactly(id);
+    assertThat(reading(id).status()).isEqualTo(QaStatus.REFUND_PENDING);
+    identity.refund = () -> RefundOutcome.NOT_CHARGED;
+    runAt(T0.plus(DAY).plus(Duration.ofDays(2)));
+    // a later claim settles it (identity's ledger is idempotent per reading)
+    assertThat(reading(id).status()).isEqualTo(QaStatus.FAILED);
+  }
+
+  @Test
+  void identity_failure_stops_the_refund_batch() {
+    UUID a = retrying();
+    UUID b = retrying();
+    AtomicInteger calls = new AtomicInteger();
+    identity.refund =
+        () -> {
+          calls.incrementAndGet();
+          throw new UpstreamUnavailableException("identity");
+        };
+
+    runAt(T0.plus(DAY));
+
+    assertThat(calls).hasValue(1);
+    assertThat(reading(a).status()).isEqualTo(QaStatus.REFUND_PENDING);
+    assertThat(reading(b).status()).isEqualTo(QaStatus.REFUND_PENDING);
+
+    identity.refund = () -> RefundOutcome.REFUNDED;
+    runAt(T0.plus(DAY).plus(Duration.ofMinutes(1)));
+    assertThat(reading(a).status()).isEqualTo(QaStatus.REFUNDED);
+    assertThat(reading(b).status()).isEqualTo(QaStatus.REFUNDED);
+  }
+
+  @Test
+  void a_database_error_on_one_refund_does_not_stop_the_others() {
+    UUID a = retrying();
+    UUID b = retrying();
+    AtomicBoolean failed = new AtomicBoolean();
+    repo.beforeTransition =
+        () -> {
+          if (identity.refunds.size() == 1 && failed.compareAndSet(false, true)) {
+            throw new IllegalStateException("db down");
+          }
+        };
+
+    runAt(T0.plus(DAY));
+
+    assertThat(identity.refunds).containsExactlyInAnyOrder(a, b);
     assertThat(List.of(reading(a).status(), reading(b).status()))
         .containsExactlyInAnyOrder(QaStatus.REFUNDED, QaStatus.REFUND_PENDING);
   }
 
-  final boolean[] failedOnce = {false};
+  @Test
+  void all_providers_down_stops_the_retry_batch() {
+    UUID a = retrying();
+    UUID b = retrying();
+    int before = provider.requests.size();
+
+    runAt(T0.plus(Duration.ofMinutes(5)));
+
+    assertThat(provider.requests).hasSize(before + 1);
+    assertThat(List.of(reading(a).attempts(), reading(b).attempts()))
+        .containsExactlyInAnyOrder(1, 2);
+  }
+
+  @Test
+  void each_row_uses_the_clock_time_of_its_own_turn() {
+    UUID id = retrying();
+    // the model call takes 3 minutes of clock time
+    provider.fallback =
+        () -> {
+          clock.now = clock.now.plus(Duration.ofMinutes(3));
+          throw new LlmUnavailableException("down");
+        };
+
+    runAt(T0.plus(Duration.ofMinutes(5)));
+
+    // next = end of the call (+8m) + 15m
+    assertThat(reading(id).nextAttemptAt()).isEqualTo(T0.plus(Duration.ofMinutes(23)));
+  }
 
   UUID insert(QaKind kind, QaStatus status, String creditSource, Instant created) {
     UUID id = UUID.randomUUID();

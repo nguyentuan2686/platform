@@ -48,8 +48,9 @@ class QaConfiguration {
   QaSettings qaSettings(
       @Value("${qa.free-daily-per-subject:3}") int perSubject,
       @Value("${qa.free-global-daily-cap:500}") int globalCap,
-      @Value("${qa.retry-window:PT24H}") Duration retryWindow) {
-    return new QaSettings(perSubject, globalCap, retryWindow);
+      @Value("${qa.retry-window:PT24H}") Duration retryWindow,
+      @Value("${qa.consume-refund-grace:PT2M}") Duration consumeRefundGrace) {
+    return new QaSettings(perSubject, globalCap, retryWindow, consumeRefundGrace);
   }
 
   @Bean
@@ -81,8 +82,12 @@ class QaConfiguration {
 
   @Bean
   QaRetryUseCase qaRetryUseCase(
-      QaRepositoryPort repo, QaService qa, IdentityPort identity, QaSettings settings) {
-    return new QaRetryUseCase(repo, qa, identity, settings);
+      QaRepositoryPort repo,
+      QaService qa,
+      IdentityPort identity,
+      QaSettings settings,
+      Clock clock) {
+    return new QaRetryUseCase(repo, qa, identity, settings, clock);
   }
 
   @Bean
