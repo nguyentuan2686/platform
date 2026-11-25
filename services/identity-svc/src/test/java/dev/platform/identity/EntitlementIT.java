@@ -170,6 +170,10 @@ class EntitlementIT {
     assertThat(api.send("POST", "/internal/credits/refund", null, refundBody).statusCode())
         .isEqualTo(200);
     assertThat(api.credits(login)).isEqualTo(1);
+    HttpResponse<String> reused = api.consume(login.accountId(), reading, "SuNghiep");
+    assertThat(reused.statusCode()).isEqualTo(409);
+    assertThat(json(reused).get("reason").asString()).isEqualTo("reading_refunded");
+    assertThat(api.credits(login)).isEqualTo(1);
     assertThat(
             api.send(
                     "POST",

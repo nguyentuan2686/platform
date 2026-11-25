@@ -338,7 +338,7 @@ paths:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
         '409':
-          description: Refused; `reason` is `no_credits`, `daily_cap`, `no_profile` or `reading_conflict`.
+          description: Refused; `reason` is `no_credits`, `daily_cap`, `no_profile`, `reading_conflict` or `reading_refunded` (the reading was refunded, retry with a new reading_id).
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}

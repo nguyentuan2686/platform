@@ -148,6 +148,23 @@ class EntitlementUseCaseTest {
   }
 
   @Test
+  void consume_of_a_refunded_reading_is_409_and_charges_nothing() {
+    buy("CREDIT_1");
+    withProfile(account);
+    UUID reading = UUID.randomUUID();
+    useCase.consume(account, reading, Topic.TaiLoc);
+    useCase.refund(reading);
+
+    assertReason(
+        org.assertj.core.api.Assertions.catchThrowable(
+            () -> useCase.consume(account, reading, Topic.TaiLoc)),
+        "reading_refunded");
+    assertThat(credits()).isEqualTo(1);
+    // A new reading id is charged normally.
+    assertThat(useCase.consume(account, UUID.randomUUID(), Topic.TaiLoc).creditsLeft()).isZero();
+  }
+
+  @Test
   void year_pass_view_lists_the_features_and_stops_at_the_daily_cap() {
     buy("PASS_YEAR");
     withProfile(account);

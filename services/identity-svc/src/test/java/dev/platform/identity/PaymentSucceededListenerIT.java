@@ -50,7 +50,12 @@ import tools.jackson.databind.node.ObjectNode;
 /** The PaymentSucceeded consumer against real Postgres and Redpanda. */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = "spring.kafka.listener.auto-startup=true")
+    properties = {
+      "spring.kafka.listener.auto-startup=true",
+      // Fast backoff so the transient-failure test finishes quickly; retries are unlimited.
+      "identity.kafka.retry.initial=200ms",
+      "identity.kafka.retry.max=1s"
+    })
 @Import(PaymentSucceededListenerIT.RecordingMailer.class)
 class PaymentSucceededListenerIT {
 
@@ -223,6 +228,37 @@ class PaymentSucceededListenerIT {
               assertThat(view.get("pass").get("questions_left").asInt()).isEqualTo(2);
               assertThat(view.get("features").get(0).asString()).isEqualTo("daily_detail");
             });
+  }
+
+  @Test
+  void a_transient_database_failure_is_retried_not_dead_lettered() throws Exception {
+    Login login = account();
+    UUID order = UUID.randomUUID();
+    jdbc.execute("alter table processed_event rename to processed_event_off");
+    try {
+      publish(event(UUID.randomUUID(), order, login.accountId(), "CREDIT_1"));
+      // Far longer than the old 3 retries; with the table missing every attempt fails.
+      Thread.sleep(6000);
+      assertThat(credits(login)).isEqualTo(1);
+    } finally {
+      jdbc.execute("alter table processed_event_off rename to processed_event");
+    }
+
+    awaitCredits(login, 2);
+    Properties p = new Properties();
+    p.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, REDPANDA.getBootstrapServers());
+    p.put(ConsumerConfig.GROUP_ID_CONFIG, "dlt-reader-" + UUID.randomUUID());
+    p.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+    p.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+    p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+    try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(p)) {
+      consumer.subscribe(List.of(DLT));
+      for (int i = 0; i < 4; i++) {
+        for (ConsumerRecord<String, String> r : consumer.poll(Duration.ofMillis(500))) {
+          assertThat(r.value()).doesNotContain(order.toString());
+        }
+      }
+    }
   }
 
   @Test

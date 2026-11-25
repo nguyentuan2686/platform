@@ -51,7 +51,17 @@ public class PaymentSucceededListener {
     if (productCode == null) {
       throw new InvalidEventException("Missing product_code");
     }
-    grants.grant(eventId, orderId, accountId, productCode);
+    try {
+      grants.grant(eventId, orderId, accountId, productCode);
+    } catch (RuntimeException e) {
+      // Ids and the exception type only: never the payload.
+      log.warn(
+          "PaymentSucceeded not applied event_id={} order_id={} cause={}",
+          eventId,
+          orderId,
+          e.getClass().getSimpleName());
+      throw e;
+    }
     log.info("PaymentSucceeded applied event_id={} order_id={}", eventId, orderId);
   }
 

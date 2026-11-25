@@ -98,6 +98,10 @@ public class EntitlementUseCase implements EntitlementGrantPort {
             if (!existing.get().accountId().equals(accountId)) {
               throw new CreditConflictException("reading_conflict");
             }
+            if (ledger.find("refund", readingId.toString()).isPresent()) {
+              // The unit went back: a retry must use a new reading id, not get a free 200.
+              throw new CreditConflictException("reading_refunded");
+            }
             return new ConsumeResult(existing.get().source(), load(accountId, now).credits());
           }
           if (profiles.find(new Subject.Account(accountId)).isEmpty()) {
@@ -108,16 +112,20 @@ public class EntitlementUseCase implements EntitlementGrantPort {
             case ConsumeDecision.Denied denied ->
                 throw new CreditConflictException(denied.reason());
             case ConsumeDecision.Use use -> {
-              ledger.append(
-                  new LedgerPort.NewEntry(
-                      accountId,
-                      -1,
-                      use.source(),
-                      use.passId(),
-                      "consume",
-                      readingId.toString(),
-                      topic.name(),
-                      now));
+              boolean written =
+                  ledger.append(
+                      new LedgerPort.NewEntry(
+                          accountId,
+                          -1,
+                          use.source(),
+                          use.passId(),
+                          "consume",
+                          readingId.toString(),
+                          topic.name(),
+                          now));
+              if (!written) {
+                throw new CreditConflictException("reading_conflict");
+              }
               ledger.lockBirth(accountId, now);
               int left = use.source() == CreditSource.CREDIT ? e.credits() - 1 : e.credits();
               yield new ConsumeResult(use.source(), left);

@@ -11,6 +11,7 @@ import dev.platform.identity.adapter.out.persistence.JdbcOidcLoginRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcProfileRepository;
 import dev.platform.identity.adapter.out.persistence.JdbcSessionRepository;
 import dev.platform.identity.application.AccountMergePort;
+import dev.platform.identity.application.AccountNotFoundException;
 import dev.platform.identity.application.AccountRepositoryPort;
 import dev.platform.identity.application.BirthCipherPort;
 import dev.platform.identity.application.EntitlementGrantPort;
@@ -32,6 +33,7 @@ import dev.platform.identity.application.SessionUseCase;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -46,7 +48,7 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.transaction.support.TransactionOperations;
-import org.springframework.util.backoff.FixedBackOff;
+import org.springframework.util.backoff.ExponentialBackOff;
 
 /** Wires the framework-free application services to their adapters. */
 @Configuration(proxyBeanMethods = false)
@@ -123,13 +125,25 @@ class IdentityConfiguration {
     return new PaymentGrantUseCase(ledger, processed, clock, tx);
   }
 
-  /** Three retries one second apart, then the record goes to {@code <topic>.DLT}. */
+  /**
+   * Contract errors (unknown product or account, bad envelope) go straight to {@code <topic>.DLT}.
+   * Anything else (database down, lock timeout) is retried with exponential backoff and no retry
+   * limit, so an outage pauses consumption instead of discarding paid grants.
+   */
   @Bean
-  CommonErrorHandler kafkaErrorHandler(KafkaTemplate<?, ?> template) {
+  CommonErrorHandler kafkaErrorHandler(
+      KafkaTemplate<?, ?> template,
+      @Value("${identity.kafka.retry.initial:1s}") Duration initial,
+      @Value("${identity.kafka.retry.max:60s}") Duration max) {
     DeadLetterPublishingRecoverer recoverer =
         new DeadLetterPublishingRecoverer(
             template, (record, ex) -> new TopicPartition(record.topic() + ".DLT", -1));
-    return new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3L));
+    ExponentialBackOff backOff = new ExponentialBackOff(initial.toMillis(), 2.0);
+    backOff.setMaxInterval(max.toMillis());
+    DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, backOff);
+    handler.addNotRetryableExceptions(
+        IllegalArgumentException.class, AccountNotFoundException.class);
+    return handler;
   }
 
   @Bean
