@@ -1,0 +1,12 @@
+# Per-Dockerfile ignore (BuildKit); paths are relative to the build context = repo root.
+# Replaces the root .dockerignore for web builds, so repeat its entries.
+.git
+.superpowers
+.claude
+docs
+**/target
+services/web/node_modules
+services/web/.next
+services/web/coverage
+services/web/*.tsbuildinfo
+services/web/.env*
