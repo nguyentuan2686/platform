@@ -9,11 +9,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Test helper: builds domain records from the chart-svc-shaped JSON fixture (tests only). */
-final class ChartFixture {
+public final class ChartFixture {
 
   private ChartFixture() {}
 
-  static Chart load() {
+  public static Chart load() {
     try (InputStream in = ChartFixture.class.getResourceAsStream("/chart-fixture.json")) {
       JsonNode root = JsonMapper.builder().build().readTree(in);
       List<Palace> palaces = new ArrayList<>();
@@ -40,7 +40,7 @@ final class ChartFixture {
     }
   }
 
-  static FlowLayer layer(String palaceKey, Mutagen... mutagens) {
+  public static FlowLayer layer(String palaceKey, Mutagen... mutagens) {
     return new FlowLayer(palaceKey, "Zi", "Jia", List.of(mutagens));
   }
 
