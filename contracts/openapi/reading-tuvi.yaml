@@ -177,8 +177,9 @@ paths:
       operationId: deleteQaReadings
       summary: Delete all of the caller's readings and messages
       description: >-
-        A reading still owed an answer or a refund (PENDING, RETRYING, REFUND_PENDING) is never
-        deleted: while one exists the call answers 409 `reading_in_progress`, and one that becomes
+        A reading still owed an answer or a refund (PENDING, RETRYING, REFUND_PENDING, or a charged
+        PAID question the model declined whose refund is not yet recorded) is never deleted: while
+        one exists the call answers 409 `reading_in_progress`, and one that becomes
         in progress during the call (a paid question being charged) is kept. Cached model answers
         (encrypted, keyed by chart and question, not by user) expire with the retention job.
       security:

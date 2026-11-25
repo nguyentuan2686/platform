@@ -147,6 +147,39 @@ class JdbcQaRepositoryIT {
   }
 
   @Test
+  void delete_during_pending_refund_of_paid_refusal_keeps_row_then_refund_pending() {
+    UUID id = insert(QaStatus.PENDING);
+    assertThat(repo.markCharged(id, "CREDIT")).isTrue();
+    assertThat(repo.markRefused(id, RefusalReason.OFF_TOPIC)).isTrue();
+
+    // the refund HTTP call is in flight: the reading is still owed its refund
+    assertThat(repo.anyInProgress(subject.id())).isTrue();
+    assertThat(repo.deleteSettledBySubject(subject.id())).isZero();
+    assertThat(repo.find(id)).isPresent();
+
+    // the refund failed: compensation is still possible
+    assertThat(repo.markRefundPending(id, "refund_unavailable")).isTrue();
+    assertThat(status(id)).isEqualTo(QaStatus.REFUND_PENDING);
+    assertThat(repo.deleteSettledBySubject(subject.id())).isZero();
+  }
+
+  @Test
+  void refunded_or_uncharged_refusals_are_settled() {
+    UUID refunded = insert(QaStatus.PENDING);
+    repo.markCharged(refunded, "CREDIT");
+    repo.markRefused(refunded, RefusalReason.OFF_TOPIC);
+    assertThat(repo.recordRefund(refunded, NOW)).isTrue();
+    UUID guardRefused = insert(QaStatus.REFUSED); // never charged
+
+    // a recorded refund is never moved back to pending
+    assertThat(repo.markRefundPending(refunded, "x")).isFalse();
+    assertThat(status(refunded)).isEqualTo(QaStatus.REFUSED);
+    assertThat(repo.anyInProgress(subject.id())).isFalse();
+    assertThat(repo.deleteSettledBySubject(subject.id())).isEqualTo(2);
+    assertThat(repo.find(guardRefused)).isEmpty();
+  }
+
+  @Test
   void a_message_is_answered_once_and_an_answered_follow_up_is_never_deleted() {
     UUID id = insert(QaStatus.ANSWERED);
     repo.insertMessage(id, new NewMessage(1, UUID.randomUUID(), new byte[] {3}, null), NOW);

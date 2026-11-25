@@ -28,6 +28,19 @@ public record QaReading(
     Instant answeredAt,
     Instant refundedAt) {
 
+  /**
+   * Still owed an answer or a refund, so never deletable: {@link QaStatus#IN_PROGRESS}, or a
+   * charged PAID reading the model refused whose refund has not been recorded yet (the refund call
+   * runs after the refusal is stored). The JDBC adapter mirrors this predicate in SQL.
+   */
+  public boolean owed() {
+    return QaStatus.IN_PROGRESS.contains(status)
+        || (kind == QaKind.PAID
+            && status == QaStatus.REFUSED
+            && creditSource != null
+            && refundedAt == null);
+  }
+
   /** A new reading in {@code status}, created at {@code now}. */
   public static QaReading create(
       UUID id,

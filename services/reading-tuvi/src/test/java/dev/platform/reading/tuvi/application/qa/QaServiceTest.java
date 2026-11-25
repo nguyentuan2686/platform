@@ -664,6 +664,51 @@ class QaServiceTest {
   }
 
   @Test
+  void delete_during_refund_of_paid_refusal_keeps_row_then_refund_pending() {
+    provider.then("NGOAI_PHAM_VI");
+    UUID id = UUID.randomUUID();
+    List<Integer> deleted = new java.util.ArrayList<>();
+    identity.refund =
+        () -> {
+          // the history DELETE lands while the refund call is in flight
+          QaReading r = repo.reading(id);
+          assertThat(r.status()).isEqualTo(QaStatus.REFUSED);
+          assertThat(repo.anyInProgress(r.subjectId())).isTrue();
+          deleted.add(repo.deleteSettledBySubject(r.subjectId()));
+          throw new UpstreamUnavailableException("identity");
+        };
+
+    assertThat(paid(id)).isInstanceOf(Refused.class);
+
+    assertThat(deleted).containsExactly(0);
+    assertThat(repo.reading(id).status()).isEqualTo(QaStatus.REFUND_PENDING);
+  }
+
+  @Test
+  void refunded_refusal_is_settled_and_never_pending_again() {
+    provider.then("NGOAI_PHAM_VI");
+    UUID id = UUID.randomUUID();
+    paid(id);
+    UUID subject = repo.reading(id).subjectId();
+
+    assertThat(repo.markRefundPending(id, "x")).isFalse();
+    assertThat(repo.reading(id).status()).isEqualTo(QaStatus.REFUSED);
+    assertThat(repo.anyInProgress(subject)).isFalse();
+    qa.deleteAll("acc");
+    assertThat(repo.reading(id)).isNull();
+  }
+
+  @Test
+  void guard_refused_paid_reading_was_never_charged_and_is_deletable() {
+    UUID id = UUID.randomUUID();
+    ask("acc", id, QaKind.PAID, "Tôi nên uống thuốc gì cho khỏe");
+
+    qa.deleteAll("acc");
+
+    assertThat(repo.reading(id)).isNull();
+  }
+
+  @Test
   void charged_reading_whose_row_vanished_is_refunded_not_kept() {
     UUID id = UUID.randomUUID();
     identity.consume =

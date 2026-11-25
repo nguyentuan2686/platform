@@ -28,7 +28,14 @@ public class JdbcQaRepository implements QaRepositoryPort {
       "id, subject_kind, subject_id, kind, topic, lang, chart_hash, status, refusal_reason,"
           + " credit_source, attempts, next_attempt_at, retry_until, last_error, created_at,"
           + " answered_at, refunded_at";
-  private static final String IN_PROGRESS = list(QaStatus.IN_PROGRESS);
+
+  /** SQL form of {@code QaReading.owed()}: still owed an answer or a refund, never deletable. */
+  private static final String OWED =
+      "(status in "
+          + list(QaStatus.IN_PROGRESS)
+          + " or (kind = 'PAID' and status = 'REFUSED' and credit_source is not null"
+          + " and refunded_at is null))";
+
   private static final String COUNTED_FREE =
       " kind = 'FREE' and status in ('PENDING', 'ANSWERED') and created_at >= ?";
 
@@ -150,7 +157,9 @@ public class JdbcQaRepository implements QaRepositoryPort {
   public boolean markRefundPending(UUID id, String lastError) {
     return jdbc.update(
             "update qa_reading set status = 'REFUND_PENDING', last_error = ? where id = ?"
-                + from(QaStatus.REFUND_PENDING),
+                + from(QaStatus.REFUND_PENDING)
+                // a refusal whose refund is already recorded never goes back to pending
+                + " and (status <> 'REFUSED' or refunded_at is null)",
             lastError,
             id)
         == 1;
@@ -345,17 +354,14 @@ public class JdbcQaRepository implements QaRepositoryPort {
   public boolean anyInProgress(UUID subjectId) {
     return Boolean.TRUE.equals(
         jdbc.queryForObject(
-            "select exists (select 1 from qa_reading where subject_id = ? and status in "
-                + IN_PROGRESS
-                + ")",
+            "select exists (select 1 from qa_reading where subject_id = ? and " + OWED + ")",
             Boolean.class,
             subjectId));
   }
 
   @Override
   public int deleteSettledBySubject(UUID subjectId) {
-    return jdbc.update(
-        "delete from qa_reading where subject_id = ? and status not in " + IN_PROGRESS, subjectId);
+    return jdbc.update("delete from qa_reading where subject_id = ? and not " + OWED, subjectId);
   }
 
   private static Timestamp ts(Instant i) {

@@ -357,6 +357,10 @@ final class QaFakes {
 
     @Override
     public boolean markRefundPending(UUID id, String lastError) {
+      QaReading current = readings.get(id);
+      if (current != null && current.status() == QaStatus.REFUSED && current.refundedAt() != null) {
+        return false;
+      }
       return transition(
           id,
           QaStatus.REFUND_PENDING,
@@ -541,22 +545,14 @@ final class QaFakes {
 
     @Override
     public boolean anyInProgress(UUID subjectId) {
-      return readings.values().stream()
-          .anyMatch(
-              r ->
-                  r.subjectId().equals(subjectId)
-                      && (r.status() == QaStatus.PENDING
-                          || r.status() == QaStatus.RETRYING
-                          || r.status() == QaStatus.REFUND_PENDING));
+      return readings.values().stream().anyMatch(r -> r.subjectId().equals(subjectId) && r.owed());
     }
 
     @Override
     public synchronized int deleteSettledBySubject(UUID subjectId) {
       List<UUID> ids =
           readings.values().stream()
-              .filter(
-                  r ->
-                      r.subjectId().equals(subjectId) && !QaStatus.IN_PROGRESS.contains(r.status()))
+              .filter(r -> r.subjectId().equals(subjectId) && !r.owed())
               .map(QaReading::id)
               .toList();
       ids.forEach(this::remove);

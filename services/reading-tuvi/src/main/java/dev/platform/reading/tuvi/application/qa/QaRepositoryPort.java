@@ -101,12 +101,12 @@ public interface QaRepositoryPort {
 
   int countFollowUps(UUID readingId);
 
-  /** Any reading in {@link QaStatus#IN_PROGRESS}. */
+  /** Any reading still owed an answer or a refund ({@link QaReading#owed()}). */
   boolean anyInProgress(UUID subjectId);
 
   /**
-   * Deletes the subject's readings except those in {@link QaStatus#IN_PROGRESS}, in one statement,
-   * so a question charged concurrently is never deleted. Returns the number deleted.
+   * Deletes the subject's readings except those {@link QaReading#owed()}, in one statement, so a
+   * question charged concurrently is never deleted. Returns the number deleted.
    */
   int deleteSettledBySubject(UUID subjectId);
 }
