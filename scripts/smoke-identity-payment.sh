@@ -35,6 +35,8 @@ call POST "$IDENTITY/guests"
 GUEST=$(field session_token)
 [ -n "$GUEST" ] || fail "no guest session_token"
 
+# Start from an empty mailbox so a stale message can never be picked.
+curl -sS -X DELETE "$MAILPIT/api/v1/messages" >/dev/null || fail "Mailpit unreachable"
 call POST "$IDENTITY/auth/magic-links" "{\"email\":\"$EMAIL\",\"lang\":\"vi\"}" "$GUEST"
 [ "$STATUS" = "202" ] || fail "POST /auth/magic-links expected 202, got $STATUS"
 
@@ -48,6 +50,7 @@ for _ in $(seq 1 20); do
 done
 [ -n "$MSG_ID" ] || fail "no mail arrived in Mailpit"
 MAIL=$(curl -sS "$MAILPIT/api/v1/message/$MSG_ID" | tr -d '\r\n')
+printf '%s' "$MAIL" | grep -qF "$EMAIL" || fail "newest mail is not addressed to this run"
 LINK_TOKEN=$(printf '%s' "$MAIL" | sed -n 's/.*xac-nhan?token=\([A-Za-z0-9_-]*\).*/\1/p')
 [ -n "$LINK_TOKEN" ] || fail "no token in the newest mail"
 

@@ -187,7 +187,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "127.0.0.1:${IDENTITY_SVC_PORT:-8084}:8084"
-    mem_limit: 320m
+    mem_limit: 384m
 
   payment-svc:
     profiles: ["app"]
@@ -222,7 +222,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "127.0.0.1:${PAYMENT_SVC_PORT:-8085}:8085"
-    mem_limit: 320m
+    mem_limit: 384m
 
   web:
     profiles: ["app"]
