@@ -15,7 +15,7 @@ CLAUDE.md, .claude/{settings.json,skills/}
 Cargo.toml, rust-toolchain.toml, deny.toml, tools/rust-dev/Dockerfile   # Rust workspace + dev image
 contracts/{openapi/<svc>.yaml, events/<event>.schema.json, knowledge/}
 knowledge/tuvi/   # reading-tuvi knowledge base (jsonl), imported at startup
-services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust), reading-tuvi (Java), web (Next.js)}
+services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust), reading-tuvi (Java), identity-svc (Java), payment-svc (Java), web (Next.js)}
 libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service}
 deploy/{local/docker-compose.yml, k8s/{base,overlays/prod,platform}, argocd}
@@ -51,10 +51,11 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `mvn -q verify` - build, test, Spotless check, coverage gate
 - `mvn spotless:apply` - auto-format
 - `docker compose -f deploy/local/docker-compose.yml up -d` - local Postgres + Redpanda + otel-lgtm
-- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080), notify-svc (:8081) and chart-svc (:8082, stateless) and reading-tuvi (:8083; needs the `reading_tuvi` db)  (if a `pgdata` volume from before Plan 2 exists, run `down -v` once so `init-db.sql` creates the notify and reading_tuvi dbs)
+- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080), notify-svc (:8081) and chart-svc (:8082, stateless) and reading-tuvi (:8083; needs the `reading_tuvi` db), identity-svc (:8084), payment-svc (:8085) and Mailpit (SMTP :1025, UI :8025) (if a `pgdata` volume from before F1.3 exists, run `down -v` once so `init-db.sql` creates the notify, reading_tuvi, identity and payment dbs; test secrets in `deploy/local/.env.example`)
 - `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
 - `scripts/smoke-chart.sh http://localhost:8082` - POST /tuvi/chart happy path: 12 palaces, lunar.month 2
 - `scripts/smoke-reading.sh http://localhost:8083` - basic reading (17 sections, last `disclaimer`) + today (4 areas) via reading-tuvi -> chart-svc
+- `scripts/smoke-identity-payment.sh [IDENTITY_URL] [PAYMENT_URL] [MAILPIT_URL]` - guest -> magic link (read from Mailpit) -> login -> CREDIT_5 order -> simulated SePay transfer (`scripts/sepay-simulate.sh`) -> credits 6, duplicate delivery changes nothing; low-memory subset: `docker compose -f deploy/local/docker-compose.yml --profile app up -d postgres redpanda mailpit identity-svc payment-svc`
 - `scripts/smoke-web.sh http://localhost:3001` - web: /health/ready 200 and /vi contains "Lão Thiên Cơ"; web e2e (Playwright + stub upstream): `npm run e2e` in services/web (CI job `e2e`)
 - `docker run --rm -v "$PWD/services/web:/app" -w /app node:22-alpine sh -c "npm ci && npm run lint && npm run typecheck && npm test && npm run build"` - web (Next.js) gates; no native Node. Local: web on http://localhost:3001 (`--profile app`)
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`

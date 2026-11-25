@@ -25,6 +25,8 @@ jobs:
       notify: ${{ steps.filter.outputs.notify }}
       chart: ${{ steps.filter.outputs.chart }}
       reading: ${{ steps.filter.outputs.reading }}
+      identity: ${{ steps.filter.outputs.identity }}
+      payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v7
@@ -61,6 +63,16 @@ jobs:
               - 'knowledge/tuvi/**'
               - 'contracts/openapi/reading-tuvi.yaml'
               - 'contracts/knowledge/**'
+              - 'libs/java/**'
+            identity:
+              - 'services/identity-svc/**'
+              - 'contracts/openapi/identity-svc.yaml'
+              - 'contracts/events/payment-succeeded.v1.schema.json'
+              - 'libs/java/**'
+            payment:
+              - 'services/payment-svc/**'
+              - 'contracts/openapi/payment-svc.yaml'
+              - 'contracts/events/payment-succeeded.v1.schema.json'
               - 'libs/java/**'
             web:
               - 'services/web/**'
@@ -119,6 +131,30 @@ jobs:
       image: reading-tuvi
       publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+  identity-svc:
+    needs: changes
+    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_java-service.yml
+    with:
+      module: services/identity-svc
+      image: identity-svc
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  payment-svc:
+    needs: changes
+    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_java-service.yml
+    with:
+      module: services/payment-svc
+      image: payment-svc
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
   web:
     needs: changes
     if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true'
@@ -135,7 +171,7 @@ jobs:
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, web]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

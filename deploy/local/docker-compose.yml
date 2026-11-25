@@ -1,4 +1,4 @@
-# Local dev stack. Infra only by default; add `--profile app` to also run the services (order-svc, notify-svc, chart-svc, reading-tuvi, web).
+# Local dev stack. Infra only by default; add `--profile app` to also run the services (order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, mailpit, web).
 name: platform-local
 services:
   postgres:
@@ -143,6 +143,86 @@ services:
     ports:
       - "127.0.0.1:${READING_TUVI_PORT:-8083}:8083"
     mem_limit: 384m
+
+  mailpit:
+    profiles: ["app"]
+    image: axllent/mailpit:v1.21.8
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    mem_limit: 64m
+
+  # Test values only (see .env.example); real ones come from Sealed Secrets.
+  identity-svc:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/identity-svc/Dockerfile
+    image: identity-svc:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      PORT: "8084"
+      DB_URL: jdbc:postgresql://postgres:5432/identity
+      DB_USER: ${IDENTITY_DB_USER:-identity}
+      DB_PASSWORD: ${IDENTITY_DB_PASSWORD:-identity}
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-local-test-internal-token}
+      # base64 of the 32-byte test phrase "local-test-profile-key-012345678"
+      PROFILE_ENC_KEY: ${PROFILE_ENC_KEY:-bG9jYWwtdGVzdC1wcm9maWxlLWtleS0wMTIzNDU2Nzg=}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3001}
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      MAIL_FROM: ${MAIL_FROM:-no-reply@localhost}
+      # Google login stays off locally (empty client id).
+      OIDC_GOOGLE_CLIENT_ID: ${OIDC_GOOGLE_CLIENT_ID:-}
+      OIDC_GOOGLE_CLIENT_SECRET: ${OIDC_GOOGLE_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URIS: ${OIDC_REDIRECT_URIS:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    ports:
+      - "127.0.0.1:${IDENTITY_SVC_PORT:-8084}:8084"
+    mem_limit: 320m
+
+  payment-svc:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/payment-svc/Dockerfile
+    image: payment-svc:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    environment:
+      PORT: "8085"
+      DB_URL: jdbc:postgresql://postgres:5432/payment
+      DB_USER: ${PAYMENT_DB_USER:-payment}
+      DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment}
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-local-test-internal-token}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-local-test-admin-token}
+      IDENTITY_SVC_URL: http://identity-svc:8084
+      SEPAY_WEBHOOK_AUTH: ${SEPAY_WEBHOOK_AUTH:-apikey}
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-local-test-sepay-secret}
+      # Fake receiving account: never a real one.
+      SEPAY_BANK_CODE: ${SEPAY_BANK_CODE:-TEST BANK}
+      SEPAY_ACCOUNT_NUMBER: ${SEPAY_ACCOUNT_NUMBER:-0000000000}
+      SEPAY_ACCOUNT_NAME: ${SEPAY_ACCOUNT_NAME:-TEST BANK}
+      SEPAY_RECONCILE_ENABLED: "false"
+      PAYPAL_MODE: fake
+      PAYPAL_FAKE_WEBHOOK_SECRET: ${PAYPAL_FAKE_WEBHOOK_SECRET:-local-test-paypal-secret}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    ports:
+      - "127.0.0.1:${PAYMENT_SVC_PORT:-8085}:8085"
+    mem_limit: 320m
 
   web:
     profiles: ["app"]
