@@ -1,6 +1,7 @@
 // Stub upstreams for the e2e suite: chart-svc, reading-tuvi and identity-svc on their own ports.
 // Controls (any port, any method): /__down → every stub answers 503, /__up → back, /__reset → up
-// and in-memory state cleared. Request bodies are never logged (they carry birth data).
+// and in-memory state cleared. GET /__calls → the "METHOD /path" calls that port received since the
+// last reset (no query, no body). Request bodies are never logged (they carry birth data).
 import { createServer } from "node:http";
 import * as chart from "./chart.mjs";
 import * as reading from "./reading.mjs";
@@ -8,6 +9,8 @@ import * as identity from "./identity.mjs";
 
 const state = { down: process.env.STUB_DOWN === "1" };
 const modules = [chart, reading, identity];
+/** module NAME -> ["METHOD /path", ...] */
+const calls = new Map(modules.map((m) => [m.NAME, []]));
 
 export function send(res, status, body, type = "application/json") {
   if (body === undefined) {
@@ -38,10 +41,19 @@ function serve(port, mod) {
     if (path === "/__down" || path === "/__up" || path === "/__reset") {
       req.resume();
       state.down = path === "/__down";
-      if (path === "/__reset") for (const m of modules) m.reset();
+      if (path === "/__reset") {
+        for (const m of modules) m.reset();
+        for (const list of calls.values()) list.length = 0;
+      }
       send(res, 204);
       return;
     }
+    if (path === "/__calls") {
+      req.resume();
+      send(res, 200, calls.get(mod.NAME));
+      return;
+    }
+    if (!path.startsWith("/__")) calls.get(mod.NAME).push(`${req.method} ${path}`);
     const body = await readBody(req);
     if (state.down) {
       send(res, 503, { status: 503 }, "application/problem+json");

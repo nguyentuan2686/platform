@@ -81,3 +81,20 @@ export const getViewer = cache(async (): Promise<Viewer> => {
     throw e;
   }
 });
+
+export type LoginGuest = { guestId?: string; token: string };
+
+/**
+ * The guest whose data should follow the user into the account being logged into.
+ * - guest cookie → that guest and its bearer;
+ * - account cookie → null (no guest bearer: an account is never "merged");
+ * - none or rejected → a fresh guest when `create` (a login start creates the session lazily), else null.
+ */
+export async function loginGuest(opts: { create: boolean }): Promise<LoginGuest | null> {
+  const viewer = await getViewer();
+  if (viewer.kind === "guest") return { guestId: viewer.guestId, token: viewer.token };
+  if (viewer.kind === "account" || !opts.create) return null;
+  const g = await createGuest();
+  await setSessionCookie(g.session_token, g.expires_at);
+  return { guestId: g.guest_id, token: g.session_token };
+}

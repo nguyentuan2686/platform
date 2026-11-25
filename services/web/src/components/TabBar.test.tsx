@@ -15,13 +15,20 @@ beforeEach(() => {
 });
 
 describe("TabBar", () => {
-  it("ships Hôm nay and Lá số with their links", () => {
+  it("ships Hôm nay, Lá số and Tài khoản with their links", () => {
     render(<TabBar />);
     const nav = screen.getByRole("navigation");
     const links = screen.getAllByRole("link");
     expect(nav).toBeTruthy();
-    expect(links.map((l) => l.textContent)).toEqual(["今Hôm nay", "命Lá số"]);
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/vi/la-so#hom-nay", "/vi/la-so"]);
+    expect(links.map((l) => l.textContent)).toEqual(["今Hôm nay", "命Lá số", "我Tài khoản"]);
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/vi/la-so#hom-nay", "/vi/la-so", "/vi/tai-khoan"]);
+  });
+
+  it("marks Tài khoản current on /vi/tai-khoan", () => {
+    pathname.value = "/vi/tai-khoan";
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Tài khoản/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Lá số/ }).getAttribute("aria-current")).toBeNull();
   });
 
   it("marks Lá số current on /vi/la-so", () => {

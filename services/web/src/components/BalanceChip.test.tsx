@@ -46,11 +46,16 @@ describe("BalanceChip", () => {
     expect(await text()).toBe("Còn 0 lượt");
   });
 
-  it("renders nothing for guests and anonymous viewers", async () => {
-    getViewer.mockResolvedValue({ kind: "guest", guestId: "g", token: "t" });
-    expect(await text()).toBe("");
-    getViewer.mockResolvedValue({ kind: "anon" });
-    expect(await text()).toBe("");
+  it("links guests and anonymous viewers to the login page", async () => {
+    for (const v of [{ kind: "guest", guestId: "g", token: "t" }, { kind: "anon" }]) {
+      getViewer.mockResolvedValue(v);
+      const el = await BalanceChip();
+      const { container, unmount } = render(el as React.ReactElement);
+      const a = container.querySelector("a");
+      expect(a?.textContent).toBe("Đăng nhập");
+      expect(a?.getAttribute("href")).toBe("/vi/dang-nhap");
+      unmount();
+    }
   });
 
   it("renders nothing when identity is down (http.ts already logged it)", async () => {

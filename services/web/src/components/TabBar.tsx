@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 
 type Tab = { key: string; label: string; glyph: string; href: string; path: string; hash?: string };
 
-// Hỏi thầy (/vi/hoi) and Tài khoản (/vi/tai-khoan) join when their pages ship.
+// Hỏi thầy (/vi/hoi) joins when its page ships.
 const TABS: Tab[] = [
   { key: "today", label: "Hôm nay", glyph: "今", href: "/vi/la-so#hom-nay", path: "/vi/la-so", hash: "#hom-nay" },
   { key: "chart", label: "Lá số", glyph: "命", href: "/vi/la-so", path: "/vi/la-so" },
+  { key: "account", label: "Tài khoản", glyph: "我", href: "/vi/tai-khoan", path: "/vi/tai-khoan" },
 ];
 
 function useHash(): [string, (h: string) => void] {

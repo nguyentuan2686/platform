@@ -29,6 +29,7 @@ import {
   clearSessionCookie,
   ensureSession,
   getViewer,
+  loginGuest,
   readSessionToken,
   sessionCookieName,
   setSessionCookie,
@@ -166,5 +167,35 @@ describe("getViewer", () => {
     jar.values.set("tv_sid", "t");
     identity.me.mockRejectedValue(new UpstreamError());
     await expect(getViewer()).rejects.toBeInstanceOf(UpstreamError);
+  });
+});
+
+describe("loginGuest", () => {
+  it("returns the current guest and its bearer without creating one", async () => {
+    jar.values.set("tv_sid", "gt");
+    identity.me.mockResolvedValue({ kind: "guest", guest_id: "g-1" });
+    expect(await loginGuest({ create: true })).toEqual({ guestId: "g-1", token: "gt" });
+    expect(identity.createGuest).not.toHaveBeenCalled();
+  });
+
+  it("gives no guest bearer to an account session", async () => {
+    jar.values.set("tv_sid", "at");
+    identity.me.mockResolvedValue({ kind: "account", account_id: "a" });
+    identity.entitlements.mockResolvedValue(ENT);
+    expect(await loginGuest({ create: true })).toBeNull();
+    expect(identity.createGuest).not.toHaveBeenCalled();
+  });
+
+  it("is null for an anonymous viewer unless asked to create", async () => {
+    expect(await loginGuest({ create: false })).toBeNull();
+    expect(identity.createGuest).not.toHaveBeenCalled();
+  });
+
+  it("creates a guest (replacing a stale cookie) when asked", async () => {
+    jar.values.set("tv_sid", "stale");
+    identity.me.mockRejectedValue(new UpstreamProblem(401));
+    identity.createGuest.mockResolvedValue({ session_token: "fresh", guest_id: "g-2", expires_at: "2099-01-01T00:00:00Z" });
+    expect(await loginGuest({ create: true })).toEqual({ guestId: "g-2", token: "fresh" });
+    expect(jar.values.get("tv_sid")).toBe("fresh");
   });
 });
