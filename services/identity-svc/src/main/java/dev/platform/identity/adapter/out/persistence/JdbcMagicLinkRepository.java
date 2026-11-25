@@ -19,6 +19,14 @@ public class JdbcMagicLinkRepository implements MagicLinkRepositoryPort {
   }
 
   @Override
+  public void lock(Email email) {
+    jdbc.sql("select pg_advisory_xact_lock(hashtext(:email))")
+        .param("email", email.value())
+        .query()
+        .singleRow();
+  }
+
+  @Override
   public void save(PendingMagicLink link) {
     jdbc.sql(
             "insert into magic_link (id, email, token_sha256, guest_id, created_at, expires_at)"

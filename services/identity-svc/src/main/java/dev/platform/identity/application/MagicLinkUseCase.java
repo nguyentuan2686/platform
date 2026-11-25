@@ -56,6 +56,7 @@ public class MagicLinkUseCase {
   @Transactional
   public void request(Email email, String lang, Optional<UUID> guestId) {
     Instant now = clock.instant();
+    links.lock(email);
     if (!MagicLinkPolicy.allows(
         links.requestTimesSince(email, MagicLinkPolicy.windowStart(now)), now)) {
       return;

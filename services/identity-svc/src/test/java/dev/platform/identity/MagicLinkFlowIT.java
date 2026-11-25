@@ -164,4 +164,33 @@ class MagicLinkFlowIT {
 
     assertThat(ids[1]).isEqualTo(ids[0]);
   }
+
+  @Test
+  void parallel_requests_for_one_email_cannot_exceed_the_rate_limit() throws Exception {
+    String body = "{\"email\":\"race@example.com\",\"lang\":\"vi\"}";
+    int before = MAILS.size();
+    int n = 12;
+    var pool = java.util.concurrent.Executors.newFixedThreadPool(n);
+    var start = new java.util.concurrent.CountDownLatch(1);
+    List<java.util.concurrent.Future<Integer>> results = new java.util.ArrayList<>();
+    for (int i = 0; i < n; i++) {
+      results.add(
+          pool.submit(
+              () -> {
+                start.await();
+                return send("POST", "/auth/magic-links", null, body).statusCode();
+              }));
+    }
+    start.countDown();
+    for (var f : results) {
+      assertThat(f.get()).isEqualTo(202);
+    }
+    pool.shutdown();
+
+    assertThat(MAILS).hasSize(before + 3);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from magic_link where email = 'race@example.com'", Long.class))
+        .isEqualTo(3L);
+  }
 }

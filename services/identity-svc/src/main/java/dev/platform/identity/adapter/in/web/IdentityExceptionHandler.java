@@ -1,5 +1,6 @@
 package dev.platform.identity.adapter.in.web;
 
+import dev.platform.identity.application.MailDeliveryException;
 import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.starter.web.PlatformProblemHandler;
 import java.net.URI;
@@ -40,6 +41,17 @@ public class IdentityExceptionHandler {
     detail.setType(UNAUTHENTICATED);
     return platform.handleException(
         new ErrorResponseException(HttpStatus.UNAUTHORIZED, detail, null), request);
+  }
+
+  /** Malformed JSON or a value of the wrong type is reported on {@code body}. */
+  @ExceptionHandler(MailDeliveryException.class)
+  ResponseEntity<Object> mailFailed(MailDeliveryException ex, WebRequest request) throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(
+            HttpStatus.SERVICE_UNAVAILABLE, "Could not send the mail, try again later");
+    detail.setType(URI.create("urn:problem:upstream-unavailable"));
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE, detail, null), request);
   }
 
   /** Malformed JSON or a value of the wrong type is reported on {@code body}. */

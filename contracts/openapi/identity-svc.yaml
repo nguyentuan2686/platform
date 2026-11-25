@@ -63,6 +63,13 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+        '503':
+          description: >-
+            The mail server did not accept the message; nothing is recorded, retry later. The
+            address never appears in the problem.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /auth/magic-links/verify:
     post:
       operationId: verifyMagicLink

@@ -25,12 +25,54 @@ class EmailTest {
     assertThatThrownBy(() -> new Email(null)).isInstanceOf(IllegalArgumentException.class);
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "a,b@x.com",
+        "a@x.com,b@y.com",
+        "a@x.com b@y.com",
+        "a;b@x.com",
+        "\"a\"@x.com",
+        "<a@x.com>",
+        "Name <a@x.com>",
+        "a@x.com\r\nBcc: v@y.com",
+        "a\u0000@x.com",
+        "a@x\u0007.com",
+        "a(c)@x.com",
+        "a\\b@x.com",
+        ".a@x.com",
+        "a.@x.com",
+        "a..b@x.com",
+        "a@.x.com",
+        "a@x..com",
+        "a@-x.com",
+        "a@x-.com",
+        "a@[127.0.0.1]",
+        "a@x_y.com",
+        "tên@x.com",
+        "a@münchen.de"
+      })
+  void rejects_unsafe_shapes(String raw) {
+    assertThatThrownBy(() -> new Email(raw)).isInstanceOf(IllegalArgumentException.class);
+  }
+
   @Test
-  void rejects_255_char_address_and_accepts_254() {
-    String tail = "@example.com";
-    assertThat(new Email("a".repeat(254 - tail.length()) + tail).value()).hasSize(254);
-    assertThatThrownBy(() -> new Email("a".repeat(255 - tail.length()) + tail))
+  void accepts_common_addresses() {
+    assertThat(new Email("first.last+tag@sub.example.co.uk").value())
+        .isEqualTo("first.last+tag@sub.example.co.uk");
+    assertThat(new Email("o'brien@example.com").value()).isEqualTo("o'brien@example.com");
+  }
+
+  @Test
+  void rejects_local_part_over_64_and_total_over_254() {
+    assertThat(new Email("a".repeat(64) + "@example.com").value()).hasSize(76);
+    assertThatThrownBy(() -> new Email("a".repeat(65) + "@example.com"))
         .isInstanceOf(IllegalArgumentException.class);
+    String label = "b".repeat(63);
+    String ok = "a@" + label + "." + label + "." + label + "." + "c".repeat(60); // 254
+    assertThat(ok).hasSize(254);
+    assertThat(new Email(ok).value()).hasSize(254);
+    assertThatThrownBy(() -> new Email(ok + "c")).isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

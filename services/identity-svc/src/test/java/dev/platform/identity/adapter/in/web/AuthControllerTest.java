@@ -141,6 +141,30 @@ class AuthControllerTest {
   }
 
   @Test
+  void mail_failure_is_503_upstream_unavailable_without_details() throws Exception {
+    org.mockito.Mockito.doThrow(new dev.platform.identity.application.MailDeliveryException())
+        .when(magicLinks)
+        .request(any(), any(), any());
+
+    postJson("/auth/magic-links", "{\"email\":\"a@example.com\",\"lang\":\"vi\"}")
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.type").value("urn:problem:upstream-unavailable"))
+        .andExpect(jsonPath("$.trace_id").exists())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("example.com"))));
+  }
+
+  @Test
+  void comma_separated_emails_are_400_on_field_email() throws Exception {
+    postJson("/auth/magic-links", "{\"email\":\"a,b@x.com\",\"lang\":\"vi\"}")
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors[0].field").value("email"));
+  }
+
+  @Test
   void verify_is_post_only() throws Exception {
     mvc.perform(get("/auth/magic-links/verify").param("token", "x"))
         .andExpect(status().isMethodNotAllowed());

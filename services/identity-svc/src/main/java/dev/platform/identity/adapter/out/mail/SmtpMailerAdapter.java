@@ -1,5 +1,6 @@
 package dev.platform.identity.adapter.out.mail;
 
+import dev.platform.identity.application.MailDeliveryException;
 import dev.platform.identity.application.MailerPort;
 import dev.platform.identity.domain.Email;
 import jakarta.mail.MessagingException;
@@ -7,6 +8,7 @@ import jakarta.mail.internet.MimeMessage;
 import java.net.URI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
@@ -39,8 +41,10 @@ public class SmtpMailerAdapter implements MailerPort {
       helper.setSubject(SUBJECT);
       helper.setText(body, false);
       sender.send(message);
-    } catch (MessagingException e) {
-      throw new IllegalStateException("could not build the magic link mail", e);
+    } catch (MessagingException | MailException e) {
+      // The exception message embeds the address, so neither it nor the cause is kept.
+      log.warn("magic link mail failed: {}", e.getClass().getSimpleName());
+      throw new MailDeliveryException();
     }
     log.info("magic link mail sent");
   }

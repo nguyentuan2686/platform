@@ -86,6 +86,9 @@ final class InMemoryPorts {
     final Set<UUID> used = new HashSet<>();
 
     @Override
+    public void lock(Email email) {}
+
+    @Override
     public void save(PendingMagicLink link) {
       saved.add(link);
     }

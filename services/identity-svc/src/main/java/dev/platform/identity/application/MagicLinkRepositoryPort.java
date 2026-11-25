@@ -7,6 +7,9 @@ import java.util.Optional;
 
 public interface MagicLinkRepositoryPort {
 
+  /** Serializes concurrent requests for one email until the surrounding transaction ends. */
+  void lock(Email email);
+
   void save(PendingMagicLink link);
 
   /** Creation times of links sent to the email after {@code since}. */
