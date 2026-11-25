@@ -8,6 +8,7 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 - Trunk-based: short branch -> PR -> CI green -> Claude squash-merges. No human review required when CI is green.
 - Any failure (CI, unexpected test fail, prod bug, failed deploy) triggers a retro: write a lesson (see Lessons loop).
 - Never claim "done" without running the verification command and reading its output.
+- CI triage: read the failing log first. HTTP 429/5xx or "could not transfer artifact" from a package registry, or a `next/font` download error, is an external flake: `gh run rerun --failed` and record a lesson, no code change.
 
 ## Repo map
 ```
