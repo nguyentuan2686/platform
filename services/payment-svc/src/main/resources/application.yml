@@ -1,0 +1,54 @@
+server:
+  port: ${PORT:8085}
+
+spring:
+  application:
+    name: payment-svc
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payment}
+    username: ${DB_USER:payment}
+    password: ${DB_PASSWORD:payment}
+  flyway:
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+platform:
+  # Empty = internal-token filter off (local use only); set INTERNAL_API_TOKEN everywhere else.
+  internal-token: ${INTERNAL_API_TOKEN:}
+  # Webhooks authenticate themselves (SePay/PayPal cannot send our token); /admin/** is guarded by
+  # X-Admin-Token instead. Everything else needs X-Internal-Token.
+  internal-token.open-paths: /health/**,/webhooks/**,/admin/**
+
+# OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
+
+payment:
+  order:
+    # How long a PENDING order reads as payable before it displays as EXPIRED.
+    payment-window: ${ORDER_PAYMENT_WINDOW:PT30M}
+  sepay:
+    # Receiving bank account shown to the customer. Empty = bank transfer orders answer 503.
+    bank-code: ${SEPAY_BANK_CODE:}
+    account-number: ${SEPAY_ACCOUNT_NUMBER:}
+    account-name: ${SEPAY_ACCOUNT_NAME:}
+    # apikey: header "Authorization: Apikey <secret>"; hmac-sha256: header X-SePay-Signature.
+    webhook-auth: ${SEPAY_WEBHOOK_AUTH:apikey}
+    webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
+    # Safety net for lost webhooks: lists SePay transactions and feeds them through the same path.
+    api-base-url: ${SEPAY_API_BASE_URL:https://my.sepay.vn}
+    api-token: ${SEPAY_API_TOKEN:}
+    reconcile:
+      enabled: ${SEPAY_RECONCILE_ENABLED:false}
+      interval: ${SEPAY_RECONCILE_INTERVAL:PT5M}
+      lookback: PT24H
+  vietqr:
+    image-url-template: ${VIETQR_IMAGE_URL_TEMPLATE:https://qr.sepay.vn/img?acc={acc}&bank={bank}&amount={amount}&des={code}}
+  paypal:
+    # Only "fake" is accepted in F1.3; anything else fails startup.
+    mode: ${PAYPAL_MODE:fake}
+    fake-webhook-secret: ${PAYPAL_FAKE_WEBHOOK_SECRET:}
+  identity:
+    url: ${IDENTITY_SVC_URL:http://localhost:8084}
+  admin:
+    # Empty = the operator API answers 401 to everyone.
+    token: ${ADMIN_API_TOKEN:}

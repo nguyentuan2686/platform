@@ -1,0 +1,24 @@
+package dev.platform.identity.application;
+
+import dev.platform.identity.domain.Email;
+import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface AccountRepositoryPort {
+
+  /** Finds the account for the email or creates it; {@code created} tells which. */
+  Upserted upsert(Email email, Instant now);
+
+  Optional<Email> findEmail(UUID accountId);
+
+  Optional<UUID> findByGoogleSub(String sub);
+
+  /**
+   * Attaches a Google subject to an account that has none. False when the account is already linked
+   * (to this or another subject) or the subject belongs to another account.
+   */
+  boolean linkGoogleSub(UUID accountId, String sub);
+
+  record Upserted(UUID id, boolean created) {}
+}

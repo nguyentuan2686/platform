@@ -1,0 +1,46 @@
+server:
+  port: ${PORT:8084}
+
+spring:
+  application:
+    name: identity-svc
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/identity}
+    username: ${DB_USER:identity}
+    password: ${DB_PASSWORD:identity}
+  flyway:
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: identity-svc
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+
+platform:
+  # identity-svc publishes no events (it only consumes PaymentSucceeded).
+  outbox:
+    enabled: false
+  # Empty = internal-token filter off (local use only); set INTERNAL_API_TOKEN everywhere else.
+  internal-token: ${INTERNAL_API_TOKEN:}
+
+# OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
+
+identity:
+  web-base-url: ${WEB_BASE_URL:http://localhost:3001}
+  profile:
+    # base64 of 32 bytes (AES-256); startup fails when missing or the wrong length.
+    enc-key: ${PROFILE_ENC_KEY:}
+  mail:
+    from: ${MAIL_FROM:no-reply@localhost}
+  oidc:
+    google:
+      issuer: ${OIDC_GOOGLE_ISSUER:https://accounts.google.com}
+      # Empty client id = Google login disabled (503).
+      client-id: ${OIDC_GOOGLE_CLIENT_ID:}
+      client-secret: ${OIDC_GOOGLE_CLIENT_SECRET:}
+      # Comma-separated exact redirect URIs the web app may use.
+      redirect-uris: ${OIDC_REDIRECT_URIS:}
