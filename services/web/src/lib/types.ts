@@ -1,6 +1,7 @@
 export type Gender = "male" | "female";
 /** Birth data. Lives only in server memory; never logged and never put in a URL. */
-export type Birth = { birth: string; zone: string; gender: Gender; calendar: "VN" };
+export type Calendar = "VN" | "CN";
+export type Birth = { birth: string; zone: string; gender: Gender; calendar: Calendar };
 
 export type Branch =
   | "Zi"

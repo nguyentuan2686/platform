@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BalanceChip } from "@/components/BalanceChip";
 
 export function SiteHeader() {
   return (
@@ -6,6 +7,7 @@ export function SiteHeader() {
       <Link href="/vi" className="brand">
         Tử Vi Đẩu Số
       </Link>
+      <BalanceChip />
     </header>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Charm, Ma_Shan_Zheng, Noto_Serif, Noto_Serif_Display } from "next/font/google";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { TabBar } from "@/components/TabBar";
 import "@/styles/theme.css";
 
 const charm = Charm({ weight: ["400", "700"], subsets: ["vietnamese", "latin"], variable: "--font-charm", display: "swap" });
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <SiteHeader />
         {children}
         <SiteFooter />
+        <TabBar />
       </body>
     </html>
   );

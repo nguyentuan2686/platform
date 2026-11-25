@@ -1,7 +1,22 @@
+import Link from "next/link";
 import { BirthForm } from "@/components/BirthForm";
 import { Sage } from "@/components/Sage";
+import { getProfile } from "@/lib/identity";
+import { getViewer } from "@/lib/session";
 
-export default function ViHome() {
+/** True when the viewer already saved a chart. An unavailable identity service just hides the link. */
+async function hasProfile(): Promise<boolean> {
+  try {
+    const viewer = await getViewer();
+    if (viewer.kind === "anon") return false;
+    return (await getProfile(viewer.token)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export default async function ViHome() {
+  const saved = await hasProfile();
   return (
     <main className="home">
       <section className="tv-hero">
@@ -14,6 +29,13 @@ export default function ViHome() {
         </p>
         <Sage mood="greet" className="hero-sage" />
       </section>
+      {saved && (
+        <p className="saved-chart">
+          <Link href="/vi/la-so" className="btn btn-ghost">
+            Xem lá số của con
+          </Link>
+        </p>
+      )}
       <BirthForm />
     </main>
   );

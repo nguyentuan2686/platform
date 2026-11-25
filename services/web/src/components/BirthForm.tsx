@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { submitBirth, type FormState } from "@/app/vi/actions";
 import { GENDER_LABELS, ZONES } from "@/lib/labels";
@@ -7,7 +8,7 @@ import { GENDER_LABELS, ZONES } from "@/lib/labels";
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p id={id} className="field-error">
+    <p id={id} className="field-error" role="alert">
       {message}
     </p>
   );
@@ -63,6 +64,22 @@ export function BirthForm({ initialState = null }: { initialState?: FormState })
           ))}
         </select>
         <FieldError id="err-zone" message={errors.zone} />
+      </div>
+      <div className="field consent">
+        <input
+          id="consent"
+          name="consent"
+          type="checkbox"
+          value="1"
+          defaultChecked={v?.consent === "1"}
+          required
+          {...err("consent")}
+        />
+        <label htmlFor="consent">
+          Ta được lưu ngày giờ sinh của con (đã mã hóa) để lập lá số.{" "}
+          <Link href="/vi/chinh-sach-rieng-tu">Xem chính sách riêng tư</Link>.
+        </label>
+        <FieldError id="err-consent" message={errors.consent} />
       </div>
       <button type="submit" className="btn" disabled={pending}>
         <span className="stamp stamp-sm" aria-hidden="true">

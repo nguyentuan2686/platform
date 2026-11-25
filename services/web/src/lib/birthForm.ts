@@ -1,7 +1,7 @@
 import type { Birth } from "@/lib/types";
 import { ZONES } from "@/lib/labels";
 
-export type FormErrors = Record<"date" | "time" | "gender" | "zone", string>;
+export type FormErrors = Record<"date" | "time" | "gender" | "zone" | "consent", string>;
 export type ParsedForm = { ok: true; birth: Birth } | { ok: false; errors: Partial<FormErrors> };
 
 const MIN_YEAR = 1900;
@@ -48,6 +48,9 @@ export function parseBirthForm(fd: FormData): ParsedForm {
 
   const zone = str("zone") || "Asia/Ho_Chi_Minh";
   if (!ZONES.some((z) => z.value === zone)) errors.zone = "Con hãy chọn nơi sinh trong danh sách.";
+
+  const consent = str("consent");
+  if (consent !== "1" && consent !== "on") errors.consent = "Con cần đồng ý để ta lưu ngày giờ sinh.";
 
   if (Object.keys(errors).length > 0 || !date) return { ok: false, errors };
   return {

@@ -152,3 +152,26 @@ html { scroll-padding-top: 12px; }
   .reading { gap: 8px; }
   .bubble { padding: 12px 11px 20px; }
 }
+
+/* F1.5b: header chip, consent, legal pages, bottom tab bar */
+.site-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.balance-chip { flex: none; font-size: 12.5px; font-family: var(--plain); color: var(--metal-soft); border: 1px solid color-mix(in srgb, var(--metal) 55%, transparent); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.consent { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; }
+.consent input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); }
+.consent label { flex: 1; min-width: 0; font-size: 13px; line-height: 1.55; color: var(--paper); }
+.consent label a, .legal a, .legal-links a { color: var(--metal-soft); }
+.consent .field-error { flex-basis: 100%; }
+.saved-chart { margin: 18px 0 0; }
+.btn-ghost { background: transparent; color: var(--metal-soft); border: 1px solid var(--metal); text-decoration: none; }
+.anchor { scroll-margin-top: 12px; }
+.legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; margin: 10px 0 0; }
+.legal h1 { font-family: var(--display); font-size: 30px; color: var(--paper); margin: 18px 0 6px; }
+.legal h2 { font-family: var(--plain); font-size: 17px; color: var(--metal-soft); margin: 22px 0 6px; }
+.legal p, .legal li { font-size: 14.5px; line-height: 1.7; color: var(--paper); overflow-wrap: anywhere; }
+.legal ul { padding-left: 20px; }
+.legal .updated { color: var(--muted); font-size: 12.5px; }
+body { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: center; gap: 4px; padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px)); background: color-mix(in srgb, var(--bg) 94%, transparent); border-top: 1px solid color-mix(in srgb, var(--metal) 30%, transparent); }
+.tab { flex: 1; max-width: 120px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; text-decoration: none; color: var(--muted); font-size: 12px; font-family: var(--plain); border-radius: var(--radius-sm); }
+.tab-glyph { font-family: var(--glyph); font-size: 20px; line-height: 1; }
+.tab[aria-current="page"] { color: var(--metal-soft); background: color-mix(in srgb, var(--accent) 22%, transparent); }
