@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getProfile } from "@/lib/identity";
+import { degradeOrThrow } from "@/lib/degrade";
+import { getProfile, getShare, type ShareLink } from "@/lib/identity";
+import { shareUrl, summaryLine } from "@/lib/shareText";
 import { getViewer } from "@/lib/session";
 import { getBasicReading, getChart, getToday } from "@/lib/upstream";
 import { GENDER_LABELS, hourLabel } from "@/lib/labels";
@@ -9,11 +11,22 @@ import { todayInVietnam } from "@/lib/today";
 import type { Birth } from "@/lib/types";
 import Board from "@/components/Board";
 import Dialogue from "@/components/Dialogue";
+import { SharePanel } from "@/components/SharePanel";
 import TodayPanel from "@/components/TodayPanel";
 
 export const dynamic = "force-dynamic";
 // The owner's chart: personal, never indexed.
 export const metadata: Metadata = { title: "Lá số của con - Lão Thiên Cơ", robots: { index: false, follow: false } };
+
+/** The active public link; trouble with identity hides the panel state (shows "create"), never the chart. */
+async function activeShare(token: string): Promise<ShareLink | null> {
+  try {
+    return await getShare(token);
+  } catch (e) {
+    degradeOrThrow(e, "share-state");
+    return null;
+  }
+}
 
 export default async function ChartPage() {
   const viewer = await getViewer();
@@ -28,6 +41,7 @@ export default async function ChartPage() {
     getBasicReading(birth),
     getToday(birth, todayInVietnam()),
   ]);
+  const share = await activeShare(viewer.token);
   return (
     <main>
       <h1>Lá số tử vi</h1>
@@ -35,6 +49,7 @@ export default async function ChartPage() {
         {GENDER_LABELS[birth.gender]} · {hourLabel(chart.hourBranch)} · năm {chart.yearCanChi.nameVi}
       </p>
       <Board chart={chart} />
+      <SharePanel share={share} summary={summaryLine(reading)} url={share ? shareUrl(share.share_id) : ""} />
       <div id="hom-nay" className="anchor">
         <TodayPanel today={today} />
       </div>

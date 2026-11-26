@@ -6,10 +6,15 @@ const m = vi.hoisted(() => ({
   }),
   getViewer: vi.fn(),
   getProfile: vi.fn(),
+  getShare: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ redirect: (u: string) => m.redirect(u) }));
 vi.mock("@/lib/session", () => ({ getViewer: () => m.getViewer() }));
-vi.mock("@/lib/identity", () => ({ getProfile: (b: string) => m.getProfile(b) }));
+vi.mock("@/lib/identity", () => ({
+  getProfile: (b: string) => m.getProfile(b),
+  getShare: (b: string) => m.getShare(b),
+}));
+vi.mock("@/app/vi/la-so/shareActions", () => ({ createShareAction: vi.fn(), deleteShareAction: vi.fn() }));
 vi.mock("@/lib/upstream", () => ({
   getChart: vi.fn(async () => (await import("@/test/chart-fixture.json")).default),
   getBasicReading: vi.fn(async () => ({ sections: [{ id: "greeting", lines: ["Chào con"] }] })),
@@ -33,6 +38,7 @@ describe("/vi/la-so", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     m.getViewer.mockResolvedValue({ kind: "guest", guestId: "g", token: "tok" });
+    m.getShare.mockResolvedValue(null);
     m.getProfile.mockResolvedValue(PROFILE);
   });
 

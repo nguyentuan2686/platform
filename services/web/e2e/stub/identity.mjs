@@ -1,4 +1,4 @@
-// identity-svc stub: guests, accounts (magic links), /me, entitlements and the chart profile, in memory.
+// identity-svc stub: guests, accounts (magic links), /me, entitlements, the chart profile and its public share link, in memory.
 // When STUB_INTERNAL_TOKEN is set, every service call must carry it in X-Internal-Token (else 401).
 // Test control: GET /__last-magic-token → {token} (the link a real mail would carry).
 import { randomBytes, randomUUID } from "node:crypto";
@@ -11,6 +11,8 @@ const ACCOUNT_TTL_MS = 30 * 24 * 3600 * 1000;
 const sessions = new Map();
 /** subject id (guest_id or account_id) -> profile */
 const profiles = new Map();
+/** subject id -> { share_id, created_at } (the active public link) */
+const shares = new Map();
 /** email -> { account_id, credits } */
 const accounts = new Map();
 /** magic token -> { email, used, guest_id } (the guest that asked, merged at verify like identity-svc) */
@@ -20,6 +22,7 @@ let lastMagicToken = null;
 export function reset() {
   sessions.clear();
   profiles.clear();
+  shares.clear();
   accounts.clear();
   links.clear();
   lastMagicToken = null;
@@ -110,6 +113,9 @@ function verify(req, res, body, send) {
     const p = profiles.get(guestId);
     if (p && !profiles.has(account.account_id)) profiles.set(account.account_id, p);
     profiles.delete(guestId);
+    const s = shares.get(guestId);
+    if (s && !shares.has(account.account_id)) shares.set(account.account_id, s);
+    shares.delete(guestId);
   }
   if (guest?.kind === "guest") sessions.delete(guestToken);
   const token = newToken();
@@ -131,6 +137,15 @@ export function handle(req, res, body, send) {
   const want = process.env.STUB_INTERNAL_TOKEN;
   if (want && req.headers["x-internal-token"] !== want) {
     send(res, 401, problem(401), "application/problem+json");
+    return true;
+  }
+  if (req.method === "GET" && route.startsWith("GET /shares/")) {
+    // Service-to-service: the FULL birth, like identity-svc (the web must reduce it).
+    const id = route.slice("GET /shares/".length);
+    const owner = [...shares.entries()].find(([, s]) => s.share_id === id)?.[0];
+    const p = owner ? profiles.get(owner) : undefined;
+    if (p) send(res, 200, { birth: p.birth, calendar: p.calendar });
+    else send(res, 404, problem(404), "application/problem+json");
     return true;
   }
   if (route === "POST /guests") {
@@ -201,6 +216,24 @@ export function handle(req, res, body, send) {
     }
     case "DELETE /me/profile":
       profiles.delete(sid);
+      shares.delete(sid);
+      send(res, 204);
+      return true;
+    case "PUT /me/profile/share": {
+      if (!profiles.has(sid)) {
+        send(res, 409, problem(409, { reason: "no_profile" }), "application/problem+json");
+        return true;
+      }
+      if (!shares.has(sid)) shares.set(sid, { share_id: randomBytes(16).toString("base64url"), created_at: new Date().toISOString() });
+      send(res, 200, shares.get(sid));
+      return true;
+    }
+    case "GET /me/profile/share":
+      if (shares.has(sid)) send(res, 200, shares.get(sid));
+      else send(res, 404, problem(404), "application/problem+json");
+      return true;
+    case "DELETE /me/profile/share":
+      shares.delete(sid);
       send(res, 204);
       return true;
     case "GET /me/entitlements": {

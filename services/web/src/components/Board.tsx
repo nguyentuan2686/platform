@@ -1,16 +1,17 @@
 import type { CSSProperties } from "react";
 import { cellOf } from "@/lib/boardLayout";
 import { brightnessLetter, canChi, hourLabel, mutagenLabel } from "@/lib/labels";
+import type { PublicChart } from "@/lib/publicShare";
 import type { Chart, Palace } from "@/lib/types";
 
-function starName(chart: Chart, key: string): string {
+function starName(chart: Pick<Chart, "palaces">, key: string): string {
   for (const p of chart.palaces) {
     for (const s of [...p.major, ...p.minor]) if (s.key === key) return s.nameVi;
   }
   return key;
 }
 
-function lunarLine(c: Chart): string {
+function lunarLine(c: Pick<Chart, "lunar">): string {
   const { day, month, leap } = c.lunar;
   return `ngày ${day} tháng ${month}${leap ? " nhuận" : ""}`;
 }
@@ -60,7 +61,8 @@ function Cell({ p }: { p: Palace }) {
   );
 }
 
-export default function Board({ chart }: { chart: Chart }) {
+/** `public`: a shared chart, which never shows the lunar date. */
+export default function Board({ chart, variant = "owner" }: { chart: Chart | PublicChart; variant?: "owner" | "public" }) {
   return (
     <nav className="board" aria-label="Bàn lá số 12 cung">
       {chart.palaces.map((p) => (
@@ -72,8 +74,12 @@ export default function Board({ chart }: { chart: Chart }) {
         </span>
         <span className="nm">Lá số tử vi</span>
         <span className="meta">
-          Âm lịch {lunarLine(chart)}
-          <br />
+          {variant === "owner" && "lunar" in chart && (
+            <>
+              Âm lịch {lunarLine(chart)}
+              <br />
+            </>
+          )}
           Năm {chart.yearCanChi.nameVi}, {hourLabel(chart.hourBranch)}
         </span>
         <span className="cuc">
