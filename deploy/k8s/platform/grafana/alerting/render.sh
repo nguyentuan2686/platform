@@ -23,6 +23,8 @@ render() {
 cp "$SRC/rules.yaml" "$OUT/rules.yaml"
 if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
   if [ -z "${TELEGRAM_CHAT_ID:-}" ]; then echo "alerting: TELEGRAM_BOT_TOKEN set but TELEGRAM_CHAT_ID empty" >&2; exit 1; fi
+  # the token lands only in these two files: owner-only, on a memory-backed emptyDir (never on node disk)
+  umask 077
   render "$SRC/contact-point.tmpl.yaml" >"$OUT/contact-point.yaml"
   render "$SRC/policy.tmpl.yaml" >"$OUT/policy.yaml"
   echo "alerting: rules + telegram contact point + policy rendered"

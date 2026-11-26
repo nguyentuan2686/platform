@@ -91,7 +91,7 @@ spec:
         - name: grafana-alerting
           configMap: {name: grafana-alerting}
         - name: provisioning-alerting
-          emptyDir: {}
+          emptyDir: {medium: Memory} # the rendered Telegram token never touches node disk
 ---
 apiVersion: v1
 kind: Service

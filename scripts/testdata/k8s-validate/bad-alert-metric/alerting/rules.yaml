@@ -142,7 +142,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "node disk {{ $$labels.mountpoint }} above 80%"
+          summary: "node {{ $$labels.k8s_node_name }} root disk above 80%"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#disk-usage-high
         data:
           - refId: A
@@ -154,7 +154,7 @@ groups:
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
-              expr: 'max by (mountpoint) (system_filesystem_utilization_ratio{mountpoint="/"}) > 0.8'
+              expr: 'max by (k8s_node_name) (k8s_node_filesystem_usage_bytes) / max by (k8s_node_name) (k8s_node_filesystem_capacity_bytes) > 0.8'
           - refId: B
             datasourceUid: __expr__
             model:

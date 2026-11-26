@@ -28,17 +28,17 @@ receivers:
     collection_interval: 30s
     node_conditions_to_report: [Ready, DiskPressure]
 
-  # Node disk usage for the disk-usage-high alert; the node's / is mounted read-only at /hostfs.
-  hostmetrics:
+  # Node filesystem usage/capacity for the disk-usage-high alert, read from the node's kubelet (nodes/stats RBAC), so no
+  # pod needs the host filesystem. See rbac.yaml and docs/runbooks/alerts.md (collector privileges).
+  kubeletstats:
     collection_interval: 30s
-    root_path: /hostfs
-    scrapers:
-      filesystem:
-        metrics:
-          system.filesystem.utilization: {enabled: true}
-        exclude_fs_types:
-          fs_types: [tmpfs, overlay, squashfs, nsfs, proc, sysfs]
-          match_type: strict
+    auth_type: serviceAccount
+    endpoint: ${env:K8S_NODE_IP}:10250
+    insecure_skip_verify: true # kubelet serving cert is self-signed (k3s, kind); the token still authenticates us to it
+    metric_groups: [node]
+    metrics:
+      k8s.node.filesystem.usage: {enabled: true}
+      k8s.node.filesystem.capacity: {enabled: true}
 
   # Service logs are JSON lines on stdout (CLAUDE.md logging contract).
   filelog:
@@ -90,7 +90,7 @@ service:
       processors: [memory_limiter, resource, batch]
       exporters: [otlphttp]
     metrics:
-      receivers: [otlp, prometheus, k8s_cluster, hostmetrics]
+      receivers: [otlp, prometheus, k8s_cluster, kubeletstats]
       processors: [memory_limiter, resource, batch]
       exporters: [otlphttp]
     logs:

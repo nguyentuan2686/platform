@@ -1,5 +1,6 @@
-# The collector reads pod logs from the node's filesystem and, for the k8s_cluster receiver (container restarts,
-# node conditions), watches the Kubernetes API: read-only, only the resources that receiver documents.
+# The collector reads pod logs from /var/log/pods (read-only hostPath, never the host root) and, for the k8s_cluster and
+# kubeletstats receivers (container restarts, node conditions, node filesystem usage), watches the Kubernetes API:
+# read-only, only the resources those receivers document.
 # NOTE (ADR 0004): on a multi-node cluster every DaemonSet pod would report the same cluster-wide metrics, so
 # k8s_cluster must then move to a single-replica Deployment. Fine on the single k3s node.
 apiVersion: v1
@@ -19,6 +20,7 @@ rules:
       - namespaces/status
       - nodes
       - nodes/spec
+      - nodes/stats # kubeletstats receiver (node filesystem usage)
       - pods
       - pods/status
       - replicationcontrollers

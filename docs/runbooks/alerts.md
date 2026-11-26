@@ -25,11 +25,16 @@ Severity warning. A Redpanda consumer group has lag above 100 messages and growi
 - Likely fixes: the consumer is down or crash-looping (see `pod-restart-loop`), a poison message that is retried forever, a slow downstream dependency; scale or fix the consumer, then watch the lag drain.
 
 ## disk-usage-high
-Severity critical. The node's root filesystem is more than 80% used for 10m (`system_filesystem_utilization_ratio{mountpoint="/"}`, from the collector's hostmetrics receiver reading the host `/`).
-- First queries: `max by (mountpoint) (system_filesystem_utilization_ratio)`; on the node `df -h /` and `du -xh --max-depth=2 / | sort -h | tail`.
+Severity critical. A node's filesystem is more than 80% used for 10m (`k8s_node_filesystem_usage_bytes / k8s_node_filesystem_capacity_bytes`, from the collector's kubeletstats receiver, i.e. the kubelet's own filesystem stats; no pod mounts the host root).
+- First queries: `max by (k8s_node_name) (k8s_node_filesystem_usage_bytes) / max by (k8s_node_name) (k8s_node_filesystem_capacity_bytes)`; on the node `df -h /` and `du -xh --max-depth=2 / | sort -h | tail`.
 - Likely fixes: prune unused images (`k3s crictl rmi --prune`), shrink container logs, check that Prometheus, Loki and Tempo retention is in effect (15d, 168h, 168h) and the telemetry volume `lgtm-data` is not the culprit, remove old files in `/var/lib/rancher`; if the disk is simply too small, grow it.
 
 ## deploy-failed
 Severity critical. An Argo CD application has been `Degraded` or `Missing` for 10m (`argocd_app_info{health_status=~"Degraded|Missing"}`, scraped from `argocd-metrics.argocd.svc.cluster.local:8082`).
 - First queries: `argocd app get <name>` or the Argo CD UI (which resource is unhealthy), `kubectl -n argocd get applications`, `scripts/verify-deploy.sh --app <name>`.
 - Likely fixes: an invalid manifest or missing Secret (for example a sealed secret that was never applied), a failing rollout (see `pod-restart-loop`), a CD commit that should be reverted. No data at all for this rule (for example Argo CD is not installed) is not an alert.
+
+## Collector privileges and residual risks
+- The OpenTelemetry collector DaemonSet runs as root only to read the root-owned pod logs under `/var/log/pods` (read-only hostPath, narrowest path). It has no other host mount: the host root, `/var/lib/rancher` and `/etc/rancher` are never mounted into any pod (`scripts/k8s-validate.sh` check `hostpath-root` fails the build otherwise), because a pod with host-root access and a ServiceAccount token could read the k3s token and every Secret.
+- It does carry a ServiceAccount token with cluster-wide read-only access to the resources of the `k8s_cluster` receiver plus `nodes/stats` (kubeletstats). It does not read Secrets. Residual risk: a compromised collector (it listens for OTLP inside the cluster) could read pod logs of the `apps` namespace and cluster state. Accepted; to shrink it further, move `k8s_cluster` and `kubeletstats` into a small non-root Deployment and drop the token from the DaemonSet (needed anyway on a multi-node cluster, see ADR 0004).
+- The Telegram token is rendered by the init container only into a memory-backed emptyDir (mode 0600) and never into the Grafana container environment. Removing `alerting-secrets` later does not delete the contact point or policy Grafana already stored: delete them in Grafana (Alerting -> Contact points / Notification policies) or recreate the pod's Grafana state.

@@ -137,6 +137,24 @@ probe_retention() {
   printf 'prometheus 15d, loki 1w, tempo 168h'
 }
 
+
+# The alerts are silent on NoData, so prove their inputs exist with the labels the rules use (deploy-failed is exempt: no Argo CD in kind).
+probe_metric_present_restarts() {
+  local r
+  r=$(prom 'count by (k8s_namespace_name, k8s_pod_name) (k8s_container_restarts{k8s_namespace_name="apps"})') || { printf '%s' "$r"; return 1; }
+  printf '%s' "$r" | cut -c1-300
+  has "$r" '"k8s_namespace_name" *: *"apps"' && has "$r" '"k8s_pod_name" *: *"[^"]+"'
+}
+
+probe_metric_present_disk() {
+  local r m
+  for m in k8s_node_filesystem_usage_bytes k8s_node_filesystem_capacity_bytes; do
+    r=$(prom "max by (k8s_node_name) ($m)") || { printf '%s' "$r"; return 1; }
+    printf '%s: %s ' "$m" "$(printf '%s' "$r" | cut -c1-150)"
+    has "$r" '"k8s_node_name" *: *"[^"]+"' || return 1
+  done
+}
+
 # check NAME PROBE -> polls PROBE until it passes or the deadline passes
 check() {
   local name="$1" probe="$2" last deadline=$((SECONDS + DEADLINE_S))
@@ -165,4 +183,6 @@ check alert-rules-loaded probe_alert_rules_loaded || failed=1
 check alert-rules-healthy probe_alert_rules_healthy || failed=1
 check contact-point probe_contact_point || failed=1
 check retention probe_retention || failed=1
+check metric-present-restarts probe_metric_present_restarts || failed=1
+check metric-present-disk probe_metric_present_disk || failed=1
 exit "$failed"

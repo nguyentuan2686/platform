@@ -57,6 +57,8 @@ def eff($c; $ps; $k): if $c.securityContext[$k] != null then $c.securityContext[
     | eff($c; $ps; "runAsUser") as $uid
     | if $nr != true or ($uid | type) != "number" or $uid < 1 then fail("nonroot"; $o; $c; "effective runAsNonRoot must be true and runAsUser a numeric id > 0 (got runAsNonRoot=\($nr), runAsUser=\($uid))") else empty end
     else empty end),
+  # hostpath-root: no pod mounts the host root or k3s state (with an API token it could read every Secret)
+  (if ($ps | type) == "object" then ($ps.volumes // [])[] | select((.hostPath.path // "") | (. == "/" or startswith("/var/lib/rancher") or startswith("/etc/rancher"))) | "POLICY: hostpath-root ($o|id): volume (.name) mounts (.hostPath.path)" else empty end),
   # no-latest
   ($all[] | . as $c | select(($c | imgtag) == "latest" or ((($c | image) | test("@sha256:")) | not) and (($c | imgtag) == ""))
     | fail("no-latest"; $o; $c; "image \"\($c | image)\" must have a pinned tag (not latest)"))
@@ -333,7 +335,7 @@ check_dashboards() {
 
 # alerts: Grafana alert rules as code. $1 = dir holding alerting/rules.yaml and metric-names.txt. rules.yaml parses, its
 # uids are exactly the six of the spec (§10), every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
-# identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[`).
+# identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[` and `_bytes` names).
 # Fails closed: missing files or parse errors fail.
 ALERT_UIDS="consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high pod-restart-loop"
 check_alerts() {
@@ -349,7 +351,7 @@ check_alerts() {
     | "POLICY: alerts \($r.uid): query \(.refId) datasourceUid \"\(.datasourceUid // "")\" must be prometheus or __expr__"' <<<"$json" | tr -d '\r') \
     || { echo "POLICY: alerts $f: datasource check failed"; return 1; }
   if [ -n "$res" ]; then echo "$res"; rc=1; fi
-  res=$(jq -r --arg re "$METRIC_RE|[a-z_][a-z0-9_]*(?=\[)" '.groups[]?.rules[]? | . as $r | .data[]? | select(.refId == "A") | .model.expr // empty
+  res=$(jq -r --arg re "$METRIC_RE|[a-z_][a-z0-9_]*(?=\[)|[a-z_][a-z0-9_]*_bytes\b" '.groups[]?.rules[]? | . as $r | .data[]? | select(.refId == "A") | .model.expr // empty
     | scan($re) | "\($r.uid)\t\(.)"' <<<"$json" | tr -d '\r' | sort -u) \
     || { echo "POLICY: alerts $f: metric extraction failed"; return 1; }
   while IFS=$'\t' read -r uid m; do

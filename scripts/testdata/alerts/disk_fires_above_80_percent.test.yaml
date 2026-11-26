@@ -1,24 +1,30 @@
-# Root filesystem above 80 % for 10 minutes fires disk-usage-high; 70 % and other mountpoints do not.
+# Node filesystem (kubelet stats) above 80 % for 10 minutes fires disk-usage-high; 70 % does not.
 rule_files: [rules.generated.yaml]
 evaluation_interval: 1m
 tests:
   - name: disk_fires_above_80_percent
     interval: 1m
     input_series:
-      - series: 'system_filesystem_utilization_ratio{mountpoint="/", device="/dev/sda1"}'
-        values: '0.85+0x30'
-      - series: 'system_filesystem_utilization_ratio{mountpoint="/boot", device="/dev/sda15"}'
-        values: '0.95+0x30'
+      - series: 'k8s_node_filesystem_usage_bytes{k8s_node_name="node-a", job="kubeletstats"}'
+        values: '85000+0x30'
+      - series: 'k8s_node_filesystem_capacity_bytes{k8s_node_name="node-a", job="kubeletstats"}'
+        values: '100000+0x30'
+      - series: 'k8s_node_filesystem_usage_bytes{k8s_node_name="node-b", job="kubeletstats"}'
+        values: '30000+0x30'
+      - series: 'k8s_node_filesystem_capacity_bytes{k8s_node_name="node-b", job="kubeletstats"}'
+        values: '100000+0x30'
     alert_rule_test:
       - eval_time: 15m
         alertname: disk-usage-high
         exp_alerts:
-          - exp_labels: {mountpoint: "/", severity: critical}
+          - exp_labels: {k8s_node_name: node-a, severity: critical}
   - name: disk_silent_at_70_percent
     interval: 1m
     input_series:
-      - series: 'system_filesystem_utilization_ratio{mountpoint="/", device="/dev/sda1"}'
-        values: '0.7+0x30'
+      - series: 'k8s_node_filesystem_usage_bytes{k8s_node_name="node-a"}'
+        values: '70000+0x30'
+      - series: 'k8s_node_filesystem_capacity_bytes{k8s_node_name="node-a"}'
+        values: '100000+0x30'
     alert_rule_test:
       - eval_time: 25m
         alertname: disk-usage-high
