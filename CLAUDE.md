@@ -8,6 +8,7 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 - Trunk-based: short branch -> PR -> CI green -> Claude squash-merges. No human review required when CI is green.
 - Any failure (CI, unexpected test fail, prod bug, failed deploy) triggers a retro: write a lesson (see Lessons loop).
 - Never claim "done" without running the verification command and reading its output.
+- Before each commit read `git diff --stat`: no deletions or files outside the task's scope. Never call a failure "pre-existing" without reproducing it on the base commit.
 - CI triage: read the failing log first. HTTP 429/5xx or "could not transfer artifact" from a package registry, or a `next/font` download error, is an external flake: `gh run rerun --failed` and record a lesson, no code change.
 
 ## Repo map
@@ -32,6 +33,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Constructor injection only; no `@Autowired` on fields.
 - Records for DTOs and value objects.
 - HTTP errors via RFC 9457 Problem Details; never stack traces or exception class names in responses.
+- Never an empty or log-less catch (Java and web): a catch rethrows, maps an expected upstream status, or hands the error to a shared handler that logs or rethrows (web: `degradeOrThrow` / `logRefusalOrThrow` in `lib/degrade.ts`, `upstreamFailure`). A deliberate swallow (browser code, parsing untrusted input) carries a `catch-ok: <reason>` comment. Web hard check: `src/catchPolicy.test.ts` + ESLint `no-empty`.
 - Coverage gate: >= 80% line coverage for `domain` and `application`.
 - Database per service; schema changes via Flyway migrations.
 
@@ -43,7 +45,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`.
 - Event evolution rule: additive changes (new optional `data` fields) stay in v1, so event schemas leave `data` open and consumers ignore unknown fields; breaking changes (remove/rename/retype a field, change meaning) go to a new topic `<name>.v2` with its own schema, published alongside v1 until consumers migrate.
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
-- Dev machine is weak (2 cores / 12GB): local stack <= ~3GB; heavy verification runs in CI.
+- Dev machine is weak (2 cores / 12GB): local stack <= ~3GB (full `--profile app` is ~2.75GB; identity-svc and payment-svc need `mem_limit: 512m`, the JVM off-heap alone is ~170MiB); heavy verification runs in CI.
 
 ## Rust conventions
 See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all cargo via `scripts/cargo.sh` (Docker). Toolchain pinned in `rust-toolchain.toml`.

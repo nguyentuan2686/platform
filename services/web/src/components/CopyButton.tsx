@@ -11,7 +11,7 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setCopied(false); // no clipboard permission: the value stays visible to copy by hand
+      setCopied(false); // catch-ok: no clipboard permission; the value stays visible to copy by hand
     }
   }
   return (

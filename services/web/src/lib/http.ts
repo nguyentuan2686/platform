@@ -85,7 +85,7 @@ export async function errorFor(svc: Svc, res: Response): Promise<Error> {
       const p = (await res.json()) as { errors?: { field: string; message: string }[] };
       for (const er of p.errors ?? []) fields[er.field] ??= er.message;
     } catch {
-      /* unreadable body: no field detail */
+      /* catch-ok: unreadable 400 body, so no field detail */
     }
     return new UpstreamValidation(fields, SVC_NAME[svc]);
   }
@@ -95,7 +95,7 @@ export async function errorFor(svc: Svc, res: Response): Promise<Error> {
       const p = (await res.json()) as { reason?: unknown };
       if (typeof p.reason === "string" && /^[a-z0-9_]{1,64}$/.test(p.reason)) reason = p.reason;
     } catch {
-      /* no body */
+      /* catch-ok: no JSON body, so no reason code */
     }
     return new UpstreamProblem(res.status as UpstreamProblem["status"], reason, SVC_NAME[svc]);
   }

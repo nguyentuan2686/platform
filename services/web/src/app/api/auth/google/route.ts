@@ -27,7 +27,7 @@ export async function POST(req: Request): Promise<Response> {
     const v = (await req.formData()).get("next");
     next = typeof v === "string" ? v : null;
   } catch {
-    /* no form body: default landing page */
+    /* catch-ok: no form body, so the default landing page */
   }
 
   let url: URL;

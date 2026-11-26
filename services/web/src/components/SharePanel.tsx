@@ -33,6 +33,7 @@ export function SharePanel({ share, summary, url }: Props) {
       await navigator.clipboard.writeText(url);
       say("Đã chép");
     } catch {
+      // catch-ok: no clipboard permission; the message tells the user to copy by hand
       say("Không chép được, con chép tay từ ô link nhé.");
     }
   }
@@ -41,7 +42,8 @@ export function SharePanel({ share, summary, url }: Props) {
     try {
       await navigator.share({ title: "Lá số tử vi của tôi", text: summary, url });
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return; // the user closed the menu
+      // catch-ok: browser side; the user closed the menu, or the failure is shown in the status line
+      if (e instanceof DOMException && e.name === "AbortError") return;
       say("Không mở được menu chia sẻ, con dùng nút sao chép link nhé.");
     }
   }

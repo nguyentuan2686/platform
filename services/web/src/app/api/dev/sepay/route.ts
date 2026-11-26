@@ -32,6 +32,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     orderId = ((await req.json()) as { order_id?: unknown } | null)?.order_id;
   } catch {
+    // catch-ok: an unparsable body has no order id, answered 404 below
     orderId = undefined;
   }
   try {

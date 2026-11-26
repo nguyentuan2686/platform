@@ -72,7 +72,7 @@ export function OrderStatus({
           }
         }
       } catch {
-        /* offline or a blip: try again at the next interval */
+        /* catch-ok: browser side; offline or a blip, tried again at the next interval */
       }
       schedule();
     };
@@ -123,6 +123,7 @@ export function OrderStatus({
       setSimState("idle");
       checkNow.current();
     } catch {
+      // catch-ok: browser side; the failure is shown on the simulator button
       setSimState("failed");
     }
   }

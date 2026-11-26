@@ -23,7 +23,7 @@ export function createSseParser(onEvent: (e: SseEvent) => void): { push(chunk: s
     try {
       parsed = JSON.parse(raw);
     } catch {
-      /* not JSON: keep the text */
+      /* catch-ok: not JSON, so the data stays text */
     }
     onEvent({ event: name, data: parsed });
   };

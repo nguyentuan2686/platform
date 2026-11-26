@@ -50,7 +50,7 @@ async function reasonOf(res: Response): Promise<string> {
     const p = (await res.json()) as { reason?: unknown };
     if (typeof p.reason === "string") return p.reason;
   } catch {
-    /* unreadable body */
+    /* catch-ok: browser side; an unreadable error body falls back to the status */
   }
   return res.status === 401 ? "unauthenticated" : "unavailable";
 }
@@ -76,6 +76,7 @@ export async function postQaStream(
       cache: "no-store",
     });
   } catch {
+    // catch-ok: browser side; the network failure is the "dropped" outcome shown to the user
     return { kind: "dropped" };
   }
   if (!res.ok || !res.body) {
@@ -99,6 +100,7 @@ export async function postQaStream(
     parser.push(decoder.decode());
     parser.end();
   } catch {
+    // catch-ok: browser side; a broken stream is the "dropped" outcome shown to the user
     parser.end();
     return { kind: "dropped" };
   }

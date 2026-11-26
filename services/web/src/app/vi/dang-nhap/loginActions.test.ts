@@ -173,8 +173,20 @@ describe("confirmLogin, link requested in this browser (matching nonce)", () => 
     expect(m.setSessionCookie).toHaveBeenCalled();
     const line = out.mock.calls.map((c: unknown[]) => String(c[0])).find((s: string) => s.includes("qa merge failed"));
     expect(line).toBeDefined();
-    expect(JSON.parse(line as string)).toMatchObject({ guest_id: "guest-1", account_id: "acc-1", message: "qa merge failed" });
+    expect(JSON.parse(line as string)).toMatchObject({
+      guest_id: "guest-1",
+      account_id: "acc-1",
+      message: "qa merge failed",
+      upstream: "reading-tuvi",
+      status: "unavailable",
+    });
     expect(logged()).not.toMatch(/link-token|acc-session|guest-token/);
+  });
+
+  it("a bug in the merge is not swallowed as a 'qa merge failed' warning", async () => {
+    m.mergeGuest.mockRejectedValue(new TypeError("boom"));
+    await expect(confirmLogin(null, fd({ token: "link-token" }))).rejects.toThrow("boom");
+    expect(logged()).not.toContain("qa merge failed");
   });
 
   it("redirects to the stored tv_next", async () => {

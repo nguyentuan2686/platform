@@ -26,6 +26,7 @@ export async function readObject(req: Request): Promise<Record<string, unknown> 
     const v: unknown = await req.json();
     return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
   } catch {
+    // catch-ok: an unparsable body is the client's error; the caller answers 400 "invalid"
     return null;
   }
 }
