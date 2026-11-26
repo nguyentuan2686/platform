@@ -1,0 +1,86 @@
+/// <reference types="vite/client" />
+import { describe, expect, it } from "vitest";
+import sitemap from "@/app/sitemap";
+import robots from "@/app/robots";
+import { cfg } from "@/lib/config";
+
+const PRIVATE_PAGES = [
+  "@/app/vi/la-so/page",
+  "@/app/vi/hoi/page",
+  "@/app/vi/hoi/[readingId]/page",
+  "@/app/vi/lich-su/page",
+  "@/app/vi/tai-khoan/page",
+  "@/app/vi/tai-khoan/giao-dich/page",
+  "@/app/vi/thanh-toan/[orderId]/page",
+  "@/app/vi/quan-tri/page",
+  "@/app/vi/dang-nhap/page",
+  "@/app/vi/dang-nhap/xac-nhan/page",
+  "@/app/vi/mua/page",
+];
+
+describe("sitemap", () => {
+  it("lists exactly the 31 public absolute URLs", () => {
+    const urls = sitemap().map((e) => e.url);
+    expect(urls).toHaveLength(31);
+    expect(new Set(urls).size).toBe(31);
+    for (const u of urls) expect(u.startsWith(cfg().webOrigin)).toBe(true);
+    expect(urls).toContain(`${cfg().webOrigin}/vi/kien-thuc/cung/menh`);
+    expect(urls).toContain(`${cfg().webOrigin}/vi/kien-thuc/sao/thien-co`);
+    expect(urls).toContain(`${cfg().webOrigin}/vi/dieu-khoan`);
+    expect(urls.some((u) => /la-so|hoi\b|tai-khoan|chia-se|quan-tri/.test(u))).toBe(false);
+  });
+});
+
+describe("robots", () => {
+  it("disallows private routes and points at the sitemap", () => {
+    const r = robots();
+    const rule = Array.isArray(r.rules) ? r.rules[0]! : r.rules;
+    expect(rule.allow).toBe("/");
+    const dis = ([] as string[]).concat(rule.disallow ?? []);
+    for (const p of ["/api/", "/vi/la-so", "/vi/hoi", "/vi/lich-su", "/vi/tai-khoan", "/vi/thanh-toan", "/vi/quan-tri", "/vi/dang-nhap", "/vi/chia-se", "/vi/mua"]) {
+      expect(dis).toContain(p);
+    }
+    expect(r.sitemap).toBe(`${cfg().webOrigin}/sitemap.xml`);
+  });
+});
+
+describe("private pages", () => {
+  it.each(PRIVATE_PAGES)("%s is noindex", async (path) => {
+    const mod = (await import(/* @vite-ignore */ path)) as { metadata?: { robots?: { index?: boolean } } };
+    expect(mod.metadata?.robots?.index).toBe(false);
+  });
+});
+
+describe("static sitemap", () => {
+  it("is not force-dynamic: the runtime image has no knowledge files", async () => {
+    const mod = (await import("@/app/sitemap")) as { dynamic?: string };
+    expect(mod.dynamic).toBeUndefined();
+  });
+});
+
+describe("page titles", () => {
+  // The root layout's template ("%s · Tử Vi Đẩu Số") adds the one site suffix to every page title.
+  const SUFFIX = /Lão Thiên Cơ|Tử Vi Đẩu Số/;
+  type PageModule = {
+    metadata?: { title?: unknown };
+    generateMetadata?: (p: { params: Promise<Record<string, string>> }) => Promise<{ title?: unknown }>;
+    generateStaticParams?: () => Record<string, string>[];
+  };
+  const modules = import.meta.glob<PageModule>("./vi/**/{page,not-found}.tsx");
+  const paths = Object.keys(modules);
+
+  it("finds the pages", () => {
+    expect(paths.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it.each(paths)("%s carries no site suffix of its own", async (path) => {
+    const mod = await modules[path]!();
+    const titles: unknown[] = [];
+    if (mod.metadata && "title" in mod.metadata) titles.push(mod.metadata.title);
+    if (mod.generateMetadata && mod.generateStaticParams) {
+      const first = mod.generateStaticParams()[0];
+      if (first) titles.push((await mod.generateMetadata({ params: Promise.resolve(first) })).title);
+    }
+    for (const t of titles) expect(typeof t === "string" ? t : JSON.stringify(t ?? "")).not.toMatch(SUFFIX);
+  });
+});

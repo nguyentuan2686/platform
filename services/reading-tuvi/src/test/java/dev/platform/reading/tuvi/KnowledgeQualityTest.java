@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -189,5 +191,44 @@ class KnowledgeQualityTest {
           .sorted()
           .toList();
     }
+  }
+
+  /**
+   * The basic reading is shown on public share pages, which must not reveal a date. Only the
+   * "today" frames may carry date placeholders; every other knowledge text (basic reading frames,
+   * doctrine, daily lines) has no date, lunar or time placeholder and no date-like literal.
+   */
+  @Test
+  void basic_reading_texts_carry_no_date_placeholder_or_date_like_text() throws IOException {
+    if (!Files.isDirectory(KNOWLEDGE)) {
+      return;
+    }
+    List<JsonNode> records = new ArrayList<>(read(KNOWLEDGE.resolve("frames.vi.jsonl")));
+    for (Path f : gatedFiles(KNOWLEDGE)) {
+      records.addAll(read(f));
+    }
+    Pattern placeholder = Pattern.compile("\\{([A-Za-z_]+)\\}");
+    Pattern forbiddenName =
+        Pattern.compile("(?i)date|lunar|canchi|birth|day|month|year|time|hour|zone");
+    Pattern dateLike =
+        Pattern.compile(
+            "\\b\\d{1,2}[/.-]\\d{1,2}([/.-]\\d{2,4})?\\b|\\b(19|20)\\d{2}\\b|\\b\\d{1,2}:\\d{2}\\b");
+    int checked = 0;
+    for (JsonNode r : records) {
+      String key = r.get("key").stringValue();
+      if (key.startsWith("tuvi:frame=today_") || key.startsWith("tuvi:frame=qa_")) {
+        continue;
+      }
+      checked++;
+      String content = r.get("content").stringValue();
+      Matcher m = placeholder.matcher(content);
+      while (m.find()) {
+        assertThat(forbiddenName.matcher(m.group(1)).find())
+            .as("date placeholder {%s} in %s", m.group(1), key)
+            .isFalse();
+      }
+      assertThat(dateLike.matcher(content).find()).as("date-like text in %s", key).isFalse();
+    }
+    assertThat(checked).isGreaterThan(10);
   }
 }

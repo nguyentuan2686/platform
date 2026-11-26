@@ -159,6 +159,13 @@ public interface QaRepositoryPort {
    */
   boolean deletedPaid(UUID id);
 
+  /**
+   * Moves every reading of the guest to the account (subject kind and id), in one statement that
+   * touches nothing else: status, credit source and refund state stay as they are. Returns the
+   * number moved; a repeat returns 0.
+   */
+  int moveGuestReadings(UUID guestId, UUID accountId);
+
   // Jobs (retry, refund, recovery, retention). Safe with several replicas: a claim is one
   // statement (FOR UPDATE SKIP LOCKED) that takes one row, moves next_attempt_at to leaseUntil and
   // stores the claim token, so the outbound call runs after the commit, no other replica takes the

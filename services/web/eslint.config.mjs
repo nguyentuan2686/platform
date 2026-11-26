@@ -12,6 +12,11 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
+    // CLAUDE.md: never an empty catch (lesson 2026-11-26-swallowed-upstream-errors). The full check,
+    // a catch that neither rethrows, logs nor says "catch-ok: <reason>", is src/catchPolicy.test.ts.
+    rules: { "no-empty": ["error", { allowEmptyCatch: false }] },
+  },
+  {
     ignores: [
       "node_modules/**",
       ".next/**",

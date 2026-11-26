@@ -6,6 +6,7 @@ import dev.platform.identity.application.CreditConflictException;
 import dev.platform.identity.application.ForbiddenException;
 import dev.platform.identity.application.InvalidRedirectUriException;
 import dev.platform.identity.application.MailDeliveryException;
+import dev.platform.identity.application.NoProfileException;
 import dev.platform.identity.application.OidcUnavailableException;
 import dev.platform.identity.application.ProfileNotFoundException;
 import dev.platform.identity.application.UnauthenticatedException;
@@ -103,6 +104,16 @@ public class IdentityExceptionHandler {
         ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Profile not found");
     return platform.handleException(
         new ErrorResponseException(HttpStatus.NOT_FOUND, detail, null), request);
+  }
+
+  @ExceptionHandler(NoProfileException.class)
+  ResponseEntity<Object> noProfile(NoProfileException ex, WebRequest request) throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Save a chart profile first");
+    detail.setType(URI.create("urn:problem:conflict"));
+    detail.setProperty("reason", "no_profile");
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.CONFLICT, detail, null), request);
   }
 
   @ExceptionHandler(ForbiddenException.class)

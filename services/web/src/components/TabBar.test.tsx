@@ -1,0 +1,77 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+
+const pathname = vi.hoisted(() => ({ value: "/vi/la-so" }));
+vi.mock("next/navigation", () => ({ usePathname: () => pathname.value }));
+
+import { TabBar } from "./TabBar";
+
+afterEach(() => {
+  cleanup();
+  window.location.hash = "";
+});
+beforeEach(() => {
+  pathname.value = "/vi/la-so";
+});
+
+describe("TabBar", () => {
+  it("ships Hôm nay, Lá số, Hỏi thầy and Tài khoản with their links", () => {
+    render(<TabBar />);
+    const nav = screen.getByRole("navigation");
+    const links = screen.getAllByRole("link");
+    expect(nav).toBeTruthy();
+    expect(links.map((l) => l.textContent)).toEqual(["今Hôm nay", "命Lá số", "問Hỏi thầy", "我Tài khoản"]);
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/vi/la-so#hom-nay", "/vi/la-so", "/vi/hoi", "/vi/tai-khoan"]);
+  });
+
+  it("marks Tài khoản current on /vi/tai-khoan", () => {
+    pathname.value = "/vi/tai-khoan";
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Tài khoản/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Lá số/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("marks Lá số current on /vi/la-so", () => {
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Lá số/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Hôm nay/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("marks Hôm nay current on the #hom-nay anchor", () => {
+    window.location.hash = "#hom-nay";
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Hôm nay/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Lá số/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("follows hash changes between the two tabs", () => {
+    render(<TabBar />);
+    act(() => {
+      window.location.hash = "#hom-nay";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(screen.getByRole("link", { name: /Hôm nay/ }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("marks nothing on other pages", () => {
+    pathname.value = "/vi";
+    render(<TabBar />);
+    for (const l of screen.getAllByRole("link")) expect(l.getAttribute("aria-current")).toBeNull();
+  });
+});
+
+describe("TabBar: Hỏi thầy", () => {
+  it.each(["/vi/hoi", "/vi/hoi/33333333-3333-4333-8333-333333333333", "/vi/lich-su"])("is current on %s", (path) => {
+    pathname.value = path;
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Hỏi thầy/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Tài khoản/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("is not current on the account page", () => {
+    pathname.value = "/vi/tai-khoan/giao-dich";
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Hỏi thầy/ }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: /Tài khoản/ }).getAttribute("aria-current")).toBe("page");
+  });
+});

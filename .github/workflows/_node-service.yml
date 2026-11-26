@@ -48,6 +48,8 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Client bundle carries no secrets or service URLs
+        run: npm run check:bundle
 
   e2e:
     runs-on: ubuntu-24.04

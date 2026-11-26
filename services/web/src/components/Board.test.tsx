@@ -94,3 +94,20 @@ describe("Board", () => {
     expect(c.textContent).toContain("Văn Xương");
   });
 });
+
+describe("Board variants", () => {
+  it("owner shows the lunar day and month", () => {
+    const { container } = render(<Board chart={chart} />);
+    expect(container.textContent).toMatch(/Âm lịch ngày 1 tháng 2/);
+  });
+
+  it("public shows no lunar date, but still year can chi and hour", () => {
+    const { lunar, ...rest } = chart;
+    void lunar;
+    const { container } = render(<Board chart={rest} variant="public" />);
+    expect(container.textContent).not.toMatch(/Âm lịch/);
+    expect(container.textContent).not.toMatch(/ngày \d+ tháng/);
+    expect(container.textContent).toContain("Năm Giáp Tuất");
+    expect(container.querySelectorAll("a.cell")).toHaveLength(12);
+  });
+});

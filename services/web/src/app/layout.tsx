@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Charm, Ma_Shan_Zheng, Noto_Serif, Noto_Serif_Display } from "next/font/google";
+import { PassBanner } from "@/components/PassBanner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { TabBar } from "@/components/TabBar";
+import { cfg } from "@/lib/config";
 import "@/styles/theme.css";
 
 const charm = Charm({ weight: ["400", "700"], subsets: ["vietnamese", "latin"], variable: "--font-charm", display: "swap" });
@@ -15,7 +18,8 @@ const notoSerifDisplay = Noto_Serif_Display({
 const maShanZheng = Ma_Shan_Zheng({ weight: "400", subsets: ["latin"], variable: "--font-glyph", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Tử vi - Lão Thiên Cơ",
+  metadataBase: new URL(cfg().webOrigin),
+  title: { default: "Tử vi - Lão Thiên Cơ", template: "%s · Tử Vi Đẩu Số" },
   description: "Lá số tử vi và luận giải.",
 };
 
@@ -27,8 +31,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body>
         <SiteHeader />
+        <PassBanner />
         {children}
         <SiteFooter />
+        <TabBar />
       </body>
     </html>
   );

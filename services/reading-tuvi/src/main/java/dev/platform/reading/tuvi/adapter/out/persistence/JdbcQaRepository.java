@@ -482,6 +482,17 @@ public class JdbcQaRepository implements QaRepositoryPort {
             "select exists (select 1 from qa_deleted_reading where id = ?)", Boolean.class, id));
   }
 
+  @Override
+  public int moveGuestReadings(UUID guestId, UUID accountId) {
+    // one statement over the guest rows only: nothing but the subject changes, so the OWED and
+    // status invariants of every moved reading are exactly what they were
+    return jdbc.update(
+        "update qa_reading set subject_kind = 'account', subject_id = ?"
+            + " where subject_kind = 'guest' and subject_id = ?",
+        accountId,
+        guestId);
+  }
+
   // ---------------------------------------------------------------- jobs
 
   @Override

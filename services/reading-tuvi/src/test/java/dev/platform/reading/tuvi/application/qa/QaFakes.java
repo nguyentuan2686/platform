@@ -636,6 +636,37 @@ final class QaFakes {
     final java.util.Set<UUID> tombstones = new java.util.HashSet<>();
 
     @Override
+    public synchronized int moveGuestReadings(UUID guestId, UUID accountId) {
+      int moved = 0;
+      for (QaReading r : List.copyOf(readings.values())) {
+        if (r.subjectKind().equals("guest") && r.subjectId().equals(guestId)) {
+          readings.put(
+              r.id(),
+              new QaReading(
+                  r.id(),
+                  "account",
+                  accountId,
+                  r.kind(),
+                  r.topic(),
+                  r.lang(),
+                  r.chartHash(),
+                  r.status(),
+                  r.refusalReason(),
+                  r.creditSource(),
+                  r.attempts(),
+                  r.nextAttemptAt(),
+                  r.retryUntil(),
+                  r.lastError(),
+                  r.createdAt(),
+                  r.answeredAt(),
+                  r.refundedAt()));
+          moved++;
+        }
+      }
+      return moved;
+    }
+
+    @Override
     public boolean deletedPaid(UUID id) {
       return tombstones.contains(id);
     }

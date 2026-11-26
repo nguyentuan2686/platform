@@ -51,6 +51,32 @@ describe("BirthForm", () => {
     expect((screen.getByLabelText("Nơi sinh") as HTMLSelectElement).value).toBe("Asia/Tokyo");
   });
 
+  it("has the storage consent checkbox linking to the privacy page", () => {
+    render(<BirthForm />);
+    const box = screen.getByRole("checkbox", { name: /Ta được lưu ngày giờ sinh của con \(đã mã hóa\) để lập lá số\./ });
+    expect(box).toHaveProperty("name", "consent");
+    const label = box.closest("div")!;
+    expect(label.textContent).toContain(
+      "Ta được lưu ngày giờ sinh của con (đã mã hóa) để lập lá số. Xem chính sách riêng tư.",
+    );
+    expect(within(label).getByRole("link", { name: "Xem chính sách riêng tư" }).getAttribute("href")).toBe(
+      "/vi/chinh-sach-rieng-tu",
+    );
+  });
+
+  it("shows the consent error as an alert and keeps the box checked after a failed submit", () => {
+    render(
+      <BirthForm
+        initialState={{
+          errors: { consent: "Con cần đồng ý để ta lưu ngày giờ sinh." },
+          values: { date: "", time: "", gender: "", zone: "", consent: "1" },
+        }}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toBe("Con cần đồng ý để ta lưu ngày giờ sinh.");
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
+  });
+
   it("shows the gentle unavailable message", () => {
     render(<BirthForm initialState={{ errors: {}, unavailable: true }} />);
     expect(screen.getByRole("alert").textContent).toContain("cần một lát");

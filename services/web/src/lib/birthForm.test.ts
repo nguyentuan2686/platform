@@ -6,7 +6,7 @@ function form(o: Record<string, string>): FormData {
   for (const [k, v] of Object.entries(o)) fd.set(k, v);
   return fd;
 }
-const ok = { date: "1994-03-12", time: "08:30", gender: "male", zone: "Asia/Ho_Chi_Minh" };
+const ok = { date: "1994-03-12", time: "08:30", gender: "male", zone: "Asia/Ho_Chi_Minh", consent: "1" };
 
 describe("parseBirthForm", () => {
   it("accepts a valid submission and builds the upstream birth string", () => {
@@ -23,7 +23,7 @@ describe("parseBirthForm", () => {
   });
 
   it("defaults the zone to Việt Nam", () => {
-    const r = parseBirthForm(form({ date: ok.date, time: ok.time, gender: "female" }));
+    const r = parseBirthForm(form({ date: ok.date, time: ok.time, gender: "female", consent: "on" }));
     expect(r.ok && r.birth.zone).toBe("Asia/Ho_Chi_Minh");
   });
 
@@ -49,5 +49,11 @@ describe("parseBirthForm", () => {
       expect(r.errors.gender).toBeTruthy();
       expect(r.errors.zone).toBeTruthy();
     }
+  });
+
+  it("requires the storage consent", () => {
+    const r = parseBirthForm(form({ date: ok.date, time: ok.time, gender: ok.gender, zone: ok.zone }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.consent).toBe("Con cần đồng ý để ta lưu ngày giờ sinh.");
   });
 });

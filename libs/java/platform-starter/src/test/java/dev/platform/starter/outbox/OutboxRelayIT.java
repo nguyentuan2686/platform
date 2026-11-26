@@ -23,15 +23,21 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,16 +65,19 @@ import tools.jackson.databind.json.JsonMapper;
     properties = {
       // The scheduled relay must not race the explicit publishPending() calls in these tests.
       "platform.outbox.poll-interval=1h",
-      "platform.outbox.send-timeout=2s",
-      // Metadata waits include topic auto-creation on the first send; delivery is bounded below.
+      // Not tight: a send the broker acks after the client gave up is re-sent by the next cycle,
+      // a duplicate the exact-count assertions below would read as a relay bug. 8 s of ack latency
+      // does not happen even on a loaded 2-core runner; broker_down pays the timeout once.
+      "platform.outbox.send-timeout=8s",
       "spring.kafka.producer.properties.max.block.ms=10000",
-      "spring.kafka.producer.properties.request.timeout.ms=1000",
-      "spring.kafka.producer.properties.delivery.timeout.ms=2000"
+      "spring.kafka.producer.properties.request.timeout.ms=3000",
+      "spring.kafka.producer.properties.delivery.timeout.ms=8000"
     })
 class OutboxRelayIT {
 
   static final String TRACE_ID = "0af7651916cd43dd8448eb211c80319c";
   static final String SPAN_ID = "b7ad6b7169203331";
+  static final Duration PUBLISH_DEADLINE = Duration.ofSeconds(50);
 
   // Shared by all test methods (weak dev machine): started once, removed by Ryuk at JVM exit.
   static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:17-alpine");
@@ -114,7 +123,7 @@ class OutboxRelayIT {
   }
 
   @Test
-  void publishes_envelope_with_headers() {
+  void publishes_envelope_with_headers() throws InterruptedException {
     String topic = topic();
     Instant occurredAt = Instant.parse("2026-11-23T10:15:30.123456Z");
     OutboxEvent event = event(topic, occurredAt);
@@ -135,7 +144,7 @@ class OutboxRelayIT {
     SpanContext[] afterSend = new SpanContext[1];
     relay.beforeMark = () -> afterSend[0] = Span.current().getSpanContext();
     try {
-      assertThat(relay.publishPending()).isEqualTo(1);
+      assertThat(publishAll(relay)).isEqualTo(1);
     } finally {
       relay.beforeMark = () -> {};
     }
@@ -143,7 +152,7 @@ class OutboxRelayIT {
     assertThat(afterSend[0].isSampled()).isFalse();
     assertThat(afterSend[0].getTraceId()).isNotEqualTo(TRACE_ID);
 
-    List<ConsumerRecord<String, String>> records = consume(topic, 1);
+    List<ConsumerRecord<String, String>> records = consume(topic);
     assertThat(records).hasSize(1);
     ConsumerRecord<String, String> record = records.get(0);
     assertThat(record.key()).isEqualTo("order-1");
@@ -161,18 +170,18 @@ class OutboxRelayIT {
   }
 
   @Test
-  void does_not_republish_published_rows() {
+  void does_not_republish_published_rows() throws InterruptedException {
     String topic = topic();
     OutboxEvent event = event(topic, Instant.now());
     tx.executeWithoutResult(status -> writer.append(event));
-    assertThat(relay.publishPending()).isEqualTo(1);
+    assertThat(publishAll(relay)).isEqualTo(1);
 
     assertThat(relay.publishPending()).isZero();
-    assertThat(consume(topic, 2)).hasSize(1);
+    assertThat(consume(topic)).hasSize(1);
   }
 
   @Test
-  void crash_before_mark_resends_same_event_id() {
+  void crash_before_mark_resends_same_event_id() throws InterruptedException {
     String topic = topic();
     OutboxEvent event = event(topic, Instant.now());
     tx.executeWithoutResult(status -> writer.append(event));
@@ -192,15 +201,26 @@ class OutboxRelayIT {
           }
         };
     try {
-      assertThatThrownBy(relay::publishPending).isInstanceOf(IllegalStateException.class);
+      // The crash fires only after a successful send; a send that times out on a loaded machine
+      // publishes 0 without reaching it, so cycle until the crash happened (deadline-bound).
+      long deadline = System.nanoTime() + PUBLISH_DEADLINE.toNanos();
+      while (!crashed[0] && System.nanoTime() < deadline) {
+        try {
+          assertThat(relay.publishPending()).isZero();
+          Thread.sleep(200);
+        } catch (IllegalStateException expected) {
+          assertThat(expected).hasMessageContaining("simulated crash");
+        }
+      }
+      assertThat(crashed[0]).isTrue();
       assertThat(publishedAt(event.eventId())).isNull();
 
-      assertThat(relay.publishPending()).isEqualTo(1);
+      assertThat(publishAll(relay)).isEqualTo(1);
     } finally {
       relay.beforeMark = () -> {};
     }
 
-    List<ConsumerRecord<String, String>> records = consume(topic, 2);
+    List<ConsumerRecord<String, String>> records = consume(topic);
     assertThat(records).hasSize(2);
     assertThat(records)
         .extracting(r -> header(r, "event_id"))
@@ -230,19 +250,7 @@ class OutboxRelayIT {
             pool.submit(
                 () -> {
                   start.await();
-                  // A send that fails on a loaded machine (fresh topic, 2 s timeouts) publishes 0
-                  // and
-                  // must not end the loop: keep going until nothing is pending or the deadline.
-                  long deadline = System.nanoTime() + Duration.ofSeconds(50).toNanos();
-                  int total = 0;
-                  while (pendingRows() > 0 && System.nanoTime() < deadline) {
-                    int n = r.publishPending();
-                    total += n;
-                    if (n == 0) {
-                      Thread.sleep(200);
-                    }
-                  }
-                  return total;
+                  return publishAll(r);
                 }));
       }
       start.countDown();
@@ -257,7 +265,7 @@ class OutboxRelayIT {
       relayB.close();
     }
 
-    List<ConsumerRecord<String, String>> records = consume(topic, 201);
+    List<ConsumerRecord<String, String>> records = consume(topic);
     assertThat(records).hasSize(200);
     Set<String> ids = records.stream().map(r -> header(r, "event_id")).collect(Collectors.toSet());
     assertThat(ids).hasSize(200);
@@ -268,12 +276,12 @@ class OutboxRelayIT {
   }
 
   @Test
-  void broker_down_keeps_rows_and_does_not_throw() {
+  void broker_down_keeps_rows_and_does_not_throw() throws InterruptedException {
     String topic = topic();
     // Warm up the producer (metadata for the topic) so the failure is a real delivery timeout.
     OutboxEvent warmup = event(topic, Instant.now());
     tx.executeWithoutResult(status -> writer.append(warmup));
-    assertThat(relay.publishPending()).isEqualTo(1);
+    assertThat(publishAll(relay)).isEqualTo(1);
 
     OutboxEvent event = event(topic, Instant.now());
     tx.executeWithoutResult(status -> writer.append(event));
@@ -294,9 +302,11 @@ class OutboxRelayIT {
       docker.unpauseContainerCmd(REDPANDA.getContainerId()).exec();
     }
 
-    assertThat(relay.publishPending()).isEqualTo(1);
+    // The producer reconnects (backoff, metadata refresh, a new idempotence epoch after the expired
+    // batch) on its own schedule: the end state is "published", not "the next cycle sent it".
+    assertThat(publishAll(relay)).isEqualTo(1);
     assertThat(publishedAt(event.eventId())).isNotNull();
-    assertThat(consume(topic, 2))
+    assertThat(consume(topic))
         .extracting(r -> header(r, "event_id"))
         .contains(event.eventId().toString());
   }
@@ -315,8 +325,58 @@ class OutboxRelayIT {
     return new OutboxEvent(UUID.randomUUID(), "OrderPlaced", topic, "order-1", occurredAt, data);
   }
 
+  /**
+   * A fresh topic, created up front (1 partition) and waited on until it has a leader, so no test
+   * pays for broker-side auto-creation inside a send timeout.
+   */
   private static String topic() {
-    return "outbox-it-" + UUID.randomUUID();
+    String name = "outbox-it-" + UUID.randomUUID();
+    try (Admin admin =
+        Admin.create(
+            Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, REDPANDA.getBootstrapServers()))) {
+      admin.createTopics(List.of(new NewTopic(name, 1, (short) 1))).all().get(30, TimeUnit.SECONDS);
+      long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+      while (true) {
+        try {
+          TopicDescription d =
+              admin
+                  .describeTopics(List.of(name))
+                  .allTopicNames()
+                  .get(5, TimeUnit.SECONDS)
+                  .get(name);
+          if (d.partitions().stream().allMatch(p -> p.leader() != null && !p.leader().isEmpty())) {
+            return name;
+          }
+        } catch (ExecutionException notYetVisible) {
+          // UnknownTopicOrPartition while the creation propagates: look again below.
+        }
+        if (System.nanoTime() > deadline) {
+          throw new IllegalStateException("topic " + name + " has no leader after 30 s");
+        }
+        Thread.sleep(100);
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("could not create topic " + name, e);
+    }
+  }
+
+  /**
+   * Runs relay cycles until no unpublished row remains (the observable end state) or {@link
+   * #PUBLISH_DEADLINE}; returns the rows this relay marked published. A cycle whose first send
+   * fails (fresh producer id, reconnect after a pause, a loaded machine) publishes 0 and is simply
+   * followed by another one, as the scheduler would do.
+   */
+  private int publishAll(OutboxRelay r) throws InterruptedException {
+    long deadline = System.nanoTime() + PUBLISH_DEADLINE.toNanos();
+    int total = 0;
+    while (pendingRows() > 0 && System.nanoTime() < deadline) {
+      int n = r.publishPending();
+      total += n;
+      if (n == 0) {
+        Thread.sleep(200);
+      }
+    }
+    return total;
   }
 
   private int pendingRows() {
@@ -335,33 +395,36 @@ class OutboxRelayIT {
   }
 
   /**
-   * Reads the topic from the beginning until {@code max} records arrived or no new record came for
-   * a short quiet period (so duplicates beyond the expected count would be seen).
+   * Reads the whole topic: every record up to the partition's end offset at call time. Callers
+   * consume only after the relay marked the rows published (the broker acked them), so the end
+   * offset already covers every send, duplicates included. The partition is assigned directly (no
+   * consumer group, so no join or rebalance to wait for) and the loop ends on the position reaching
+   * that end offset, with a deadline.
    */
-  private static List<ConsumerRecord<String, String>> consume(String topic, int max) {
+  private static List<ConsumerRecord<String, String>> consume(String topic) {
     Map<String, Object> config =
         Map.of(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
             REDPANDA.getBootstrapServers(),
-            ConsumerConfig.GROUP_ID_CONFIG,
-            "it-" + UUID.randomUUID(),
-            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,
-            "earliest",
+            ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
+            false,
             ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
             StringDeserializer.class,
             ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
             StringDeserializer.class);
     List<ConsumerRecord<String, String>> records = new ArrayList<>();
+    TopicPartition partition = new TopicPartition(topic, 0);
     try (var consumer = new KafkaConsumer<String, String>(config)) {
-      consumer.subscribe(List.of(topic));
-      long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
-      long quietUntil = Long.MAX_VALUE;
-      while (records.size() < max && System.nanoTime() < Math.min(deadline, quietUntil)) {
-        int before = records.size();
-        consumer.poll(Duration.ofMillis(250)).forEach(records::add);
-        if (records.size() > before || (quietUntil == Long.MAX_VALUE && !records.isEmpty())) {
-          quietUntil = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+      consumer.assign(List.of(partition));
+      consumer.seekToBeginning(List.of(partition));
+      long end = consumer.endOffsets(List.of(partition), Duration.ofSeconds(30)).get(partition);
+      long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+      while (consumer.position(partition, Duration.ofSeconds(30)) < end) {
+        if (System.nanoTime() > deadline) {
+          throw new IllegalStateException(
+              "read " + records.size() + " of " + end + " records from " + topic + " in 30 s");
         }
+        consumer.poll(Duration.ofMillis(250)).forEach(records::add);
       }
     }
     return records;

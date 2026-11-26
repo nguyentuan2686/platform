@@ -8,6 +8,7 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 - Trunk-based: short branch -> PR -> CI green -> Claude squash-merges. No human review required when CI is green.
 - Any failure (CI, unexpected test fail, prod bug, failed deploy) triggers a retro: write a lesson (see Lessons loop).
 - Never claim "done" without running the verification command and reading its output.
+- Before each commit read `git diff --stat`: no deletions or files outside the task's scope. Never call a failure "pre-existing" without reproducing it on the base commit.
 - CI triage: read the failing log first. HTTP 429/5xx or "could not transfer artifact" from a package registry, or a `next/font` download error, is an external flake: `gh run rerun --failed` and record a lesson, no code change.
 
 ## Repo map
@@ -32,6 +33,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Constructor injection only; no `@Autowired` on fields.
 - Records for DTOs and value objects.
 - HTTP errors via RFC 9457 Problem Details; never stack traces or exception class names in responses.
+- Never an empty or log-less catch (Java and web): a catch rethrows, maps an expected upstream status, or hands the error to a shared handler that logs or rethrows (web: `degradeOrThrow` / `logRefusalOrThrow` in `lib/degrade.ts`, `upstreamFailure`). A deliberate swallow (browser code, parsing untrusted input) carries a `catch-ok: <reason>` comment. Web hard check: `src/catchPolicy.test.ts` + ESLint `no-empty`.
 - Coverage gate: >= 80% line coverage for `domain` and `application`.
 - Database per service; schema changes via Flyway migrations.
 
@@ -43,7 +45,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`.
 - Event evolution rule: additive changes (new optional `data` fields) stay in v1, so event schemas leave `data` open and consumers ignore unknown fields; breaking changes (remove/rename/retype a field, change meaning) go to a new topic `<name>.v2` with its own schema, published alongside v1 until consumers migrate.
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
-- Dev machine is weak (2 cores / 12GB): local stack <= ~3GB; heavy verification runs in CI.
+- Dev machine is weak (2 cores / 12GB): local stack <= ~3GB (full `--profile app` is ~2.75GB; identity-svc and payment-svc need `mem_limit: 512m`, the JVM off-heap alone is ~170MiB); heavy verification runs in CI.
 
 ## Rust conventions
 See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all cargo via `scripts/cargo.sh` (Docker). Toolchain pinned in `rust-toolchain.toml`.
@@ -58,8 +60,8 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `scripts/smoke-reading.sh http://localhost:8083` - basic reading (17 sections, last `disclaimer`) + today (4 areas) via reading-tuvi -> chart-svc
 - `scripts/smoke-qa.sh` - paid/free tử vi Q&A end to end on the fake provider (needs `postgres redpanda mailpit chart-svc identity-svc reading-tuvi`; bring up with `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build --no-deps <those>`; each run uses a fresh birth time because the free quota is per chart)
 - `scripts/smoke-identity-payment.sh [IDENTITY_URL] [PAYMENT_URL] [MAILPIT_URL]` - guest -> magic link (read from Mailpit) -> login -> CREDIT_5 order -> simulated SePay transfer (`scripts/sepay-simulate.sh`) -> credits 6, duplicate delivery changes nothing; low-memory subset: `docker compose -f deploy/local/docker-compose.yml --profile app up -d postgres redpanda mailpit identity-svc payment-svc`
-- `scripts/smoke-web.sh http://localhost:3001` - web: /health/ready 200 and /vi contains "Lão Thiên Cơ"; web e2e (Playwright + stub upstream): `npm run e2e` in services/web (CI job `e2e`)
-- `docker run --rm -v "$PWD/services/web:/app" -w /app node:22-alpine sh -c "npm ci && npm run lint && npm run typecheck && npm test && npm run build"` - web (Next.js) gates; no native Node. Local: web on http://localhost:3001 (`--profile app`)
+- `scripts/smoke-web.sh http://localhost:3001` - web: /health/ready 200, /vi contains "Lão Thiên Cơ", /vi/kien-thuc and /robots.txt 200, prints `OK`; web e2e (Playwright + stub upstreams, in CI job `e2e`): `npm run e2e` in services/web. Full-stack e2e (local only, never CI; real stack, Mailpit magic link, fake LLM, dev payment simulator): bring up `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build --no-deps postgres redpanda mailpit chart-svc reading-tuvi identity-svc payment-svc web`, then `docker run --rm --network host -v "$PWD/services/web:/w" -w /w mcr.microsoft.com/playwright:v1.65.1-noble sh -c "npm ci && npx playwright test -c playwright.stack.config.ts"`, then `down -v`. Web env and prod rules: `docs/runbooks/web.md`
+- `docker run --rm -v "$PWD/services/web:/app" -v "$PWD/knowledge/tuvi:/knowledge/tuvi:ro" -e KNOWLEDGE_DIR=/knowledge/tuvi -w /app node:22-alpine sh -c "npm ci && npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundle"` - web (Next.js) gates; no native Node. Local: web on http://localhost:3001 (`--profile app`)
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
 
 ## Testing

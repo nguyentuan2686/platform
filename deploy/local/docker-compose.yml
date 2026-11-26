@@ -201,7 +201,8 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "127.0.0.1:${IDENTITY_SVC_PORT:-8084}:8084"
-    mem_limit: 384m
+    # 512m: ~360 MiB RSS at 384m was off-heap (metaspace, OTel agent, threads), ~20 MiB from the OOM killer.
+    mem_limit: 512m
 
   payment-svc:
     profiles: ["app"]
@@ -236,23 +237,48 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "127.0.0.1:${PAYMENT_SVC_PORT:-8085}:8085"
-    mem_limit: 384m
+    mem_limit: 512m # as identity-svc: off-heap growth, not heap
 
   web:
     profiles: ["app"]
     build:
       context: ../..
       dockerfile: services/web/Dockerfile
+      args:
+        # Baked into the static pages (canonical URLs, sitemap). Set to the public domain when deploying.
+        WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
     image: web:local
     depends_on:
       chart-svc:
         condition: service_started
       reading-tuvi:
         condition: service_started
+      identity-svc:
+        condition: service_started
+      payment-svc:
+        condition: service_started
     environment:
       PORT: "3000"
       CHART_SVC_URL: http://chart-svc:8082
       READING_URL: http://reading-tuvi:8083
+      IDENTITY_SVC_URL: http://identity-svc:8084
+      PAYMENT_SVC_URL: http://payment-svc:8085
+      # Test value only; server-side, never sent to the browser.
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-local-test-internal-token}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
+      COOKIE_SECURE: "0"
+      # Google button stays hidden locally (identity-svc has no client id either).
+      GOOGLE_LOGIN: "0"
+      QA_STREAM_TIMEOUT_MS: ${QA_STREAM_TIMEOUT_MS:-95000}
+      # Admin page ("chưa khớp"): only for the account ids listed here; the token stays server-side.
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-local-test-admin-token}
+      ADMIN_ACCOUNT_IDS: ${ADMIN_ACCOUNT_IDS:-}
+      # Dev-only "giả lập chuyển khoản": posts a SePay webhook with the same secret as payment-svc.
+      # DEPLOY_ENV=prod force-disables it.
+      DEV_PAYMENT_SIMULATOR: "1"
+      DEPLOY_ENV: local
+      SEPAY_WEBHOOK_AUTH: ${SEPAY_WEBHOOK_AUTH:-apikey}
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-local-test-sepay-secret}
     ports:
       # Host 3000 is taken by Grafana (lgtm), so web defaults to 3001.
       - "127.0.0.1:${WEB_PORT:-3001}:3000"
