@@ -38,9 +38,20 @@ use super::idempotency::{process_once, Outcome};
 use super::metrics::{ConsumerMetrics, ProcessOutcome};
 use super::{Envelope, EventHandler, MalformedEvent};
 
-/// Default upper bound for the retry backoff.
+/// Default upper bound for the processing retry backoff (a receive error uses the short `RECV_ERROR_PAUSE`).
 pub const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(30);
 const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+/// Pause after a receive error (broker down, transport failure). librdkafka reconnects on its own, paced by
+/// `reconnect.backoff.ms`..`reconnect.backoff.max.ms`, and queues one error event per failed attempt; `recv()` blocks
+/// until the next event, so a persistent outage is already paced. An app-level exponential backoff here would drain
+/// a burst of stale queued errors at one per backoff period (minutes at 30s) after the broker is back. This pause
+/// only guards against a hot loop.
+const RECV_ERROR_PAUSE: Duration = Duration::from_millis(200);
+// Compile-time guard: a burst of stale errors queued during an outage must drain in seconds once the broker is back,
+// so the pause stays short and below the processing backoff (it must never become the 1s..30s processing backoff).
+const _: () = assert!(
+    RECV_ERROR_PAUSE.as_millis() > 0 && RECV_ERROR_PAUSE.as_millis() < INITIAL_BACKOFF.as_millis()
+);
 
 #[derive(Debug, Clone)]
 pub struct ConsumerConfig {
@@ -49,7 +60,7 @@ pub struct ConsumerConfig {
     pub topic: String,
     /// Stable name of this consumer; part of the idempotency key `(consumer, event_id)`.
     pub consumer_name: &'static str,
-    /// Retry backoff starts at 1s and doubles up to this value.
+    /// Processing retry backoff starts at 1s and doubles up to this value (not used for receive errors).
     pub max_backoff: Duration,
 }
 
@@ -116,7 +127,6 @@ pub async fn run_consumer(
         finished: Mutex::default(),
         metrics: ConsumerMetrics::global(),
     };
-    let mut recv_backoff = INITIAL_BACKOFF.min(cfg.max_backoff);
     loop {
         // The borrowed message is detached immediately: it is not `Send` and must not live across
         // an await point of this (spawned) future.
@@ -127,7 +137,6 @@ pub async fn run_consumer(
         };
         match received {
             Ok(msg) => {
-                recv_backoff = INITIAL_BACKOFF.min(cfg.max_backoff);
                 let span = consumer_span(&msg);
                 if runner.process(&msg).instrument(span).await == Flow::Stop {
                     break;
@@ -138,13 +147,12 @@ pub async fn run_consumer(
                     error = %e,
                     error_type = "KafkaReceiveFailed",
                     topic = %cfg.topic,
-                    backoff_ms = duration_ms(recv_backoff),
+                    backoff_ms = duration_ms(RECV_ERROR_PAUSE),
                     "kafka receive failed, retrying"
                 );
-                if !sleep_or_cancelled(recv_backoff, &shutdown).await {
+                if !sleep_or_cancelled(RECV_ERROR_PAUSE, &shutdown).await {
                     break;
                 }
-                recv_backoff = (recv_backoff * 2).min(cfg.max_backoff);
             }
         }
     }

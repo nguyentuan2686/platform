@@ -26,3 +26,12 @@ backoff when choosing a deadline.
 
 ## Escalation
 none (first occurrence)
+
+## Update (run 45861392787): the deadline was not the real cause
+With a 60s deadline, smoke-flow still failed. notify-svc logged `BrokerTransportFailure` every 30s for minutes
+after Redpanda was up. librdkafka queues one error event per failed reconnect attempt during the outage. The
+platform-core consumer backed off exponentially (to 30s) after each receive error, so it drained that backlog at
+one stale error per 30s and consumed nothing in the meantime. The real fix is in `platform-core`: a receive error
+now pauses a fixed 200 ms (`RECV_ERROR_PAUSE`, compile-time bounded below the 1s processing backoff). librdkafka
+already paces reconnects itself (`reconnect.backoff.max.ms`). The exponential backoff stays for processing retries
+only. Escalation: none. This is a bug fix, and the e2e smoke-flow is the regression check.
