@@ -4,7 +4,8 @@ import { cfg } from "@/lib/config";
 import { bindLoginToSession, rememberNext, setOidcState } from "@/lib/loginCookies";
 import { assertSameOrigin, forbidden, ForbiddenOrigin } from "@/lib/sameOrigin";
 import { loginGuest, readSessionToken } from "@/lib/session";
-import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
 
@@ -35,15 +36,19 @@ export async function POST(req: Request): Promise<Response> {
     const guest = await loginGuest({ create: true });
     const auth = await googleAuthorization(googleRedirectUri(), guest?.token);
     url = new URL(auth.authorization_url);
-    if (url.protocol !== "https:") return seeOther(GOOGLE_ERROR_PATH);
+    if (url.protocol !== "https:") {
+      log("error", "google authorization url refused", { upstream: "identity-svc", reason: "not_https" });
+      return seeOther(GOOGLE_ERROR_PATH);
+    }
     await setOidcState(auth.state);
     session = guest?.token ?? (await readSessionToken());
   } catch (e) {
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem || e instanceof UpstreamValidation) {
+    if (e instanceof TypeError && /URL/i.test(e.message)) {
+      log("error", "google authorization url refused", { upstream: "identity-svc", reason: "unparsable" });
       return seeOther(GOOGLE_ERROR_PATH);
     }
-    if (e instanceof TypeError && /URL/i.test(e.message)) return seeOther(GOOGLE_ERROR_PATH);
-    throw e;
+    logRefusalOrThrow(e, "google-start"); // down: logged by http.ts; any refusal: logged here
+    return seeOther(GOOGLE_ERROR_PATH);
   }
   if (session) await bindLoginToSession(session);
   await rememberNext(next);

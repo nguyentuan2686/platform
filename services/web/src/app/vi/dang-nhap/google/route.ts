@@ -5,7 +5,8 @@ import { GOOGLE_ERROR_PATH, notFound, seeOther } from "@/lib/googleLogin";
 import { completeLogin } from "@/lib/login";
 import { takeLoginBinding, takeNext, takeOidcState } from "@/lib/loginCookies";
 import { loginGuest, readSessionToken } from "@/lib/session";
-import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { UpstreamProblem } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
 
@@ -38,10 +39,10 @@ export async function GET(req: Request): Promise<Response> {
     const login = await googleCallback(code, state, bound ? guest?.token : undefined);
     await completeLogin(login, bound ? guest : null);
   } catch (e) {
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem || e instanceof UpstreamValidation) {
-      return seeOther(GOOGLE_ERROR_PATH);
-    }
-    throw e;
+    // A 401 is a stale or replayed code/state (the user reloaded the callback): expected.
+    if (e instanceof UpstreamProblem && e.status === 401) return seeOther(GOOGLE_ERROR_PATH);
+    logRefusalOrThrow(e, "google-callback");
+    return seeOther(GOOGLE_ERROR_PATH);
   }
   return seeOther(await takeNext());
 }

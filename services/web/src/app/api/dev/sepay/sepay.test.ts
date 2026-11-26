@@ -31,6 +31,7 @@ const order = (status = "PENDING") => ({
 type Call = { url: string; method: string; headers: Headers; raw?: string };
 let calls: Call[];
 let orderRes: () => Response;
+let hookRes: () => Response;
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -47,6 +48,7 @@ let out: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   calls = [];
   orderRes = () => json(200, order());
+  hookRes = () => json(200, { success: true });
   process.env.DEV_PAYMENT_SIMULATOR = "1";
   process.env.DEPLOY_ENV = "local";
   process.env.SEPAY_WEBHOOK_SECRET = "local-test-sepay-secret";
@@ -56,7 +58,7 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init: RequestInit) => {
       calls.push({ url, method: String(init.method), headers: new Headers(init.headers), raw: init.body ? String(init.body) : undefined });
-      return url.endsWith("/webhooks/sepay") ? json(200, { success: true }) : orderRes();
+      return url.endsWith("/webhooks/sepay") ? hookRes() : orderRes();
     }),
   );
   out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
@@ -128,6 +130,17 @@ describe("POST /api/dev/sepay", () => {
     expect(hook.headers.get("authorization")).toBe("Apikey local-test-sepay-secret");
     const body = JSON.parse(hook.raw ?? "{}");
     expect(body).toMatchObject({ content: "TV7K3M9P CHUYEN KHOAN", transferType: "in", transferAmount: 29000 });
+  });
+
+  it("logs a webhook refusal (secret differs from payment-svc) and answers 503", async () => {
+    hookRes = () => json(401, { status: 401 });
+    const res = await POST(req());
+    expect(res.status).toBe(503);
+    const lines = out.mock.calls.map((c: unknown[]) => JSON.parse(String(c[0])));
+    expect(lines).toEqual([expect.objectContaining({ level: "error", upstream: "payment-svc", status: "401", part: "dev-sepay" })]);
+    const raw = JSON.stringify(lines);
+    expect(raw).not.toContain("local-test-sepay-secret");
+    expect(raw).not.toContain("TV7K3M9P");
   });
 
   it("never logs the transfer content or the secret", async () => {

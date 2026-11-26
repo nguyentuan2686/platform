@@ -6,7 +6,8 @@ import { cfg } from "@/lib/config";
 import { assignUnmatched, completeRefundRequest, resolveUnmatched, type Resolution } from "@/lib/payment";
 import { unmatchedReasonLabel } from "@/lib/products";
 import { getViewer } from "@/lib/session";
-import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { UpstreamProblem } from "@/lib/upstream";
 
 /** Never carries the admin token or upstream detail: labels only. */
 export type AdminState = { ok: string; error?: never } | { error: string; ok?: never } | null;
@@ -25,13 +26,12 @@ function txId(fd: FormData): number | null {
   return typeof raw === "string" && /^[1-9]\d{0,17}$/.test(raw) ? Number(raw) : null;
 }
 
-function upstreamMessage(e: unknown): AdminState {
-  if (e instanceof UpstreamProblem && e.status === 401) return { error: "payment-svc từ chối admin token." };
+/** 404 (an id the operator typed) is expected; anything else is logged (never the token), then shown. */
+function upstreamMessage(e: unknown, part: string): AdminState {
   if (e instanceof UpstreamProblem && e.status === 404) return { error: "Không thấy giao dịch" };
-  if (e instanceof UpstreamError || e instanceof UpstreamProblem || e instanceof UpstreamValidation) {
-    return { error: "payment-svc chưa trả lời, thử lại sau." };
-  }
-  throw e;
+  logRefusalOrThrow(e, part);
+  if (e instanceof UpstreamProblem && e.status === 401) return { error: "payment-svc từ chối admin token." };
+  return { error: "payment-svc chưa trả lời, thử lại sau." };
 }
 
 /** "Gán đơn": pays a PENDING order with an unmatched transfer. */
@@ -47,7 +47,7 @@ export async function assignAction(_prev: AdminState, fd: FormData): Promise<Adm
   } catch (e) {
     if (e instanceof UpstreamProblem && e.status === 404) return { error: "Không thấy đơn" };
     if (e instanceof UpstreamProblem && e.status === 409) return { error: unmatchedReasonLabel(e.reason) };
-    return upstreamMessage(e);
+    return upstreamMessage(e, "admin-assign");
   }
   revalidatePath(PAGE);
   return { ok: `Đã gán giao dịch #${id} cho đơn ${code}.` };
@@ -65,7 +65,7 @@ export async function resolveAction(_prev: AdminState, fd: FormData): Promise<Ad
   try {
     await resolveUnmatched(id, resolution as Resolution, note);
   } catch (e) {
-    return upstreamMessage(e);
+    return upstreamMessage(e, "admin-resolve");
   }
   revalidatePath(PAGE);
   return { ok: `Đã đóng giao dịch #${id}.` };
@@ -79,7 +79,7 @@ export async function completeRefundAction(_prev: AdminState, fd: FormData): Pro
   try {
     await completeRefundRequest(id);
   } catch (e) {
-    return upstreamMessage(e);
+    return upstreamMessage(e, "admin-refund-complete");
   }
   revalidatePath(PAGE);
   return { ok: "Đã ghi nhận chuyển trả." };

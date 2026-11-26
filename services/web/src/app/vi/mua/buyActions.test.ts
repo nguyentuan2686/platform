@@ -12,7 +12,7 @@ vi.mock("@/lib/session", () => ({ getViewer: () => m.getViewer() }));
 vi.mock("@/lib/payment", () => ({ createOrder: (a: string, p: string) => m.createOrder(a, p) }));
 
 import { buyAction } from "@/app/vi/mua/actions";
-import { UpstreamError } from "@/lib/http";
+import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/http";
 import * as paymentCache from "@/lib/paymentCache";
 
 const ACC = "11111111-1111-1111-1111-111111111111";
@@ -93,5 +93,43 @@ describe("buyAction", () => {
   it("rethrows a bug", async () => {
     m.createOrder.mockRejectedValue(new TypeError("boom"));
     await expect(buyAction(null, form({ product: "CREDIT_5", adult: "1" }))).rejects.toThrow("boom");
+  });
+});
+
+describe("buyAction logging", () => {
+  const logged = (w: { mock: { calls: unknown[][] } }) => w.mock.calls.map((c) => JSON.parse(String(c[0])));
+
+  it.each([
+    ["401 (wrong internal token)", new UpstreamProblem(401, undefined, "payment-svc"), "401"],
+    ["403", new UpstreamProblem(403, undefined, "payment-svc"), "403"],
+    ["400 (contract mismatch)", new UpstreamValidation({ adult_confirmed: "required" }, "payment-svc"), "400"],
+  ])("logs an unexpected %s with upstream/status only, then shows the retry message", async (_n, err, status) => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.createOrder.mockRejectedValue(err);
+    expect(await buyAction(null, form({ product: "CREDIT_5", adult: "1" }))).toEqual({
+      error: "Kênh chuyển khoản chưa sẵn sàng, con thử lại sau.",
+    });
+    const lines = logged(write);
+    write.mockRestore();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: "error", upstream: "payment-svc", status, part: "buy" });
+    expect(JSON.stringify(lines)).not.toMatch(/acc-token|Bearer|@/);
+  });
+
+  it("does not log again what http.ts already logged (down, 5xx)", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.createOrder.mockRejectedValue(new UpstreamError());
+    await buyAction(null, form({ product: "CREDIT_5", adult: "1" }));
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("logs an order that came back without VietQR instructions (id only)", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.createOrder.mockResolvedValue({ order_id: ORD, payment: { kind: "PAYPAL", approve_url: "https://x" } });
+    expect((await buyAction(null, form({ product: "CREDIT_5", adult: "1" })))?.error).toBeTruthy();
+    const lines = logged(write);
+    write.mockRestore();
+    expect(lines).toEqual([expect.objectContaining({ level: "error", message: "order without VietQR payment", order_id: ORD })]);
   });
 });

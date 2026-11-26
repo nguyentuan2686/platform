@@ -14,7 +14,7 @@ vi.mock("@/lib/session", () => ({ getViewer: () => m.getViewer() }));
 vi.mock("@/lib/payment", () => ({ requestRefund: (o: string, a: string) => m.requestRefund(o, a) }));
 
 import { refundAction } from "@/app/vi/tai-khoan/giao-dich/actions";
-import { UpstreamError, UpstreamProblem } from "@/lib/http";
+import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/http";
 
 const ACC = "11111111-1111-1111-1111-111111111111";
 const ORD = "22222222-2222-2222-2222-222222222222";
@@ -67,5 +67,32 @@ describe("refundAction", () => {
   it("rejects a malformed order id without calling payment-svc", async () => {
     expect((await refundAction(null, form("../x")))?.error).toBe("Không thấy đơn này.");
     expect(m.requestRefund).not.toHaveBeenCalled();
+  });
+});
+
+describe("refundAction logging", () => {
+  const logged = (w: { mock: { calls: unknown[][] } }) => w.mock.calls.map((c) => JSON.parse(String(c[0])));
+
+  it("does not log the refusals the page explains (known 409s, 404)", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.requestRefund.mockRejectedValue(new UpstreamProblem(409, "credits_used", "payment-svc"));
+    await refundAction(null, form(ORD));
+    m.requestRefund.mockRejectedValue(new UpstreamProblem(404, undefined, "payment-svc"));
+    await refundAction(null, form(ORD));
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it.each([
+    [new UpstreamProblem(403, undefined, "payment-svc"), "403"],
+    [new UpstreamProblem(409, "something_new", "payment-svc"), "409"],
+    [new UpstreamValidation({ account_id: "invalid" }, "payment-svc"), "400"],
+  ])("logs an unexpected refusal (%s) and asks to retry", async (err, status) => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.requestRefund.mockRejectedValue(err);
+    expect((await refundAction(null, form(ORD)))?.error).toBe("Ta chưa ghi nhận được, con thử lại sau.");
+    const lines = logged(write);
+    write.mockRestore();
+    expect(lines).toEqual([expect.objectContaining({ level: "error", upstream: "payment-svc", status, part: "refund" })]);
   });
 });

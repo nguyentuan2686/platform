@@ -9,9 +9,12 @@ export class UpstreamError extends Error {
     this.name = "UpstreamError";
   }
 }
-/** Upstream answered 400; `fields` maps the upstream field name to its first message. */
+/** Upstream answered 400; `fields` maps the upstream field name to its first message; `upstream` names the service (for logs). */
 export class UpstreamValidation extends Error {
-  constructor(readonly fields: Record<string, string>) {
+  constructor(
+    readonly fields: Record<string, string>,
+    readonly upstream?: string,
+  ) {
     super("validation");
     this.name = "UpstreamValidation";
   }
@@ -84,7 +87,7 @@ export async function errorFor(svc: Svc, res: Response): Promise<Error> {
     } catch {
       /* unreadable body: no field detail */
     }
-    return new UpstreamValidation(fields);
+    return new UpstreamValidation(fields, SVC_NAME[svc]);
   }
   if (res.status === 401 || res.status === 403 || res.status === 404 || res.status === 409) {
     let reason: string | undefined;

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { logout, me, requestMagicLink, verifyMagicLink } from "@/lib/identity";
+import { logRefusalOrThrow } from "@/lib/degrade";
 import { completeLogin } from "@/lib/login";
 import {
   bindLoginToSession,
@@ -12,7 +13,7 @@ import {
   takePendingLogin,
 } from "@/lib/loginCookies";
 import { loginGuest, readSessionToken, setSessionCookie } from "@/lib/session";
-import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
+import { UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
 
 export type LoginState = { sent: true } | { errors: { email: string } } | null;
 /** `pending`: a link this browser did not ask for, verified but waiting for the user's yes. */
@@ -35,7 +36,7 @@ async function discard(token: string): Promise<void> {
   try {
     await logout(token);
   } catch (e) {
-    if (!(e instanceof UpstreamError || e instanceof UpstreamProblem)) throw e;
+    logRefusalOrThrow(e, "login-discard"); // best effort: the session also expires by itself
   }
 }
 
@@ -54,9 +55,10 @@ export async function requestLogin(_prev: LoginState, fd: FormData): Promise<Log
     session = guest?.token ?? (await readSessionToken());
   } catch (e) {
     if (e instanceof UpstreamValidation) return { errors: { email: BAD_EMAIL } };
-    // 503 from the mail server, a timeout, or a refusal (logged by http.ts / no PII): retry later.
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem) return { errors: { email: NOT_SENT } };
-    throw e;
+    // 503 from the mail server or a timeout (logged by http.ts), or an unexpected refusal (logged
+    // here, no email): retry later. A bug rethrows.
+    logRefusalOrThrow(e, "login-request");
+    return { errors: { email: NOT_SENT } };
   }
   if (session) await bindLoginToSession(session);
   await rememberNext(str(fd, "next"));
@@ -93,8 +95,8 @@ export async function confirmLogin(_prev: ConfirmState, fd: FormData): Promise<C
   } catch (e) {
     if (e instanceof UpstreamProblem && e.status === 401) return { error: EXPIRED };
     if (e instanceof UpstreamValidation) return { error: EXPIRED };
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem) return { error: UNAVAILABLE };
-    throw e;
+    logRefusalOrThrow(e, "login-confirm");
+    return { error: UNAVAILABLE };
   }
   redirect(await takeNext());
 }

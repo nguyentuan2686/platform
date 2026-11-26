@@ -5,7 +5,8 @@ import { getOrder, postSepayWebhook } from "@/lib/payment";
 import { assertSameOrigin, forbidden, ForbiddenOrigin } from "@/lib/sameOrigin";
 import { buildSepayWebhook } from "@/lib/sepaySim";
 import { getViewer } from "@/lib/session";
-import { UpstreamError, UpstreamProblem } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { UpstreamProblem } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,8 @@ export async function POST(req: Request): Promise<Response> {
     return reply(204);
   } catch (e) {
     if (e instanceof UpstreamProblem && e.status === 404) return reply(404, { reason: "not_found" });
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem) return reply(503, { reason: "unavailable" });
-    throw e;
+    // Anything else (e.g. 401 from /webhooks/sepay: the secret differs from payment-svc) is logged.
+    logRefusalOrThrow(e, "dev-sepay");
+    return reply(503, { reason: "unavailable" });
   }
 }

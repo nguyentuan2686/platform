@@ -116,6 +116,21 @@ describe("POST /api/auth/google", () => {
     m.googleAuthorization.mockResolvedValue({ authorization_url: "javascript:alert(1)", state: STATE });
     const res = await POST(start());
     expect(res.headers.get("location")).toBe(`${ORIGIN}/vi/dang-nhap?loi=google`);
+    expect(JSON.parse(String(out.mock.calls[0][0]))).toMatchObject({ level: "error", reason: "not_https" });
+    expect(String(out.mock.calls[0][0])).not.toContain("javascript");
+  });
+
+  it("logs an identity refusal of the start (e.g. 403) and an unparsable URL", async () => {
+    m.googleAuthorization.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
+    await POST(start());
+    m.googleAuthorization.mockResolvedValue({ authorization_url: "not a url", state: STATE });
+    const res = await POST(start());
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/vi/dang-nhap?loi=google`);
+    const lines = out.mock.calls.map((c: unknown[]) => JSON.parse(String(c[0])));
+    expect(lines).toEqual([
+      expect.objectContaining({ status: "403", part: "google-start" }),
+      expect.objectContaining({ reason: "unparsable" }),
+    ]);
   });
 });
 
@@ -180,6 +195,17 @@ describe("GET /vi/dang-nhap/google (callback)", () => {
       expect(m.setSessionCookie).not.toHaveBeenCalled();
     },
   );
+
+  it("logs an unexpected callback refusal (403), not a stale code (401)", async () => {
+    m.googleCallback.mockRejectedValue(new UpstreamProblem(401, undefined, "identity-svc"));
+    await GET(callback(`code=c&state=${STATE}`));
+    expect(out).not.toHaveBeenCalled();
+    m.googleCallback.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
+    const res = await GET(callback(`code=c&state=${STATE}`));
+    expect(res.headers.get("location")).toBe(`${ORIGIN}/vi/dang-nhap?loi=google`);
+    const line = JSON.parse(out.mock.calls.map((c: unknown[]) => String(c[0])).join(""));
+    expect(line).toMatchObject({ level: "error", upstream: "identity-svc", status: "403", part: "google-callback" });
+  });
 
   it("never logs the code or the state", async () => {
     m.googleCallback.mockRejectedValue(new UpstreamProblem(401, undefined, "identity-svc"));

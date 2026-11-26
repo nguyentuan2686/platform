@@ -140,10 +140,15 @@ describe("submitBirth", () => {
     expect(m.redirect).not.toHaveBeenCalled();
   });
 
-  it("shows the unavailable state for an unexpected identity refusal", async () => {
-    m.putProfile.mockRejectedValue(new UpstreamProblem(403));
+  it("shows the unavailable state for an unexpected identity refusal, and logs it (no birth data)", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    m.putProfile.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
     const state = await submitBirth(null, form());
+    const out = write.mock.calls.map((c) => String(c[0])).join("");
+    write.mockRestore();
     expect(state?.unavailable).toBe(true);
+    expect(JSON.parse(out)).toMatchObject({ level: "error", upstream: "identity-svc", status: "403", part: "save-chart" });
+    expect(out).not.toMatch(/1990|08:30|Asia\/Ho_Chi_Minh|male/);
   });
 
   it("rethrows unexpected errors", async () => {

@@ -5,7 +5,8 @@ import { createOrder } from "@/lib/payment";
 import * as paymentCache from "@/lib/paymentCache";
 import { isProductCode } from "@/lib/products";
 import { getViewer } from "@/lib/session";
-import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { log } from "@/lib/log";
 
 export type BuyState = { error: string; field?: "adult" | "product" } | null;
 
@@ -25,14 +26,17 @@ export async function buyAction(_prev: BuyState, fd: FormData): Promise<BuyState
   let orderId: string;
   try {
     const order = await createOrder(viewer.accountId, product);
-    if (order.payment.kind !== "VIETQR") return { error: NOT_READY };
+    if (order.payment.kind !== "VIETQR") {
+      log("error", "order without VietQR payment", { order_id: order.order_id });
+      return { error: NOT_READY };
+    }
     paymentCache.put(order.order_id, order.payment);
     orderId = order.order_id;
   } catch (e) {
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem || e instanceof UpstreamValidation) {
-      return { error: NOT_READY };
-    }
-    throw e;
+    // 503 (no receiving account), down or timeout: logged by http.ts. Any 4xx is unexpected here
+    // (a wrong internal token, a contract mismatch): logged, then the same message. A bug rethrows.
+    logRefusalOrThrow(e, "buy");
+    return { error: NOT_READY };
   }
   redirect(`/vi/thanh-toan/${orderId}`);
 }

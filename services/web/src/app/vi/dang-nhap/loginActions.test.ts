@@ -121,6 +121,16 @@ describe("requestLogin", () => {
     });
   });
 
+  it("logs an unexpected refusal (e.g. 403, wrong internal token) without the email; a 400 stays quiet", async () => {
+    m.requestMagicLink.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
+    await requestLogin(null, fd({ email: "an@example.com" }));
+    expect(JSON.parse(logged())).toMatchObject({ level: "error", upstream: "identity-svc", status: "403", part: "login-request" });
+    out.mockClear();
+    m.requestMagicLink.mockRejectedValue(new UpstreamValidation({ email: "invalid" }, "identity-svc"));
+    await requestLogin(null, fd({ email: "an@example.com" }));
+    expect(out).not.toHaveBeenCalled();
+  });
+
   it("never logs the email", async () => {
     m.requestMagicLink.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
     await requestLogin(null, fd({ email: "secret.person@example.com" }));
@@ -218,6 +228,16 @@ describe("confirmLogin errors", () => {
   it("answers the expired message for a missing token without calling identity", async () => {
     expect(await confirmLogin(null, fd({}))).toEqual({ error: EXPIRED });
     expect(m.verifyMagicLink).not.toHaveBeenCalled();
+  });
+
+  it("an expired link (401) is not logged; an unexpected 403 is", async () => {
+    m.verifyMagicLink.mockRejectedValue(new UpstreamProblem(401, undefined, "identity-svc"));
+    await confirmLogin(null, fd({ token: "used" }));
+    expect(out).not.toHaveBeenCalled();
+    m.verifyMagicLink.mockRejectedValue(new UpstreamProblem(403, undefined, "identity-svc"));
+    const s = await confirmLogin(null, fd({ token: "t" }));
+    expect(s).not.toEqual({ error: EXPIRED });
+    expect(JSON.parse(logged())).toMatchObject({ level: "error", status: "403", part: "login-confirm" });
   });
 
   it("asks to retry when identity is unavailable", async () => {

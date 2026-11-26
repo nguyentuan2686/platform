@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { parseBirthForm, type FormErrors } from "@/lib/birthForm";
 import { getProfile, putProfile, type Profile, type ProfileRequest } from "@/lib/identity";
 import { clearSessionCookie, ensureSession, readSessionToken } from "@/lib/session";
-import { getChart, UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { getChart, UpstreamProblem, UpstreamValidation } from "@/lib/upstream";
 
 export type FormValues = { date: string; time: string; gender: string; zone: string; consent?: string };
 export type FormState = { errors: Partial<FormErrors>; unavailable?: boolean; values?: FormValues } | null;
@@ -83,8 +84,8 @@ export async function submitBirth(_prev: FormState, fd: FormData): Promise<FormS
     if (e instanceof UpstreamProblem && e.status === 409 && e.reason === "profile_locked") {
       return { errors: { date: LOCKED_MSG }, values };
     }
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem) return { errors: {}, unavailable: true, values };
-    throw e;
+    logRefusalOrThrow(e, "save-chart"); // down: logged by http.ts; an unexpected refusal: logged here
+    return { errors: {}, unavailable: true, values };
   }
   redirect("/vi/la-so");
 }

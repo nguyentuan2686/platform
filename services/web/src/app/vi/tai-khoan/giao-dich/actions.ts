@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { isUuid } from "@/lib/ids";
 import { requestRefund } from "@/lib/payment";
 import { getViewer } from "@/lib/session";
-import { UpstreamError, UpstreamProblem } from "@/lib/upstream";
+import { logRefusalOrThrow } from "@/lib/degrade";
+import { UpstreamProblem } from "@/lib/upstream";
 
 export type RefundState = { ok: string; error?: never } | { error: string; ok?: never } | null;
 
@@ -24,14 +25,13 @@ export async function refundAction(_prev: RefundState, fd: FormData): Promise<Re
   try {
     await requestRefund(orderId, viewer.accountId);
   } catch (e) {
-    if (e instanceof UpstreamProblem && e.status === 409) {
-      return { error: REFUSED[e.reason ?? ""] ?? REFUSED.not_refundable };
+    // Expected: the two 409s the page explains, and 404 (not this account's order).
+    if (e instanceof UpstreamProblem && e.status === 409 && e.reason && Object.hasOwn(REFUSED, e.reason)) {
+      return { error: REFUSED[e.reason] };
     }
     if (e instanceof UpstreamProblem && e.status === 404) return { error: "Không thấy đơn này." };
-    if (e instanceof UpstreamError || e instanceof UpstreamProblem) {
-      return { error: "Ta chưa ghi nhận được, con thử lại sau." };
-    }
-    throw e;
+    logRefusalOrThrow(e, "refund"); // an unknown 409, 401/403, a 400: logged; down: logged by http.ts
+    return { error: "Ta chưa ghi nhận được, con thử lại sau." };
   }
   revalidatePath(PAGE);
   return { ok: "Ta đã ghi nhận. Tiền sẽ được chuyển lại trong vài ngày làm việc." };

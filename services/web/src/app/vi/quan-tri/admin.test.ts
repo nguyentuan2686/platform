@@ -120,6 +120,20 @@ describe("admin actions", () => {
     expect(JSON.stringify(down)).not.toContain(TOKEN);
   });
 
+  it("logs a refused admin token (status only, never the token) and keeps 404/409 unlogged", async () => {
+    next = () => json(401, { status: 401 });
+    expect(await assignAction(null, form({ id: "7", order_code: "TV7K3M9P" }))).toEqual({ error: "payment-svc từ chối admin token." });
+    const lines = out.mock.calls.map((c: unknown[]) => JSON.parse(String(c[0])));
+    expect(lines).toEqual([expect.objectContaining({ level: "error", upstream: "payment-svc", status: "401", part: "admin-assign" })]);
+    expect(JSON.stringify(lines)).not.toContain(TOKEN);
+    out.mockClear();
+    next = () => json(409, { status: 409, reason: "amount_low" });
+    await assignAction(null, form({ id: "7", order_code: "TV7K3M9P" }));
+    next = () => json(404, { status: 404 });
+    await resolveAction(null, form({ id: "7", resolution: "IGNORED" }));
+    expect(out).not.toHaveBeenCalled();
+  });
+
   it("validates the form before calling payment-svc", async () => {
     expect((await assignAction(null, form({ id: "x", order_code: "TV7K3M9P" })))?.error).toBeTruthy();
     expect((await assignAction(null, form({ id: "7", order_code: "" })))?.error).toBeTruthy();
