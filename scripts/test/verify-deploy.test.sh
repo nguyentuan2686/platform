@@ -19,6 +19,7 @@ cat >"$tmp/bin/kubectl" <<'EOF'
 name=""; prev=""
 for a in "$@"; do [ "$prev" = application ] && name="$a"; prev="$a"; done
 f="$FAKE_APPS/$name.json"
+[ -f "$FAKE_APPS/.warn" ] && echo "time=\"x\" level=warning msg=\"open /etc/rancher/k3s/config.yaml: permission denied\"" >&2
 [ -n "$name" ] && [ -f "$f" ] || { echo "Error from server (NotFound): applications.argoproj.io \"$name\" not found" >&2; exit 1; }
 cat "$f"
 EOF
@@ -90,6 +91,17 @@ expect_outofsync_rejects_synced() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+stderr_warning_does_not_break_parsing() {
+  # k3s's multi-call kubectl warns on stderr (e.g. it cannot read /etc/rancher/k3s/config.yaml); JSON is on stdout.
+  rm -f "$tmp/apps"/*; use root healthy
+  touch "$tmp/apps/.warn"
+  run --app root --revision "$rev" --deadline-s 5 --no-smoke
+  rm -f "$tmp/apps/.warn"
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  grep -qx 'OK argo-root' "$tmp/out" || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 bad_arguments_exit_2() {
   run --revision "$rev"
   [ "$rc" -eq 2 ] || fail "${FUNCNAME[0]}" "missing --app: rc=$rc"
@@ -105,4 +117,5 @@ missing_app_fails
 expect_outofsync_passes
 expect_outofsync_rejects_comparison_error
 expect_outofsync_rejects_synced
+stderr_warning_does_not_break_parsing
 bad_arguments_exit_2

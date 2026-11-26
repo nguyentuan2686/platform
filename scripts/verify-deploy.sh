@@ -29,6 +29,8 @@ done
 [[ "$deadline_s" =~ ^[0-9]+$ ]] || { echo "verify-deploy: --deadline-s must be a number" >&2; usage; }
 command -v jq >/dev/null 2>&1 || { echo "verify-deploy: jq is required" >&2; exit 2; }
 interval="${VERIFY_DEPLOY_INTERVAL_S:-10}"
+errf="$(mktemp)"
+trap 'rm -f "$errf"' EXIT
 
 declare -A want=() last=()
 pending=()
@@ -41,11 +43,14 @@ fi
 
 # state <app>: prints "sync health revision conditions" (conditions = type:message;... or -); 1 if not readable.
 state() {
-  local json
-  json=$(kubectl -n argocd get application "$1" -o json 2>&1) || { echo "- - - $(head -c 200 <<<"$json" | tr '\n' ' ')"; return 1; }
-  jq -r '[(.status.sync.status // "-"), (.status.health.status // "-"), (.status.sync.revision // "-"),
+  local json err out
+  # stdout only: kubectl may warn on stderr (k3s's multi-call kubectl does), which is not JSON.
+  json=$(kubectl -n argocd get application "$1" -o json 2>"$errf") || {
+    err=$(tr '\n' ' ' <"$errf"); echo "- - - ${err:0:200}"; return 1; }
+  out=$(jq -r '[(.status.sync.status // "-"), (.status.health.status // "-"), (.status.sync.revision // "-"),
           ([(.status.conditions // [])[] | "\(.type):\(.message // "" | gsub("\\s+"; " ") | .[0:200])"] | join(";") | if . == "" then "-" else . end)]
-         | join(" ")' <<<"$json"
+         | join(" ")' <<<"$json" 2>"$errf") || { echo "- - - unparseable kubectl output: ${json:0:120}"; return 1; }
+  echo "$out"
 }
 
 reached() { # reached <app> <sync> <health> <revision> <conditions>
