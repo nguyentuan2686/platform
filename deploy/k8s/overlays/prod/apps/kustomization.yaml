@@ -1,4 +1,4 @@
-# Prod apps slice (Argo CD app `prod-apps`): the 7 service bases, the public Ingress and the prod patches.
+# Prod apps slice (Argo CD app `prod-apps`): the 7 service bases, the public Ingresses + edge Middlewares and the prod patches.
 # CD bumps the image tags below from `main` to `sha-<commit>`; they live only in this file.
 # The Secrets come from SealedSecrets in ../sealed (inventory: ../secrets.tsv); this slice renders NO Secret objects.
 # web-secrets holds only INTERNAL_API_TOKEN and ADMIN_API_TOKEN (not SEPAY_WEBHOOK_SECRET: only the dev payment
@@ -14,6 +14,7 @@ resources:
   - ../../../base/payment-svc
   - ../../../base/web
   - ingress.yaml
+  - middlewares.yaml
 components:
   - ../domain
 patches:
@@ -27,6 +28,10 @@ replacements:
   - source: {kind: ConfigMap, name: app-domain, fieldPath: data.APP_DOMAIN}
     targets:
       - select: {kind: Ingress, name: web}
+        fieldPaths: [spec.rules.0.host]
+      - select: {kind: Ingress, name: web-strict}
+        fieldPaths: [spec.rules.0.host]
+      - select: {kind: Ingress, name: payment-webhook}
         fieldPaths: [spec.rules.0.host]
       - select: {kind: Deployment, name: web}
         fieldPaths: ["spec.template.spec.containers.[name=web].env.[name=WEB_ORIGIN].value"]

@@ -1,4 +1,8 @@
-# Public entry: Traefik (ClusterIP) behind the cloudflared tunnel. The host is replaced from ../domain/domain.yaml (APP_DOMAIN).
+# Public entry: Traefik (ClusterIP) behind the cloudflared tunnel. Every host is replaced from ../domain/domain.yaml
+# (APP_DOMAIN). Only two backends are public (scripts/k8s-validate.sh prod-ingress allowlist): web (any path), and
+# payment-svc for exactly POST /webhooks/sepay (pathType Exact, never Prefix /webhooks: payment-svc also serves
+# /webhooks/paypal, /admin/*, /orders* and /prometheus). Traefik picks the longest matching rule first.
+# Middlewares: middlewares.yaml (<namespace>-<name>@kubernetescrd).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,6 +11,8 @@ metadata:
   labels:
     app.kubernetes.io/name: web
     app.kubernetes.io/part-of: platform
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: apps-ratelimit-site@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -19,3 +25,49 @@ spec:
               service:
                 name: web
                 port: {number: 3000}
+---
+# The abuse-prone web routes: login (each magic link is a real mail) and Q&A (each answer spends LLM quota).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-strict
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: platform
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: apps-ratelimit-strict@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: app.example.invalid
+      http:
+        paths:
+          - {path: /vi/dang-nhap, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
+          - {path: /api/auth, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
+          - {path: /api/qa, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
+---
+# SePay -> payment-svc. Authentication stays in payment-svc (SEPAY_WEBHOOK_AUTH=apikey). Needs a stable hostname (a
+# domain + the named tunnel): a quick-tunnel URL changes on every cloudflared restart (docs/runbooks/go-live.md).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: payment-webhook
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: payment-svc
+    app.kubernetes.io/part-of: platform
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: apps-ratelimit-webhook@kubernetescrd,apps-body-64k@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: app.example.invalid
+      http:
+        paths:
+          - path: /webhooks/sepay
+            pathType: Exact
+            backend:
+              service:
+                name: payment-svc
+                port: {number: 8085}

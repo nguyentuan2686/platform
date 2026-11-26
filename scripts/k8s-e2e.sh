@@ -95,6 +95,13 @@ run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://lo
 run smoke-qa http://localhost:8084 http://localhost:8083 http://localhost:8025
 run smoke-web http://localhost:3001
 run e2e-observability http://localhost:9090 http://localhost:3200 http://localhost:3100 http://localhost:3000
+# webhook-auth: payment-svc's own SePay check (the only authentication of the public /webhooks/sepay route) refuses a
+# call without the key. The route itself (Exact path, body cap, rate limit) is checked through Traefik by
+# scripts/e2e-edge.sh in the bootstrap job.
+code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Content-Type: application/json' \
+  --data '{"id":1,"transferType":"in","transferAmount":1000}' http://localhost:8085/webhooks/sepay) || code=000
+[ "$code" = 401 ] || fail "webhook-auth: POST /webhooks/sepay without the key got $code, want 401"
+echo "OK webhook-auth"
 
 # --- 5. no app container restarted during the whole run (startup gating: wait-for-postgres init containers,
 # kafkaTopics readiness). RESTARTS > 0 here means a service crash-looped on a dependency it should have waited for.

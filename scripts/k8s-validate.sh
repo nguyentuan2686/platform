@@ -215,6 +215,30 @@ JQ_PRODPROTECTED="$JQ_DEFS"'
     | "POLICY: prod-protected \($o | id): volumeClaimTemplates need persistentVolumeClaimRetentionPolicy {whenDeleted: Retain, whenScaled: Retain}"
   else empty end'
 
+# prod-ingress: the public surface is an allowlist. Every Ingress is class traefik with no defaultBackend; every path is
+# web:3000 (Prefix) or exactly payment-svc:8085 Exact /webhooks/sepay (payment-svc also serves /webhooks/paypal, /admin/*,
+# /orders*). Every Ingress carries a rateLimit Middleware of this build keyed on Cf-Connecting-IP (behind cloudflared an
+# IP criterion would bucket every client together), and the payment-svc route a buffering body cap <= 64 KiB.
+JQ_PRODINGRESS="$JQ_DEFS"'
+(map(select(type == "object" and .kind == "Middleware")) | map({key: "\(ns)-\(.metadata.name)@kubernetescrd", value: (.spec // {})}) | from_entries) as $mw
+| .[] | select(type == "object" and .kind == "Ingress") as $o
+| ((($o.metadata.annotations // {})["traefik.ingress.kubernetes.io/router.middlewares"] // "") | split(",") | map(gsub("\\s"; "")) | map(select(length > 0))) as $refs
+| [$refs[] | $mw[.] | select(. != null)] as $specs
+| [($o.spec.rules // [])[] | (.http.paths // [])[] | {path: (.path // ""), type: (.pathType // ""), svc: (.backend.service.name // ""), port: (.backend.service.port.number // .backend.service.port.name // "")}] as $paths
+| ( (if ($o.spec.ingressClassName // "") != "traefik" then "POLICY: prod-ingress \($o | id): ingressClassName must be traefik" else empty end),
+    (if $o.spec.defaultBackend != null then "POLICY: prod-ingress \($o | id): defaultBackend is not allowed" else empty end),
+    (if ($paths | length) == 0 then "POLICY: prod-ingress \($o | id): no rule paths" else empty end),
+    ($paths[] | select(((.svc == "web" and .port == 3000 and .type == "Prefix")
+                        or (.svc == "payment-svc" and .port == 8085 and .type == "Exact" and .path == "/webhooks/sepay")) | not)
+      | "POLICY: prod-ingress \($o | id): path \(.path) (\(.type)) -> \(.svc):\(.port) is not allowed (only web:3000 Prefix, or payment-svc:8085 Exact /webhooks/sepay)"),
+    ($refs[] | select($mw[.] == null) | "POLICY: prod-ingress \($o | id): middleware \(.) is not a Middleware of this build"),
+    (if ([$specs[] | select(.rateLimit != null and (.rateLimit.sourceCriterion.requestHeaderName // "") == "Cf-Connecting-IP")] | length) == 0
+       then "POLICY: prod-ingress \($o | id): needs a rateLimit Middleware with sourceCriterion.requestHeaderName Cf-Connecting-IP (annotation traefik.ingress.kubernetes.io/router.middlewares)" else empty end),
+    (if ([$paths[] | select(.svc == "payment-svc")] | length) > 0
+        and ([$specs[] | select((.buffering.maxRequestBodyBytes // 0) > 0 and .buffering.maxRequestBodyBytes <= 65536)] | length) == 0
+       then "POLICY: prod-ingress \($o | id): the payment-svc route needs a buffering Middleware with 0 < maxRequestBodyBytes <= 65536" else empty end)
+  )'
+
 # Prod inventory inputs: a fixture may carry its own, else the real prod overlay's.
 prod_tsv() { if [ -f "$1/secrets.tsv" ]; then echo "$1/secrets.tsv"; else echo deploy/k8s/overlays/prod/secrets.tsv; fi; }
 prod_domain_file() {
@@ -278,6 +302,8 @@ policy() { # $1 = dir; stdin = kustomize output
       res=$(jq -r "$JQ_NOFAKESEPAY" <<<"$json") || { echo "POLICY: internal $1: prod-no-fake-sepay check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
       res=$(jq -r "$JQ_PRODPROTECTED" <<<"$json") || { echo "POLICY: internal $1: prod-protected check failed"; return 1; }
+      [ -n "$res" ] && echo "$res"
+      res=$(jq -r "$JQ_PRODINGRESS" <<<"$json") || { echo "POLICY: internal $1: prod-ingress check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
       prod_inventory_checks "$1" "$json" || return 1 ;;
     e2e)

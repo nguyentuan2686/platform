@@ -182,6 +182,10 @@ jobs:
           fi
           echo "OK verify-deploy-negative"
 
+      - name: Public edge through Traefik (prod Ingresses and rate limits, stub backends)
+        # Final review I1/I2: only /webhooks/sepay (Exact) reaches payment-svc, body cap 413, per-client-IP 429.
+        run: bash scripts/e2e-edge.sh
+
       - name: Diagnostics
         if: failure() || cancelled()
         run: |
