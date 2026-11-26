@@ -6,6 +6,7 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false # root never prunes or deletes a slice (k8s-validate argocd)
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:

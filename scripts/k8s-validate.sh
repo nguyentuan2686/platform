@@ -57,8 +57,14 @@ def eff($c; $ps; $k): if $c.securityContext[$k] != null then $c.securityContext[
     | eff($c; $ps; "runAsUser") as $uid
     | if $nr != true or ($uid | type) != "number" or $uid < 1 then fail("nonroot"; $o; $c; "effective runAsNonRoot must be true and runAsUser a numeric id > 0 (got runAsNonRoot=\($nr), runAsUser=\($uid))") else empty end
     else empty end),
-  # hostpath-root: no pod mounts the host root or k3s state (with an API token it could read every Secret)
-  (if ($ps | type) == "object" then ($ps.volumes // [])[] | select((.hostPath.path // "") | (. == "/" or startswith("/var/lib/rancher") or startswith("/etc/rancher"))) | "POLICY: hostpath-root ($o|id): volume (.name) mounts (.hostPath.path)" else empty end),
+  # hostpath-root: a hostPath volume may only be the pod log directories, mounted read-only by every container that
+  # mounts it (any other host path, e.g. /, /var, /etc or k3s state, with an API token could read every Secret)
+  (if ($ps | type) == "object" then ($ps.volumes // [])[] | select(.hostPath != null) | . as $v | ($v.hostPath.path // "") as $p
+    | if ([("/var/log/pods", "/var/log/containers") as $ok | ($p == $ok or ($p | startswith($ok + "/")))] | any) | not
+      then "POLICY: hostpath-root \($o|id): volume \($v.name) mounts host path \"\($p)\" (allowed: /var/log/pods, /var/log/containers, read-only)"
+      else ($all[] | . as $c | ($c.volumeMounts // [])[] | select(.name == $v.name and .readOnly != true)
+        | fail("hostpath-root"; $o; $c; "mounts hostPath volume \($v.name) (\($p)) without readOnly: true")) end
+    else empty end),
   # no-latest
   ($all[] | . as $c | select(($c | imgtag) == "latest" or ((($c | image) | test("@sha256:")) | not) and (($c | imgtag) == ""))
     | fail("no-latest"; $o; $c; "image \"\($c | image)\" must have a pinned tag (not latest)"))
@@ -374,7 +380,10 @@ check_argocd() {
   while IFS= read -r f; do
     apps=$(yq -o=json '.' "$f" | jq -c -s '.[] | select(type == "object" and .kind == "Application")
       | {name: .metadata.name, path: (.spec.source.path // ""), rev: (.spec.source.targetRevision // ""),
-         prune: (.spec.syncPolicy.automated.prune // false), heal: (.spec.syncPolicy.automated.selfHeal // false)}') \
+         prune: (.spec.syncPolicy.automated.prune // false), heal: (.spec.syncPolicy.automated.selfHeal // false),
+         project: (.spec.project // ""),
+         protected: ((((.metadata.annotations // {})["argocd.argoproj.io/sync-options"] // "") | split(",") | map(gsub("\\s"; ""))) as $o
+                     | ($o | index("Prune=false")) != null and ($o | index("Delete=false")) != null)}') \
       || { echo "POLICY: argocd $f: cannot parse"; rc=1; continue; }
     while IFS= read -r a; do
       [ -z "$a" ] && continue
@@ -387,6 +396,16 @@ check_argocd() {
       if [ "$prune" != true ] || [ "$heal" != true ]; then echo "POLICY: argocd $f Application/$name: syncPolicy.automated needs prune: true and selfHeal: true"; rc=1; fi
       if [ "$path" != deploy/argocd/apps ] && ! grep -qxF -- "$path" <<<"$aggregated"; then
         echo "POLICY: argocd $f Application/$name: source.path $path is not a slice of the prod aggregate deploy/k8s/overlays/prod/kustomization.yaml"; rc=1
+      fi
+      # Every child (not the root) is in the prod AppProject (its Secret blacklist), and root never prunes or deletes it:
+      # a renamed or removed apps/*.yaml must not cascade-delete a whole prod slice.
+      if [ "$path" != deploy/argocd/apps ]; then
+        if [ "$(jq -r .project <<<"$a" | tr -d '\r')" != prod ]; then
+          echo "POLICY: argocd $f Application/$name: spec.project must be prod (the AppProject that forbids plain Secrets)"; rc=1
+        fi
+        if [ "$(jq -r .protected <<<"$a" | tr -d '\r')" != true ]; then
+          echo "POLICY: argocd $f Application/$name: needs annotation argocd.argoproj.io/sync-options: Prune=false,Delete=false"; rc=1
+        fi
       fi
     done <<<"$apps"
   done < <(find "$dir" -name '*.yaml' -type f | sort)
