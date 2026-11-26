@@ -13,8 +13,11 @@ on:
         type: boolean
         default: false
 
+# PRs: one group per branch, a new push cancels the old run. main (push/dispatch): one group per commit, so a burst
+# of merges never cancels a pending run (GitHub drops all but one pending run per group), and every merge publishes
+# its images for CD.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

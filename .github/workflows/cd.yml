@@ -18,9 +18,13 @@ on:
         description: Commit on main (40 hex) whose published images to deploy
         required: true
 
-# One CD run at a time, in order; a queued run is never cancelled by a running one.
+# One group per commit, never one global group: GitHub keeps at most one *pending* run per group and cancels the
+# older pending one (cancel-in-progress only protects the running run), which would silently drop the deploy of a
+# service changed only in the skipped commit. Runs for different commits therefore race; that is safe because a
+# rejected push re-runs cd-bump.sh on the new main (3 attempts) and cd-bump.sh never moves a tag backwards, so any
+# order converges to the newest tag per service (scripts/test/cd-push.test.sh parallel_runs_converge_in_either_order).
 concurrency:
-  group: cd-main
+  group: cd-${{ github.event.workflow_run.head_sha || inputs.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -81,7 +85,9 @@ jobs:
             workflow_run)
               if [ "$RUN_CONCLUSION" != success ] || { [ "$RUN_EVENT" != push ] && [ "$RUN_EVENT" != workflow_dispatch ]; } \
                 || [ "$RUN_HEAD_BRANCH" != main ] || [ "$RUN_HEAD_REPO" != "$REPO" ]; then
-                echo "::notice::CD skipped: ci run is not a successful push/dispatch on $REPO main (conclusion=$RUN_CONCLUSION event=$RUN_EVENT branch=$RUN_HEAD_BRANCH repo=$RUN_HEAD_REPO)"
+                echo "::notice::CD skipped: ci run is not a successful push/dispatch on $REPO main"
+                # Run fields can be fork-chosen text: plain log line, never inside a workflow command.
+                echo "skipped run: conclusion=$RUN_CONCLUSION event=$RUN_EVENT branch=$RUN_HEAD_BRANCH repo=$RUN_HEAD_REPO"
                 cd=false verify=false
               else
                 sha="$RUN_HEAD_SHA"

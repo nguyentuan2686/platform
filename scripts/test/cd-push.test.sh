@@ -29,8 +29,8 @@ chmod +x "$tmp/bin/gh"
 g() { git -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false "$@"; }
 tag_in() { git -C "$1" show "origin/main:$kpath" 2>/dev/null | sed -n "s|.*{name: $prefix/$2, newTag: \([^}]*\)}.*|\1|p"; }
 
-setup() { # fresh origin with main = A -> C; a seed clone to push "concurrent" commits; a runner clone at C
-  rm -rf "$tmp/origin.git" "$tmp/seed" "$tmp/runner" "$tmp/rt"
+setup() { # fresh origin with main = A -> B -> C; a seed clone to push "concurrent" commits; a runner clone at C
+  rm -rf "$tmp/origin.git" "$tmp/seed" "$tmp/runner" "$tmp/runner2" "$tmp/rt" "$tmp/rt2"
   git init -q --bare "$tmp/origin.git"
   git -C "$tmp/origin.git" symbolic-ref HEAD refs/heads/main
   git init -q -b main "$tmp/seed"
@@ -39,23 +39,32 @@ setup() { # fresh origin with main = A -> C; a seed clone to push "concurrent" c
   printf '#!/usr/bin/env bash\necho "OK k8s-validate (stub) $*"\n' >"$tmp/seed/scripts/k8s-validate.sh"
   cp "$root/scripts/testdata/cd-bump/kustomization.yaml" "$tmp/seed/$kpath"
   g -C "$tmp/seed" add -A; g -C "$tmp/seed" commit -q -m A
+  g -C "$tmp/seed" commit -q --allow-empty -m B; B="$(git -C "$tmp/seed" rev-parse HEAD)"
   g -C "$tmp/seed" commit -q --allow-empty -m C; C="$(git -C "$tmp/seed" rev-parse HEAD)"
   git -C "$tmp/seed" remote add origin "$tmp/origin.git"
   git -C "$tmp/seed" push -q origin main
   git clone -q "$tmp/origin.git" "$tmp/runner"
-  mkdir -p "$tmp/rt"
+  git clone -q "$tmp/origin.git" "$tmp/runner2"
+  mkdir -p "$tmp/rt" "$tmp/rt2"
 }
 
-steps() { # run the bump step then the push step in the runner clone; sets rc, writes $tmp/out and $tmp/gh_out
-  rc=0
-  : >"$tmp/gh_out"
+phase() { # phase bump|push <runner> <runner temp> <sha> <published>: one step script in one runner clone
+  local outf; outf="$tmp/gh_out.$(basename "$2")"
+  [ "$1" = bump ] && : >"$outf"
   (
-    cd "$tmp/runner"
-    export PATH="$tmp/bin:$PATH" RUNNER_TEMP="$tmp/rt" GITHUB_OUTPUT="$tmp/gh_out" SHA="$C" KUSTOMIZATION="$kpath" \
-      PUBLISHED="order-svc web" APP_SLUG=cd-bot GH_TOKEN=x
-    bash "$tmp/bump-step.sh"
-    CHANGED="$(sed -n 's/^changed=//p' "$tmp/gh_out")" bash "$tmp/push-step.sh"
-  ) >"$tmp/out" 2>&1 || rc=$?
+    cd "$2"
+    export PATH="$tmp/bin:$PATH" RUNNER_TEMP="$3" GITHUB_OUTPUT="$outf" SHA="$4" KUSTOMIZATION="$kpath" \
+      PUBLISHED="$5" APP_SLUG=cd-bot GH_TOKEN=x
+    if [ "$1" = bump ]; then bash "$tmp/bump-step.sh"
+    else CHANGED="$(sed -n 's/^changed=//p' "$outf")" bash "$tmp/push-step.sh"; fi
+  )
+}
+
+steps() { # run the bump step then the push step in the runner clone for C; sets rc, writes $tmp/out and $tmp/gh_out
+  rc=0
+  { phase bump "$tmp/runner" "$tmp/rt" "$C" "order-svc web" && phase push "$tmp/runner" "$tmp/rt" "$C" "order-svc web"; } \
+    >"$tmp/out" 2>&1 || rc=$?
+  cp "$tmp/gh_out.runner" "$tmp/gh_out"
 }
 
 push_commits_only_the_kustomization() {
@@ -107,6 +116,38 @@ retry_never_overwrites_a_newer_tag() { # Review Focus 1: CD for a later commit D
   echo "ok ${FUNCNAME[0]}"
 }
 
+race() { # race <first sha> <first published> <second sha> <second published>: both runners check out the same main
+  # and bump before either pushes (two CD runs in parallel, no global concurrency group); then they push in order.
+  rc=0
+  {
+    phase bump "$tmp/runner" "$tmp/rt" "$1" "$2" && phase bump "$tmp/runner2" "$tmp/rt2" "$3" "$4" \
+      && phase push "$tmp/runner" "$tmp/rt" "$1" "$2" && phase push "$tmp/runner2" "$tmp/rt2" "$3" "$4"
+  } >"$tmp/out" 2>&1 || rc=$?
+  git -C "$tmp/runner" fetch -q origin
+  # setup() makes new commit ids each time: compare with B/C as placeholders
+  final="$(git -C "$tmp/runner" show "origin/main:$kpath" | sed "s/sha-$B/sha-B/; s/sha-$C/sha-C/")"
+}
+
+parallel_runs_converge_in_either_order() { # B published {order-svc, web}, C published {order-svc, chart-svc}
+  local b_first c_first
+  setup
+  race "$B" "order-svc web" "$C" "order-svc chart-svc"
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "B first: rc=$rc: $(cat "$tmp/out")"
+  grep -q '^push attempt 1 rejected' "$tmp/out" || fail "${FUNCNAME[0]}" "B first: second push not rejected: $(cat "$tmp/out")"
+  b_first="$final"
+  setup
+  race "$C" "order-svc chart-svc" "$B" "order-svc web"
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "C first: rc=$rc: $(cat "$tmp/out")"
+  grep -qx "KEEP order-svc: current sha-$C is not an ancestor of $B" "$tmp/out" || fail "${FUNCNAME[0]}" "C first: $(cat "$tmp/out")"
+  c_first="$final"
+  [ "$b_first" = "$c_first" ] || fail "${FUNCNAME[0]}" "orders differ: $(diff <(echo "$b_first") <(echo "$c_first") || true)"
+  [ "$(tag_in "$tmp/runner" order-svc)" = "sha-$C" ] && [ "$(tag_in "$tmp/runner" web)" = "sha-$B" ] \
+    && [ "$(tag_in "$tmp/runner" chart-svc)" = "sha-$C" ] && [ "$(tag_in "$tmp/runner" notify-svc)" = main ] \
+    || fail "${FUNCNAME[0]}" "not the newest tag per service: $(echo "$final" | grep newTag)"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 push_commits_only_the_kustomization
 rejected_push_reapplies_on_new_main
+parallel_runs_converge_in_either_order
 retry_never_overwrites_a_newer_tag

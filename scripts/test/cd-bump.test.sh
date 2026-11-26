@@ -108,6 +108,21 @@ unpublished_service_keeps_tag() { # Review Focus 1: only order-svc was published
   echo "ok ${FUNCNAME[0]}"
 }
 
+either_order_converges() { # CD runs race: B published {order-svc, web}, C published {order-svc, chart-svc}
+  fresh
+  run --sha "$B" order-svc web; [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "B then C, B: rc=$rc: $(cat "$tmp/out")"
+  run --sha "$C" order-svc chart-svc; [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "B then C, C: rc=$rc: $(cat "$tmp/out")"
+  cp "$k" "$tmp/b_then_c"
+  fresh
+  run --sha "$C" order-svc chart-svc; [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "C then B, C: rc=$rc: $(cat "$tmp/out")"
+  run --sha "$B" order-svc web; [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "C then B, B: rc=$rc: $(cat "$tmp/out")"
+  grep -qx "KEEP order-svc: current sha-$C is not an ancestor of $B" "$tmp/out" || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  cmp -s "$k" "$tmp/b_then_c" || fail "${FUNCNAME[0]}" "orders differ: $(diff "$tmp/b_then_c" "$k" || true)"
+  [ "$(tag_of order-svc)" = "sha-$C" ] && [ "$(tag_of web)" = "sha-$B" ] && [ "$(tag_of chart-svc)" = "sha-$C" ] \
+    && [ "$(tag_of notify-svc)" = main ] || fail "${FUNCNAME[0]}" "not the newest tag per service: $(grep newTag "$k")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 invalid_sha_exits_2() {
   local bad
   for bad in "${C:0:7}" "${C^^}" "${C}0" "sha-$C" "main" ""; do
@@ -165,6 +180,7 @@ unrelated_sha_is_not_applied
 unknown_current_tag_is_kept
 same_sha_is_noop
 unpublished_service_keeps_tag
+either_order_converges
 invalid_sha_exits_2
 unknown_service_exits_2
 comments_preserved
