@@ -199,7 +199,7 @@ jobs:
       - name: Validate manifests (self-test, schema, policy)
         run: |
           bash scripts/k8s-validate.sh --self-test
-          bash scripts/k8s-validate.sh
+          bash scripts/k8s-validate.sh deploy/k8s/platform deploy/k8s/overlays/prod deploy/k8s/overlays/e2e
       - name: Trivy config scan
         # Same SHA pin as the Java workflow (tag-hijack incident Mar 2026).
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

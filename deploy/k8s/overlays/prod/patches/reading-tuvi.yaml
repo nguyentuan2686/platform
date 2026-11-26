@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reading-tuvi
+spec:
+  template:
+    spec:
+      containers:
+        - name: reading-tuvi
+          env:
+            # ADR 0003: ordered failover list; groq/gemini are enabled only when their API key is set.
+            - {name: LLM_PROVIDERS, value: "groq,gemini"}

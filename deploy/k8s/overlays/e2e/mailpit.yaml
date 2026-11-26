@@ -1,0 +1,49 @@
+# Local SMTP sink for the magic-link e2e flow (compose: mailpit). e2e only; prod uses a real SMTP relay.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: data
+  labels: {app: mailpit}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: mailpit}
+  template:
+    metadata:
+      labels: {app: mailpit}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.21.8
+          ports:
+            - {name: smtp, containerPort: 1025}
+            - {name: http, containerPort: 8025}
+          resources:
+            requests: {cpu: 10m, memory: 64Mi}
+            limits: {memory: 64Mi}
+          livenessProbe:
+            httpGet: {path: /livez, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: data
+  labels: {app: mailpit}
+spec:
+  selector: {app: mailpit}
+  ports:
+    - {name: smtp, port: 1025, targetPort: smtp}
+    - {name: http, port: 8025, targetPort: http}

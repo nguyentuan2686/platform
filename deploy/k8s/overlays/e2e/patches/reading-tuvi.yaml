@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reading-tuvi
+spec:
+  template:
+    spec:
+      containers:
+        - name: reading-tuvi
+          env:
+            - {name: OTEL_METRIC_EXPORT_INTERVAL, value: "10000"}
+            - {name: LLM_PROVIDERS, value: fake}
+            - {name: LLM_FAKE_MODE, value: ok}

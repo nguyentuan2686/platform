@@ -61,19 +61,62 @@ def eff($c; $ps; $k): if $c.securityContext[$k] != null then $c.securityContext[
     | fail("no-latest"; $o; $c; "image \"\($c | image)\" must have a pinned tag (not latest)"))
 )'
 
-# Extra rule applied only to prod overlay builds: no plaintext Secret objects.
-JQ_NOSECRET='.[] | select(type == "object" and .kind == "Secret") | "POLICY: no-secret Secret/\(.metadata.name): plaintext Secret in a prod build (use SealedSecret)"'
+# Shared jq helpers for the overlay checks.
+JQ_DEFS='
+def podspec:
+  if .kind == "Pod" then .spec
+  elif .kind == "CronJob" then .spec.jobTemplate.spec.template.spec
+  else .spec.template.spec end;
+def id: "\(.kind)/\(.metadata.name)";
+def ns: (.metadata.namespace // "default");
+'
+
+# prod-no-secrets: prod builds contain no plaintext Secret objects (Plan 4 supplies SealedSecrets).
+JQ_NOSECRET='.[] | select(type == "object" and .kind == "Secret") | "POLICY: prod-no-secrets Secret/\(.metadata.name): plaintext Secret in a prod build (use SealedSecret)"'
+
+# prod-images: every app (namespace apps) image in prod is ghcr.io/nguyentuan2686/<workload name>:<tag>.
+JQ_PRODIMAGES="$JQ_DEFS"'
+.[] | select(type == "object" and (.kind | IN("Deployment","StatefulSet","DaemonSet","Job","CronJob"))) | select(ns == "apps") as $o
+| (($o | podspec) | (.containers // []) + (.initContainers // []))[]
+| select((.image // "") | startswith("ghcr.io/nguyentuan2686/" + $o.metadata.name + ":") | not)
+| "POLICY: prod-images \($o | id): container \(.name): image \"\(.image // "")\" must be ghcr.io/nguyentuan2686/\($o.metadata.name):<tag>"'
+
+# secret-refs: every envFrom secretRef / env secretKeyRef names a Secret of this build in the same namespace,
+# and every referenced key exists in it (non-optional refs only).
+JQ_SECRETREFS="$JQ_DEFS"'
+(map(select(type == "object" and .kind == "Secret")
+     | {key: "\(ns)/\(.metadata.name)", value: (((.data // {}) + (.stringData // {})) | keys)}) | from_entries) as $secrets
+| .[] | select(type == "object" and (.kind | IN("Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob","ReplicaSet"))) as $o
+| (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
+| ( ($c.envFrom // [])[] | select(.secretRef != null and (.secretRef.optional | not))
+    | "\($o | ns)/\(.secretRef.name)" as $k
+    | if $secrets[$k] == null then "POLICY: secret-refs \($o | id): container \($c.name): envFrom secretRef \($k) names no Secret in this build" else empty end ),
+  ( ($c.env // [])[] | select(.valueFrom.secretKeyRef != null and (.valueFrom.secretKeyRef.optional | not))
+    | .valueFrom.secretKeyRef as $r | "\($o | ns)/\($r.name)" as $k
+    | if $secrets[$k] == null then "POLICY: secret-refs \($o | id): container \($c.name): secretKeyRef \($k) names no Secret in this build"
+      elif ($secrets[$k] | index($r.key)) == null then "POLICY: secret-refs \($o | id): container \($c.name): secretKeyRef \($k) has no key \($r.key)"
+      else empty end )'
+
+# Overlay kind: the `overlay` file in a fixture, else the directory name (prod | e2e).
+overlay_kind() { # $1 = dir
+  if [ -f "$1/overlay" ]; then tr -d '\r\n' <"$1/overlay"; else basename "$1"; fi
+}
 
 # Fails closed: any parse/jq error, or empty input, is a violation (non-zero + POLICY line).
-policy() { # $1 = label (path); stdin = kustomize output
+policy() { # $1 = dir; stdin = kustomize output
   local json res
   json=$(yq -o=json '.' | jq -s '.') || { echo "POLICY: internal $1: cannot parse kustomize output"; return 1; }
   if [ "$(jq 'length' <<<"$json")" = "0" ]; then echo "POLICY: internal $1: kustomize output is empty"; return 1; fi
   res=$(jq -r "$JQ_POLICY" <<<"$json") || { echo "POLICY: internal $1: policy evaluation failed"; return 1; }
   [ -n "$res" ] && echo "$res"
-  case "$1" in
-    */prod|*/prod/)
-      res=$(jq -r "$JQ_NOSECRET" <<<"$json") || { echo "POLICY: internal $1: secret check failed"; return 1; }
+  case "$(overlay_kind "$1")" in
+    prod)
+      res=$(jq -r "$JQ_NOSECRET" <<<"$json") || { echo "POLICY: internal $1: prod-no-secrets check failed"; return 1; }
+      [ -n "$res" ] && echo "$res"
+      res=$(jq -r "$JQ_PRODIMAGES" <<<"$json") || { echo "POLICY: internal $1: prod-images check failed"; return 1; }
+      [ -n "$res" ] && echo "$res" ;;
+    e2e)
+      res=$(jq -r "$JQ_SECRETREFS" <<<"$json") || { echo "POLICY: internal $1: secret-refs check failed"; return 1; }
       [ -n "$res" ] && echo "$res" ;;
   esac
   return 0

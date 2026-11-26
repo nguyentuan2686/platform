@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-svc
+  labels:
+    app.kubernetes.io/name: payment-svc
+    app.kubernetes.io/part-of: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-svc
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: payment-svc
+        app.kubernetes.io/part-of: platform
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: payment-svc
+          image: ghcr.io/nguyentuan2686/payment-svc
+          ports:
+            - {name: http, containerPort: 8085}
+          env:
+            - {name: PORT, value: "8085"}
+            - {name: DB_URL, value: "jdbc:postgresql://postgres.data.svc.cluster.local:5432/payment"}
+            - {name: KAFKA_BOOTSTRAP_SERVERS, value: "redpanda.data.svc.cluster.local:9092"}
+            - {name: IDENTITY_SVC_URL, value: "http://identity-svc.apps.svc.cluster.local:8084"}
+            - {name: SEPAY_WEBHOOK_AUTH, value: apikey}
+            # Fake receiving account: Plan 4 replaces these (overlay patch) before real money flows.
+            - {name: SEPAY_BANK_CODE, value: TEST BANK}
+            - {name: SEPAY_ACCOUNT_NUMBER, value: "0000000000"}
+            - {name: SEPAY_ACCOUNT_NAME, value: TEST BANK}
+            - {name: SEPAY_RECONCILE_ENABLED, value: "false"}
+            - {name: PAYPAL_MODE, value: fake}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc.cluster.local:4318"}
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
+            - {name: OTEL_SERVICE_NAME, value: payment-svc}
+            - {name: OTEL_METRIC_EXPORT_INTERVAL, value: "60000"}
+            - {name: OTEL_LOGS_EXPORTER, value: none} # logs reach Loki via the collector's filelog, not OTLP
+          envFrom:
+            - secretRef: {name: payment-svc-secrets}
+          resources:
+            requests: {cpu: 100m, memory: 512Mi}
+            limits: {memory: 512Mi}
+          startupProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 5
+            failureThreshold: 36 # 180 s
+          livenessProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
