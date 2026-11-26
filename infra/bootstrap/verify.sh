@@ -8,9 +8,9 @@
 #   sealed-controller-ready    Deployment kube-system/sealed-secrets-controller rolled out
 #   argocd-ready               every Deployment/StatefulSet in argocd has all replicas ready
 #   no-public-listeners        nothing listens on 0.0.0.0/[::]/* ports 80, 443, 8080; ufw is active, denies incoming
-#                              and allows only lo, tailscale0, the pod/service CIDRs and (SSH guard) 22/tcp, so 6443
+#                              and allows only lo, tailscale0, the pod/service CIDRs and (SSH guard) the sshd ports, so 6443
 #                              is reachable only from those
-#   ssh-kept-without-tailscale tailscale0 absent: ufw allows 22/tcp; tailscale0 up: it no longer does
+#   ssh-kept-without-tailscale Tailscale not connected: ufw allows every sshd port; connected: none of them is public
 #   second-run-no-changes      (--expect-unchanged) the log has no `CHANGED ` line and ends `bootstrap: 0 changed`
 set -uo pipefail
 
@@ -71,13 +71,13 @@ argocd_ready() {
   [ -z "$bad" ] || { reason="not ready: $bad"; return 1; }
 }
 
-tailscale_up() { local l re="[<,]UP[,>]"; l=$(ip -o link show tailscale0 2>/dev/null) && [[ "$l" =~ $re ]]; }
-
-# ufw user rules that may exist: anything else could open 6443 (or more) to the world.
-allowed_rule='^ufw allow (in on (lo|tailscale0)|from 10\.42\.0\.0/16|from 10\.43\.0\.0/16|22/tcp)$'
+# Same predicates as the bootstrap: tailscale_connected (logged in and online, not merely a tailscale0 link),
+# ssh_ports (every port sshd listens on) and managed_rule_regex (the ufw rules bootstrap owns).
+# shellcheck source=lib/hostnet.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/hostnet.sh"
 
 check_listeners_and_firewall() {
-  local listeners public status added extra
+  local listeners public status added extra ports
   if ! command -v ss >/dev/null 2>&1; then fail no-public-listeners "ss not found"; return; fi
   if ! command -v ufw >/dev/null 2>&1; then fail no-public-listeners "ufw not found"; return; fi
   listeners=$(ss -ltnH 2>&1) || { fail no-public-listeners "ss failed: $listeners"; return; }
@@ -87,21 +87,27 @@ check_listeners_and_firewall() {
   grep -q '^Status: active' <<<"$status" || { fail no-public-listeners "ufw is not active"; return; }
   grep -q '^Default: deny (incoming)' <<<"$status" || { fail no-public-listeners "ufw default incoming is not deny"; return; }
   added=$(ufw show added 2>&1) || { fail no-public-listeners "ufw show added failed: $added"; return; }
-  extra=$(grep '^ufw ' <<<"$added" | grep -Ev "$allowed_rule" | paste -sd';' -)
+  mapfile -t ports < <(ssh_ports)
+  # Any allow rule outside the managed set could open 6443 (or more) to the world.
+  extra=$(grep '^ufw ' <<<"$added" | grep -Ev "$(managed_rule_regex "${ports[@]}")" | paste -sd';' -)
   if [ -n "$extra" ]; then fail no-public-listeners "unexpected ufw rule(s): $extra"; return; fi
   ok no-public-listeners
 }
 
 check_ssh_guard() {
-  local added
+  local added ports p open=() closed=()
   if ! command -v ufw >/dev/null 2>&1; then fail ssh-kept-without-tailscale "ufw not found"; return; fi
   added=$(ufw show added 2>&1) || { fail ssh-kept-without-tailscale "ufw show added failed: $added"; return; }
-  if tailscale_up; then
-    if grep -qx 'ufw allow 22/tcp' <<<"$added"; then fail ssh-kept-without-tailscale "tailscale0 is up but 22/tcp is still public"
-    else ok "ssh-kept-without-tailscale (tailscale0 up, public 22 dropped)"; fi
+  mapfile -t ports < <(ssh_ports)
+  for p in "${ports[@]}"; do
+    if grep -qx "ufw allow $p/tcp" <<<"$added"; then open+=("$p"); else closed+=("$p"); fi
+  done
+  if tailscale_connected; then
+    if [ "${#open[@]}" -gt 0 ]; then fail ssh-kept-without-tailscale "Tailscale is connected but SSH port(s) $(IFS=,; echo "${open[*]}") are still public"
+    else ok "ssh-kept-without-tailscale (Tailscale connected, public SSH closed)"; fi
   else
-    if grep -qx 'ufw allow 22/tcp' <<<"$added"; then ok ssh-kept-without-tailscale
-    else fail ssh-kept-without-tailscale "tailscale0 is not up and ufw does not allow 22/tcp"; fi
+    if [ "${#closed[@]}" -gt 0 ]; then fail ssh-kept-without-tailscale "Tailscale is not connected and ufw does not allow sshd port(s) $(IFS=,; echo "${closed[*]}")"
+    else ok "ssh-kept-without-tailscale (sshd on $(IFS=,; echo "${ports[*]}"))"; fi
   fi
 }
 

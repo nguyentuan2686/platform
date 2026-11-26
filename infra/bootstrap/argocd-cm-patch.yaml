@@ -1,8 +1,10 @@
-# Applied by infra/bootstrap (lib/argocd.sh) server-side with its own field manager on top of Argo CD's install.yaml.
-# Application health: Argo CD >= 1.8 no longer assesses the health of an Application resource, so without this the
-# root app's sync waves (prod-sealed -1, prod-platform 0, prod-tunnel/prod-apps 1) would not wait for a child app to be
-# Healthy before syncing the next wave. A child carrying platform.dev/ci-manual-sync: "true" (set only by bootstrap's
-# GITOPS_CI_MODE=1 on the apps it leaves unsynced) counts as Healthy, so the root app can still become Healthy in CI.
+# Applied by infra/bootstrap (lib/argocd.sh render_argocd_cm) server-side with its own field manager on top of Argo
+# CD's install.yaml. Application health: Argo CD >= 1.8 no longer assesses the health of an Application resource, so
+# without this the root app's sync waves (prod-sealed -1, prod-platform 0, prod-tunnel/prod-apps 1) would not wait for
+# a child app to be Healthy before syncing the next wave.
+# The lines between `-- ci-mode-begin` and `-- ci-mode-end` are rendered only with GITOPS_CI_MODE=1: there, a child
+# carrying platform.dev/ci-manual-sync: "true" (set by bootstrap on the apps it leaves unsynced) counts as Healthy, so
+# the root app can still become Healthy. In prod the branch does not exist, so no annotation can mask a child's health.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,11 +15,13 @@ data:
     hs = {}
     hs.status = "Progressing"
     hs.message = ""
+    -- ci-mode-begin
     if obj.metadata.annotations ~= nil and obj.metadata.annotations["platform.dev/ci-manual-sync"] == "true" then
       hs.status = "Healthy"
       hs.message = "CI mode: left unsynced by infra/bootstrap"
       return hs
     end
+    -- ci-mode-end
     if obj.status ~= nil and obj.status.health ~= nil then
       hs.status = obj.status.health.status
       if obj.status.health.message ~= nil then

@@ -15,8 +15,21 @@ argocd_workloads_ready() {
   [ -n "$out" ] && ! awk '$1 != $2 {bad=1} END {exit !bad}' <<<"$out"
 }
 
+# render_argocd_cm: argocd-cm-patch.yaml, with the CI-only health branch (between `-- ci-mode-begin` and
+# `-- ci-mode-end`) kept only when GITOPS_CI_MODE=1. Prints the manifest on stdout.
+render_argocd_cm() {
+  local src="$BOOTSTRAP_DIR/argocd-cm-patch.yaml"
+  [ "$(grep -c -- '-- ci-mode-begin$' "$src")" = 1 ] && [ "$(grep -c -- '-- ci-mode-end$' "$src")" = 1 ] \
+    || die "$src: expected one ci-mode-begin and one ci-mode-end marker"
+  if [ "$GITOPS_CI_MODE" = 1 ]; then
+    grep -v -- '-- ci-mode-\(begin\|end\)$' "$src"
+  else
+    sed '/-- ci-mode-begin$/,/-- ci-mode-end$/d' "$src"
+  fi
+}
+
 step_argocd() {
-  local file="$CACHE_DIR/argocd-$ARGOCD_VERSION/install.yaml" what=() ns_file
+  local file="$CACHE_DIR/argocd-$ARGOCD_VERSION/install.yaml" what=() ns_file cm_file
   fetch_verified "https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_COMMIT/manifests/install.yaml" \
     "$(pin_sha ARGOCD)" "$file"
 
@@ -25,7 +38,10 @@ step_argocd() {
   if kube_sync "$ns_file" bootstrap-argocd; then what+=("namespace"); fi
   rm -f "$ns_file"
   if kube_sync "$file" bootstrap-argocd "$ARGOCD_NS"; then what+=("Argo CD $ARGOCD_VERSION"); fi
-  if kube_sync "$BOOTSTRAP_DIR/argocd-cm-patch.yaml" bootstrap-argocd-cm; then what+=("Application health customization"); fi
+  cm_file="$(mktemp)"
+  render_argocd_cm >"$cm_file"
+  if kube_sync "$cm_file" bootstrap-argocd-cm; then what+=("Application health customization"); fi
+  rm -f "$cm_file"
 
   kc wait --for=condition=Established --timeout=120s \
     crd/applications.argoproj.io crd/appprojects.argoproj.io >&2 || die "Argo CD CRDs not established"
