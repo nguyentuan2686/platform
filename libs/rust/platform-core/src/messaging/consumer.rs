@@ -427,6 +427,10 @@ const RECV_ERROR_LOG_EVERY: Duration = Duration::from_secs(30);
 /// A non-transport receive error (authorization, group, configuration) that persists this long with no message in
 /// between makes `run_consumer` return an error, so the service's supervisor restarts the client or the process.
 const RECV_ERROR_GIVE_UP_AFTER: Duration = Duration::from_secs(600);
+/// Two non-transport errors further apart than this are unrelated, not one persisting failure: the give-up window
+/// starts again. A failing client reports far more often (every `RECV_ERROR_PAUSE`, or librdkafka's reconnect backoff,
+/// 10s at most), so an idle topic with an occasional error never reaches the give-up.
+const RECV_ERROR_OTHER_GAP: Duration = Duration::from_secs(60);
 
 /// How a receive error is handled: `Transport` (broker unreachable, coordinator moving, topic not created yet) is
 /// retried for as long as it lasts, librdkafka reconnects by itself; `Fatal` (the client is unusable) stops the
@@ -470,10 +474,12 @@ struct RecvErrorDecision {
     give_up: bool,
 }
 
-/// Rate-limits receive-error logs and decides when to stop; reset by every received message.
+/// Rate-limits receive-error logs and decides when to stop; reset by every received message, and the give-up window
+/// also by a pause of more than [`RECV_ERROR_OTHER_GAP`] between non-transport errors.
 #[derive(Debug, Default)]
 struct RecvErrorGuard {
     first_other: Option<Instant>,
+    last_other: Option<Instant>,
     last_log: Option<Instant>,
     suppressed: u64,
 }
@@ -484,6 +490,13 @@ impl RecvErrorGuard {
             RecvErrorKind::Fatal => true,
             RecvErrorKind::Transport => false,
             RecvErrorKind::Other => {
+                if self
+                    .last_other
+                    .is_some_and(|t| now.duration_since(t) > RECV_ERROR_OTHER_GAP)
+                {
+                    self.first_other = None;
+                }
+                self.last_other = Some(now);
                 let first = *self.first_other.get_or_insert(now);
                 now.duration_since(first) >= RECV_ERROR_GIVE_UP_AFTER
             }
@@ -613,21 +626,62 @@ mod tests {
         assert!(d.log.is_some(), "the give-up error is always logged");
     }
 
+    /// Feeds an Other error every `step` from `from` until `until` (inclusive); returns the first give-up offset.
+    fn other_errors(
+        g: &mut RecvErrorGuard,
+        from: Instant,
+        step: Duration,
+        until: Duration,
+    ) -> Option<Duration> {
+        let mut at = Duration::ZERO;
+        while at <= until {
+            if g.on_error(from + at, RecvErrorKind::Other).give_up {
+                return Some(at);
+            }
+            at += step;
+        }
+        None
+    }
+
     #[test]
     fn persistent_other_error_gives_up_after_the_limit_and_a_message_resets() {
         let t0 = Instant::now();
         let mut g = RecvErrorGuard::default();
-        assert!(!g.on_error(t0, RecvErrorKind::Other).give_up);
-        let just_before = t0 + RECV_ERROR_GIVE_UP_AFTER.saturating_sub(Duration::from_secs(1));
-        assert!(!g.on_error(just_before, RecvErrorKind::Other).give_up);
+        // An error every second: one persisting failure, given up exactly at the limit.
+        let one_s = Duration::from_secs(1);
+        assert_eq!(
+            other_errors(&mut g, t0, one_s, RECV_ERROR_GIVE_UP_AFTER),
+            Some(RECV_ERROR_GIVE_UP_AFTER)
+        );
+        // A received message starts the window again.
         g.on_message();
-        assert!(
-            !g.on_error(t0 + RECV_ERROR_GIVE_UP_AFTER, RecvErrorKind::Other)
-                .give_up,
+        let t1 = t0 + RECV_ERROR_GIVE_UP_AFTER * 2;
+        let almost = RECV_ERROR_GIVE_UP_AFTER.saturating_sub(one_s);
+        assert_eq!(
+            other_errors(&mut g, t1, one_s, almost),
+            None,
             "reset by a message"
         );
-        let later = t0 + RECV_ERROR_GIVE_UP_AFTER * 2;
-        assert!(g.on_error(later, RecvErrorKind::Other).give_up);
+    }
+
+    #[test]
+    fn sparse_other_errors_never_give_up() {
+        let t0 = Instant::now();
+        let mut g = RecvErrorGuard::default();
+        // Unrelated errors on an idle topic, further apart than the gap: never one persisting failure.
+        let sparse = RECV_ERROR_OTHER_GAP + Duration::from_secs(1);
+        assert_eq!(
+            other_errors(&mut g, t0, sparse, RECV_ERROR_GIVE_UP_AFTER * 6),
+            None
+        );
+        // Two errors more than the give-up window apart, with no message between them.
+        let mut g = RecvErrorGuard::default();
+        assert!(!g.on_error(t0, RecvErrorKind::Other).give_up);
+        let after = t0 + RECV_ERROR_GIVE_UP_AFTER + Duration::from_secs(60);
+        assert!(
+            !g.on_error(after, RecvErrorKind::Other).give_up,
+            "a new window starts after a long pause"
+        );
     }
 
     #[test]
