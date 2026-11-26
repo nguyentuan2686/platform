@@ -618,7 +618,7 @@ mod tests {
         let t0 = Instant::now();
         let mut g = RecvErrorGuard::default();
         assert!(!g.on_error(t0, RecvErrorKind::Other).give_up);
-        let just_before = t0 + RECV_ERROR_GIVE_UP_AFTER - Duration::from_secs(1);
+        let just_before = t0 + RECV_ERROR_GIVE_UP_AFTER.saturating_sub(Duration::from_secs(1));
         assert!(!g.on_error(just_before, RecvErrorKind::Other).give_up);
         g.on_message();
         assert!(
