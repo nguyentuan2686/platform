@@ -9,3 +9,8 @@ spec:
         - name: payment-svc
           env:
             - {name: OTEL_METRIC_EXPORT_INTERVAL, value: "10000"}
+            # Fake receiving account (compose test values). Prod leaves these empty on purpose: SePay orders then
+            # fail with 503 upstream-unavailable (CreateOrderUseCase.java:73) instead of showing a bogus account.
+            - {name: SEPAY_BANK_CODE, value: TEST BANK}
+            - {name: SEPAY_ACCOUNT_NUMBER, value: "0000000000"}
+            - {name: SEPAY_ACCOUNT_NAME, value: TEST BANK}

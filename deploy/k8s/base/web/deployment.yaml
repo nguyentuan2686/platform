@@ -34,7 +34,7 @@ spec:
             - {name: PAYMENT_SVC_URL, value: "http://payment-svc.apps.svc.cluster.local:8085"}
             # Runtime same-origin check. The image also bakes WEB_ORIGIN at build time (Docker build arg, canonical URLs
             # and sitemap), so the CD build must pass the same public origin; the overlay sets the runtime value.
-            - {name: WEB_ORIGIN, value: "http://localhost:3000"}
+            - {name: WEB_ORIGIN, value: "https://app.example.invalid"}
             - {name: COOKIE_SECURE, value: "1"}
             - {name: GOOGLE_LOGIN, value: "0"}
             - {name: QA_STREAM_TIMEOUT_MS, value: "95000"}

@@ -14,6 +14,7 @@ spec:
       labels: {app: mailpit}
     spec:
       automountServiceAccountToken: false
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
       containers:
         - name: mailpit
           image: axllent/mailpit:v1.21.8

@@ -74,6 +74,14 @@ def ns: (.metadata.namespace // "default");
 # prod-no-secrets: prod builds contain no plaintext Secret objects (Plan 4 supplies SealedSecrets).
 JQ_NOSECRET='.[] | select(type == "object" and .kind == "Secret") | "POLICY: prod-no-secrets Secret/\(.metadata.name): plaintext Secret in a prod build (use SealedSecret)"'
 
+# prod-no-fake-sepay: the prod build must not carry the fake compose receiving account (an unset account makes
+# SePay orders fail safe with 503; a fake one would be shown to real users).
+JQ_NOFAKESEPAY='.[] | select(type == "object") | . as $o
+  | [.. | objects | select(has("name") and has("value") and (.value | type) == "string")
+      | select(.name | test("^SEPAY_(BANK_CODE|ACCOUNT_NUMBER|ACCOUNT_NAME)$"))
+      | select(.value == "TEST BANK" or (.value | test("^0+$")))]
+  | .[] | "POLICY: prod-no-fake-sepay \($o.kind)/\($o.metadata.name): \(.name) has the fake test value \"\(.value)\""'
+
 # prod-images: every app (namespace apps) image in prod is ghcr.io/nguyentuan2686/<workload name>:<tag>.
 JQ_PRODIMAGES="$JQ_DEFS"'
 .[] | select(type == "object" and (.kind | IN("Deployment","StatefulSet","DaemonSet","Job","CronJob"))) | select(ns == "apps") as $o
@@ -114,6 +122,8 @@ policy() { # $1 = dir; stdin = kustomize output
       res=$(jq -r "$JQ_NOSECRET" <<<"$json") || { echo "POLICY: internal $1: prod-no-secrets check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
       res=$(jq -r "$JQ_PRODIMAGES" <<<"$json") || { echo "POLICY: internal $1: prod-images check failed"; return 1; }
+      [ -n "$res" ] && echo "$res"
+      res=$(jq -r "$JQ_NOFAKESEPAY" <<<"$json") || { echo "POLICY: internal $1: prod-no-fake-sepay check failed"; return 1; }
       [ -n "$res" ] && echo "$res" ;;
     e2e)
       res=$(jq -r "$JQ_SECRETREFS" <<<"$json") || { echo "POLICY: internal $1: secret-refs check failed"; return 1; }
