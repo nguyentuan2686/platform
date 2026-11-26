@@ -1,5 +1,7 @@
 # infra/bootstrap
 
+For the full go-live order (what to prepare, sealing the secrets, GitHub secrets, first deploy, rollback and moving to a new host), follow [`docs/runbooks/go-live.md`](../../docs/runbooks/go-live.md). This README covers the bootstrap script itself.
+
 Idempotent setup of the single prod host: Ubuntu 24.04, amd64 or arm64. It assumes a fresh host. A k3s that bootstrap did not set up is refused unless you pass `--adopt`. Run it as root from a checkout of this repo:
 
 ```sh

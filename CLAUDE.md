@@ -20,9 +20,9 @@ knowledge/tuvi/   # reading-tuvi knowledge base (jsonl), imported at startup
 services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust), reading-tuvi (Java), identity-svc (Java), payment-svc (Java), web (Next.js)}
 libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service}
-deploy/{local/docker-compose.yml, k8s/{base,overlays/{prod,e2e},platform}, argocd}   # k8s: Kustomize; overlays/e2e = CI kind test values
-infra/bootstrap/   # idempotent host setup: k3s + argocd + sealed-secrets
-scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, verify-deploy, public-url
+deploy/{local/docker-compose.yml, k8s/{base,platform,components/{cloudflared-quick,cloudflared-named},overlays/{e2e,prod/{platform,tunnel,apps,sealed,domain}}}, argocd/{root.yaml,apps/}}   # k8s: Kustomize; overlays/e2e = CI kind test values; overlays/prod = Argo CD slices (prod-sealed/-platform/-tunnel/-apps), secrets.tsv = prod secret inventory, domain/domain.yaml = APP_DOMAIN
+infra/bootstrap/   # idempotent prod host setup (x86/ARM): ufw, k3s, Tailscale, Sealed Secrets, Argo CD, gitops root; pins in versions.env
+scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh; tests in scripts/test/*.test.sh
 docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 .github/{workflows, dependabot.yml}
 ```
@@ -65,6 +65,13 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
 - `docker run --rm -v "$PWD:/w" -w /w alpine/k8s:1.33.4 bash scripts/k8s-validate.sh` - k8s manifests: kustomize build + kubeconform + policy checks + dashboards (CI job `k8s-manifests`; `--self-test` checks the fixtures)
 - kind e2e of the full stack (deploy `overlays/e2e`, every smoke script, then `scripts/e2e-observability.sh`: cross-service trace, RED/consumer/outbox/consumer-lag metrics, logs with trace_id, dashboards) runs only in CI job `k8s-e2e` (`.github/workflows/_k8s-e2e.yml`: every push to main, PRs touching `deploy/k8s/**`, `deploy/local/**`, `scripts/**` or the e2e workflow); never run kind locally. On failure read the `k8s-e2e-diagnostics` artifact first
+- Prod host and GitOps (go-live order, secrets and GitHub App setup: `docs/runbooks/go-live.md`; ADR 0005). Bootstrap runs only in CI job `bootstrap` or on the prod host, never on the dev machine: `sudo --preserve-env=TS_AUTHKEY infra/bootstrap/bootstrap.sh` then `sudo infra/bootstrap/verify.sh` (`infra/bootstrap/README.md`)
+- `scripts/seal-secrets.sh --cert deploy/k8s/overlays/prod/sealed/sealing-cert.crt` - seal `deploy/k8s/overlays/prod/secrets.local/*.env` (gitignored) per `secrets.tsv` into `overlays/prod/sealed/`; then `bash scripts/k8s-validate.sh --require-sealed deploy/k8s/overlays/prod`
+- `scripts/public-url` - the public URL of prod (quick tunnel log, else `https://<APP_DOMAIN>`); needs kubectl to prod
+- `scripts/pg-restore.sh --db <name> [--stamp latest]` - restore a backup into `<db>_restore_check` (drill); `--target <db> --overwrite` restores over the source on a host move
+- `bash scripts/alerts-promtool.sh` - unit tests of the Grafana alert rules' PromQL (pinned promtool image)
+- `scripts/verify-deploy.sh --app <apps> --revision <sha> [--no-smoke]` - wait until the Argo CD apps are Synced + Healthy at a commit, then smoke web via a port-forward to Traefik with `Host: <APP_DOMAIN>`; `scripts/deploy-rollback.sh --sha <bump commit> [--push]` reverts one CD bump commit (exit 2 refused, 3 conflict)
+- CI jobs `ops-scripts` (shellcheck, actionlint, action SHA pins, every `scripts/test/*.test.sh`, promtool) and `bootstrap` (bootstrap twice + verify on x86 and ARM runners). Workflow `cd` (`.github/workflows/cd.yml`, after a green `ci` on main): `gate` -> `bump` (prod image tags to `sha-<commit>` as the CD GitHub App) -> `verify-deploy` (over Tailscale; on failure revert + `deploy-failed` issue). Each skips with a `::notice::` until its secrets are set
 
 ## Testing
 - A test must wait on the observable end state with a deadline, never on "an operation returned 0/empty once" or a fixed sleep. Tight timeouts in a test must not turn a slow first call (fresh Kafka topic, container warm-up) into a failure. Loops end on state, not on a return value. A flake that recurs gets a fix, not a rerun.

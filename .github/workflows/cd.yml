@@ -238,3 +238,126 @@ jobs:
             check_and_commit
           done
           { echo "pushed=$pushed"; echo "bump_sha=$(git rev-parse HEAD)"; } >>"$GITHUB_OUTPUT"
+      - name: Deployed without verification
+        if: steps.push.outputs.pushed == 'true' && needs.gate.outputs.verify != 'true'
+        run: |
+          echo "::warning::deployed without verification: Tailscale/kubeconfig secrets not set (see docs/runbooks/go-live.md)"
+
+  # Spec 7 CD 3-4: wait for Argo CD to sync the bump, smoke-test through the internal ingress, and on failure revert
+  # the bump commit and open an issue. Inside cd.yml (not a separate workflow_run workflow) because only this run knows
+  # whether a bump was pushed. Reaches the cluster API over Tailscale (no public ports, spec 11).
+  verify-deploy:
+    needs: [gate, bump]
+    if: needs.bump.outputs.pushed == 'true' && needs.gate.outputs.verify == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ needs.gate.outputs.sha }}
+      BUMP_SHA: ${{ needs.bump.outputs.bump_sha }}
+      # Same minor as the prod k3s pin (infra/bootstrap/versions.env K3S_VERSION v1.37.2+k3s1).
+      KUBECTL_VERSION: v1.37.2
+      # sha256 of linux/amd64 kubectl, as published at dl.k8s.io/release/<version>/bin/linux/amd64/kubectl.sha256
+      KUBECTL_SHA256: c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4
+    steps:
+      # Trusted code only: main of this repo (it contains the bump commit), never the triggering run's head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0 # verify-deploy --allow-descendant checks ancestry (and fetches main) here
+      - name: Tailscale pin (infra/bootstrap/versions.env)
+        id: pins
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          . infra/bootstrap/versions.env
+          { echo "tailscale_version=$TAILSCALE_VERSION"; echo "tailscale_sha256=$TAILSCALE_SHA256_amd64"; } >>"$GITHUB_OUTPUT"
+      - name: Join the tailnet (tag:ci)
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: ${{ steps.pins.outputs.tailscale_version }}
+          sha256sum: ${{ steps.pins.outputs.tailscale_sha256 }}
+      - name: Prod kubeconfig
+        env:
+          PROD_KUBECONFIG: ${{ secrets.PROD_KUBECONFIG }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$PROD_KUBECONFIG" >"$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >>"$GITHUB_ENV"
+      - name: Install kubectl (pinned, sha256 verified)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_SHA256}  $RUNNER_TEMP/kubectl" | sha256sum -c -
+          sudo install -m 0755 "$RUNNER_TEMP/kubectl" /usr/local/bin/kubectl
+          kubectl version --client
+      - name: Verify the deploy (Argo CD synced + healthy, smoke via Traefik)
+        id: verify
+        run: |
+          set -euo pipefail
+          bash scripts/verify-deploy.sh --app prod-platform,prod-tunnel,prod-apps --revision "$BUMP_SHA" --allow-descendant \
+            2>&1 | tee "$RUNNER_TEMP/verify.out"
+      - name: CD GitHub App token (contents + issues write on this repo only)
+        id: app
+        if: failure() && steps.verify.outcome == 'failure'
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ vars.CD_APP_ID }}
+          private-key: ${{ secrets.CD_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+      - name: Roll back (revert the bump commit)
+        id: rollback
+        if: failure() && steps.verify.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # A writable clone of the current main, separate from the trusted checkout the scripts run from.
+          git clone -q "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$RUNNER_TEMP/rollback"
+          uid="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
+          git -C "$RUNNER_TEMP/rollback" config user.name "${APP_SLUG}[bot]"
+          git -C "$RUNNER_TEMP/rollback" config user.email "${uid}+${APP_SLUG}[bot]@users.noreply.github.com"
+          rc=0
+          bash scripts/deploy-rollback.sh --sha "$BUMP_SHA" --repo "$RUNNER_TEMP/rollback" --push \
+            >"$RUNNER_TEMP/rollback.out" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/rollback.out"
+          echo "rc=$rc" >>"$GITHUB_OUTPUT"
+          exit "$rc"
+      - name: Open a deploy-failed issue
+        id: issue
+        if: failure() && steps.verify.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ROLLBACK_RC: ${{ steps.rollback.outputs.rc }}
+        run: |
+          set -euo pipefail
+          case "$ROLLBACK_RC" in
+            0) rollback="Rolled back: the bump commit was reverted on main; Argo CD syncs the previous tags." ;;
+            3) rollback="NOT rolled back: the revert conflicted (ROLLBACK: conflict, manual action needed)." ;;
+            *) rollback="NOT rolled back: deploy-rollback.sh failed (rc=${ROLLBACK_RC:-not run}); see the run log." ;;
+          esac
+          {
+            echo "verify-deploy failed for bump commit \`$BUMP_SHA\` (images \`sha-${SHA:0:7}\`)."
+            echo
+            echo "- Run: $RUN_URL"
+            echo "- $rollback"
+            echo "- Runbook: docs/runbooks/go-live.md (Rollback)"
+            echo
+            echo "Last 100 lines of verify-deploy:"
+            echo
+            echo '```'
+            tail -n 100 "$RUNNER_TEMP/verify.out" 2>/dev/null || echo "(no verify-deploy output)"
+            echo '```'
+          } >"$RUNNER_TEMP/issue.md"
+          gh label create deploy-failed --color B60205 --description "CD verify-deploy failed" --force
+          gh issue create --title "deploy failed: sha-${SHA:0:7}" --label deploy-failed --body-file "$RUNNER_TEMP/issue.md"
