@@ -18,3 +18,6 @@ Thumbs.db
 .superpowers/
 # Plaintext prod secret inputs for scripts/seal-secrets.sh (never commit)
 deploy/k8s/overlays/prod/secrets.local/
+# Kubeconfigs and Sealed Secrets key backups (docs/runbooks/go-live.md): never in the repo
+*.kubeconfig
+sealing-key*.json

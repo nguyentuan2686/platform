@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hard check: every `uses:` is a local path (./...) or <owner>/<repo>[/<path>]@<40 lowercase hex>.
-# Usage: scripts/check-action-pins.sh [file...]   (default: .github/workflows/*.yml and .github/**/action.yml)
+# Usage: scripts/check-action-pins.sh [file...]   (default: .github/workflows/*.yml, *.yaml and .github/**/action.yml)
 # Prints `PIN: <file>:<line>: <value>` for each violation and exits 1; prints `OK action-pins` otherwise.
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if [ "$#" -gt 0 ]; then
 else
   files=()
   while IFS= read -r f; do files+=("$f"); done < <(
-    { ls .github/workflows/*.yml 2>/dev/null || true; find .github -name action.yml -o -name action.yaml 2>/dev/null; } | sort -u
+    { ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null || true; find .github -name action.yml -o -name action.yaml 2>/dev/null; } | sort -u
   )
 fi
 
