@@ -1,21 +1,11 @@
 import type { Metadata } from "next";
-import { Charm, Ma_Shan_Zheng, Noto_Serif, Noto_Serif_Display } from "next/font/google";
 import { PassBanner } from "@/components/PassBanner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { TabBar } from "@/components/TabBar";
 import { cfg } from "@/lib/config";
+import "@/styles/fonts.css";
 import "@/styles/theme.css";
-
-const charm = Charm({ weight: ["400", "700"], subsets: ["vietnamese", "latin"], variable: "--font-charm", display: "swap" });
-const notoSerif = Noto_Serif({ subsets: ["vietnamese", "latin"], variable: "--font-noto-serif", display: "swap" });
-const notoSerifDisplay = Noto_Serif_Display({
-  weight: ["500", "700"],
-  subsets: ["vietnamese", "latin"],
-  variable: "--font-noto-serif-display",
-  display: "swap",
-});
-const maShanZheng = Ma_Shan_Zheng({ weight: "400", subsets: ["latin"], variable: "--font-glyph", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(cfg().webOrigin),
@@ -25,10 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="vi"
-      className={`${charm.variable} ${notoSerif.variable} ${notoSerifDisplay.variable} ${maShanZheng.variable}`}
-    >
+    <html lang="vi">
       <body>
         <SiteHeader />
         <PassBanner />
