@@ -13,6 +13,8 @@
 #   SEALED_SECRETS_KEY_DIR  dir with tls.crt + tls.key of an existing sealing key to restore (host migration)
 #   BOOTSTRAP_FIREWALL      0 = leave ufw alone (default 1)
 #   BOOTSTRAP_ADOPT         1 = same as --adopt (default 0)
+#   BOOTSTRAP_CLOSE_PUBLIC_SSH  1 = remove the public SSH rules, honoured only while Tailscale is connected; set it
+#                           only after SSH over the tailnet is proven to work (README.md). Default 0: public SSH stays.
 # Every step prints exactly one of `CHANGED <component>: <what>`, `OK <component>` or `SKIP <component>: <reason>` on
 # stdout (details go to stderr); the last line is `bootstrap: <n> changed`. A second run on an unchanged host prints
 # `bootstrap: 0 changed`. Pins: versions.env. Checks: verify.sh. Details: README.md.
@@ -56,6 +58,9 @@ done
 case "$GITOPS_CI_MODE" in 0 | 1) ;; *) die "GITOPS_CI_MODE must be 0 or 1" ;; esac
 case "$BOOTSTRAP_FIREWALL" in 0 | 1) ;; *) die "BOOTSTRAP_FIREWALL must be 0 or 1" ;; esac
 case "$BOOTSTRAP_ADOPT" in 0 | 1) ;; *) die "BOOTSTRAP_ADOPT must be 0 or 1" ;; esac
+BOOTSTRAP_CLOSE_PUBLIC_SSH="${BOOTSTRAP_CLOSE_PUBLIC_SSH:-0}"
+case "$BOOTSTRAP_CLOSE_PUBLIC_SSH" in 0 | 1) ;; *) die "BOOTSTRAP_CLOSE_PUBLIC_SSH must be 0 or 1" ;; esac
+export BOOTSTRAP_CLOSE_PUBLIC_SSH
 [[ "$TS_HOSTNAME" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || die "TS_HOSTNAME must be a DNS label: $TS_HOSTNAME"
 if [ -n "$SEALED_SECRETS_KEY_DIR" ]; then
   [ -d "$SEALED_SECRETS_KEY_DIR" ] || die "SEALED_SECRETS_KEY_DIR $SEALED_SECRETS_KEY_DIR is not a directory"
@@ -74,8 +79,11 @@ esac
 export ARCH
 
 note "bootstrap: arch $ARCH, revision $GITOPS_REVISION, ci mode $GITOPS_CI_MODE"
-step_k3s
+# k3s refusals first (host unchanged when refused), then the firewall before k3s exists, so 6443/10250 are never
+# reachable from outside, not even during the first run.
+k3s_preflight
 step_firewall
+step_k3s
 step_tailscale
 step_sealed
 step_argocd

@@ -26,6 +26,13 @@ sys.exit(0 if s.get("BackendState") == "Running" and me.get("Online") is True an
 ' <<<"$s"
 }
 
+# public_ssh_closing: true only when the operator opted in (BOOTSTRAP_CLOSE_PUBLIC_SSH=1, after checking that SSH over
+# the tailnet works) AND Tailscale is connected. Connected alone never closes public SSH: on a cloud VM that would also
+# cut the provider's browser SSH/IAP, and nothing proves the operator's own device can reach the node over the tailnet.
+public_ssh_closing() {
+  [ "${BOOTSTRAP_CLOSE_PUBLIC_SSH:-0}" = 1 ] && tailscale_connected
+}
+
 # ssh_ports: every TCP port sshd listens on, one per line, sorted. Union of `sshd -T` (sshd_config), `ss -ltnpH`
 # (listening sockets owned by sshd) and ssh.socket's ListenStream (Ubuntu 24.04 socket activation, where the socket
 # belongs to systemd, not sshd). Falls back to 22 when none of them answers.

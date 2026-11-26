@@ -24,6 +24,8 @@ lib() { # run "$@" with the bootstrap libs sourced and $tmp/bin first on PATH
     . "$root/infra/bootstrap/lib/k3s.sh"
     # shellcheck source=../../infra/bootstrap/lib/tailscale.sh
     . "$root/infra/bootstrap/lib/tailscale.sh"
+    # shellcheck source=../../infra/bootstrap/lib/firewall.sh
+    . "$root/infra/bootstrap/lib/firewall.sh"
     # shellcheck source=../../infra/bootstrap/lib/argocd.sh
     . "$root/infra/bootstrap/lib/argocd.sh"
     PATH="$tmp/bin:$PATH"
@@ -144,6 +146,47 @@ argocd_cm_ci_branch_only_in_ci_mode() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+fake_ufw() { # ufw that keeps its user rules in $tmp/ufw.rules
+  : >"$tmp/ufw.rules"
+  fake ufw 'db="$FAKE_UFW_DB"; touch "$db"
+case "$1" in
+  status) echo "Status: active"; echo "Default: deny (incoming), allow (outgoing), deny (routed)" ;;
+  show) echo "Added user rules (see '"'"'ufw status'"'"' for running firewall):"; cat "$db" ;;
+  default | --force) ;;
+  allow) r="ufw $*"; grep -qxF "$r" "$db" || echo "$r" >>"$db" ;;
+  delete) shift; r="ufw $*"; grep -vxF "$r" "$db" >"$db.t" || true; mv "$db.t" "$db" ;;
+  *) echo "fake ufw: unexpected $*" >&2; exit 2 ;;
+esac'
+}
+
+# fw <connected 0|1> <close flag 0|1>: run firewall_apply + firewall_ssh_notice against the fake ufw.
+fw() {
+  if [ "$1" = 1 ]; then fake tailscale "echo '{\"BackendState\":\"Running\",\"TailscaleIPs\":[\"100.64.0.1\"],\"Self\":{\"Online\":true}}'"
+  else fake tailscale "echo '{\"BackendState\":\"NeedsLogin\",\"TailscaleIPs\":[],\"Self\":{\"Online\":false}}'"; fi
+  FAKE_UFW_DB="$tmp/ufw.rules" BOOTSTRAP_CLOSE_PUBLIC_SSH="$2" lib eval 'firewall_apply || true; firewall_ssh_notice' >"$tmp/notice" 2>&1 \
+    || fail "${FUNCNAME[1]}" "firewall_apply failed: $(cat "$tmp/notice")"
+}
+
+public_ssh_closes_only_on_opt_in_while_connected() {
+  if ! command -v python3 >/dev/null 2>&1; then echo "skip ${FUNCNAME[0]} (no python3)"; return; fi
+  reset_fakes; fake_ufw
+  fake sshd 'echo "port 22"'; fake ss 'exit 1'; fake systemctl 'exit 1'
+  fw 0 0
+  grep -qx 'ufw allow 22/tcp' "$tmp/ufw.rules" || fail "${FUNCNAME[0]}" "not connected: 22/tcp not allowed"
+  grep -q 'public SSH kept on 22/tcp (Tailscale not connected)' "$tmp/notice" || fail "${FUNCNAME[0]}" "notice: $(cat "$tmp/notice")"
+  fw 1 0
+  grep -qx 'ufw allow 22/tcp' "$tmp/ufw.rules" || fail "${FUNCNAME[0]}" "connected without opt-in closed public SSH"
+  grep -q '^::notice::firewall: public SSH kept on 22/tcp. Tailscale is connected: check SSH over the tailnet, then re-run with BOOTSTRAP_CLOSE_PUBLIC_SSH=1' "$tmp/notice" \
+    || fail "${FUNCNAME[0]}" "notice: $(cat "$tmp/notice")"
+  fw 0 1
+  grep -qx 'ufw allow 22/tcp' "$tmp/ufw.rules" || fail "${FUNCNAME[0]}" "opt-in without a connected Tailscale closed public SSH"
+  fw 1 1
+  if grep -qx 'ufw allow 22/tcp' "$tmp/ufw.rules"; then fail "${FUNCNAME[0]}" "opt-in while connected kept public SSH"; fi
+  grep -q '^::notice::firewall: public SSH closed on 22/tcp' "$tmp/notice" || fail "${FUNCNAME[0]}" "notice: $(cat "$tmp/notice")"
+  grep -qx 'ufw allow from 10.42.0.0/16' "$tmp/ufw.rules" || fail "${FUNCNAME[0]}" "pod CIDR rule missing"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 ssh_ports_union_of_sshd_ss_and_socket
 ssh_ports_falls_back_to_22
 managed_rules_cover_ssh_ports_only
@@ -152,3 +195,4 @@ k3s_existing_host_decisions
 k3s_config_marker_is_recognised
 tailscale_package_install_is_used_as_is
 argocd_cm_ci_branch_only_in_ci_mode
+public_ssh_closes_only_on_opt_in_while_connected

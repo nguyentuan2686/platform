@@ -69,6 +69,16 @@ k3s_config_kind() { # $1 = config path -> absent | ours | foreign
   else echo foreign; fi
 }
 
+# k3s_preflight: every k3s refusal (foreign install, newer version) before the host is changed at all; bootstrap.sh
+# runs it before the firewall step, so a refused host is left exactly as it was. Sets K3S_INSTALLED, K3S_CONFIG_KIND
+# and K3S_DECISION for step_k3s.
+k3s_preflight() {
+  K3S_INSTALLED="$(k3s_installed_version)"
+  K3S_CONFIG_KIND="$(k3s_config_kind /etc/rancher/k3s/config.yaml)"
+  K3S_DECISION="$(k3s_existing_decision "$K3S_INSTALLED" "$K3S_CONFIG_KIND" "$BOOTSTRAP_ADOPT")"
+  case "$K3S_DECISION" in refuse:*) die "${K3S_DECISION#refuse:}" ;; esac
+}
+
 k3s_node_ready() {
   local s
   s=$(kc get nodes -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}') || return 1
@@ -81,10 +91,8 @@ step_k3s() {
   [ "$ARCH" = arm64 ] && bin_name="k3s-arm64"
   tag_url="${K3S_VERSION//+/%2B}"
 
-  installed="$(k3s_installed_version)"
-  kind="$(k3s_config_kind "$cfg_dir/config.yaml")"
-  decision="$(k3s_existing_decision "$installed" "$kind" "$BOOTSTRAP_ADOPT")"
-  case "$decision" in refuse:*) die "${decision#refuse:}" ;; esac
+  k3s_preflight # normally already run by bootstrap.sh before the firewall; cheap and idempotent
+  installed="$K3S_INSTALLED" kind="$K3S_CONFIG_KIND" decision="$K3S_DECISION"
   if [ "$kind" = foreign ]; then
     cp -p "$cfg_dir/config.yaml" "$cfg_dir/config.yaml.pre-bootstrap.$(date -u +%Y%m%dT%H%M%SZ)"
     note "k3s: adopting; the previous config.yaml was saved next to it"

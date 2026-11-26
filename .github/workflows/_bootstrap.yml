@@ -45,6 +45,15 @@ jobs:
           sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
             infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run1.log"
 
+      - name: firewall-before-k3s
+        run: |
+          # ufw must be up before k3s exists, so 6443/10250 are never reachable from outside, even on the first run.
+          steps=$(grep -E '^(CHANGED|OK|SKIP) ' "$RUNNER_TEMP/run1.log" | cut -d' ' -f2 | tr -d ':')
+          first="${steps%%$'\n'*}"
+          [ "$first" = firewall ] || { echo "FAIL firewall-before-k3s: first step was [$first]"; exit 1; }
+          grep -qx 'CHANGED firewall: ufw rules' "$RUNNER_TEMP/run1.log" || { echo "FAIL firewall-before-k3s: firewall did not enable ufw on the fresh runner"; exit 1; }
+          echo "OK firewall-before-k3s"
+
       - name: Bootstrap (run 2, must change nothing)
         run: |
           sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \

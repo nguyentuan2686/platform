@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks a host set up by infra/bootstrap/bootstrap.sh (run as root, like the bootstrap).
-# Usage: sudo infra/bootstrap/verify.sh [--expect-unchanged <log>]
+# Usage: sudo [BOOTSTRAP_CLOSE_PUBLIC_SSH=1] infra/bootstrap/verify.sh [--expect-unchanged <log>]
 # Prints `OK <check>` or `FAIL <check>: <reason>` per check and exits 1 if any check failed (all checks run, so one
 # run shows the whole picture). Cluster checks are deadline loops on observable state (VERIFY_DEADLINE_S, default 180).
 #   k3s-ready                  every node Ready
@@ -10,7 +10,8 @@
 #   no-public-listeners        nothing listens on 0.0.0.0/[::]/* ports 80, 443, 8080; ufw is active, denies incoming
 #                              and allows only lo, tailscale0, the pod/service CIDRs and (SSH guard) the sshd ports, so 6443
 #                              is reachable only from those
-#   ssh-kept-without-tailscale Tailscale not connected: ufw allows every sshd port; connected: none of them is public
+#   ssh-kept-without-tailscale ufw allows every sshd port, unless BOOTSTRAP_CLOSE_PUBLIC_SSH=1 (same value as for the
+#                              bootstrap run) and Tailscale is connected: then none of them is public
 #   second-run-no-changes      (--expect-unchanged) the log has no `CHANGED ` line and ends `bootstrap: 0 changed`
 set -uo pipefail
 
@@ -102,11 +103,12 @@ check_ssh_guard() {
   for p in "${ports[@]}"; do
     if grep -qx "ufw allow $p/tcp" <<<"$added"; then open+=("$p"); else closed+=("$p"); fi
   done
-  if tailscale_connected; then
-    if [ "${#open[@]}" -gt 0 ]; then fail ssh-kept-without-tailscale "Tailscale is connected but SSH port(s) $(IFS=,; echo "${open[*]}") are still public"
-    else ok "ssh-kept-without-tailscale (Tailscale connected, public SSH closed)"; fi
+  if public_ssh_closing; then
+    if [ "${#open[@]}" -gt 0 ]; then fail ssh-kept-without-tailscale "BOOTSTRAP_CLOSE_PUBLIC_SSH=1 and Tailscale connected, but SSH port(s) $(IFS=,; echo "${open[*]}") are still public"
+    else ok "ssh-kept-without-tailscale (opted in, Tailscale connected: public SSH closed)"; fi
   else
-    if [ "${#closed[@]}" -gt 0 ]; then fail ssh-kept-without-tailscale "Tailscale is not connected and ufw does not allow sshd port(s) $(IFS=,; echo "${closed[*]}")"
+    if [ "${#closed[@]}" -gt 0 ]; then fail ssh-kept-without-tailscale "public SSH must stay open (no BOOTSTRAP_CLOSE_PUBLIC_SSH=1 or Tailscale not connected), but ufw does not allow sshd port(s) $(IFS=,; echo "${closed[*]}")"
+    elif tailscale_connected; then ok "ssh-kept-without-tailscale (Tailscale connected, public SSH kept until BOOTSTRAP_CLOSE_PUBLIC_SSH=1; sshd on $(IFS=,; echo "${ports[*]}"))"
     else ok "ssh-kept-without-tailscale (sshd on $(IFS=,; echo "${ports[*]}"))"; fi
   fi
 }

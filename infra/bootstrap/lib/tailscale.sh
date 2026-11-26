@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # Step tailscale (only with TS_AUTHKEY): pinned static tarball (unless Tailscale is already installed some other way),
 # tailscaled as a systemd unit, `tailscale up` (Tailscale SSH off: plain sshd over the tailnet). Once tailscaled is
-# connected (lib/hostnet.sh tailscale_connected), the firewall is converged again, which closes public SSH.
+# connected (lib/hostnet.sh tailscale_connected), the firewall is converged again. That closes public SSH only with the
+# explicit opt-in BOOTSTRAP_CLOSE_PUBLIC_SSH=1 (lib/hostnet.sh public_ssh_closing).
 
 # Written when bootstrap installed the tarball, so a later run knows /usr/bin/tailscale is its own.
 TAILSCALE_MARKER="${TAILSCALE_MARKER:-/var/lib/platform-bootstrap/tailscale-tarball}"
@@ -58,8 +59,13 @@ step_tailscale() {
   fi
   wait_until 120 "tailscaled to be logged in and connected" tailscale_connected
 
-  # Converge the firewall now that Tailscale is connected: this closes public SSH. Reported in this line, so the
-  # firewall component keeps exactly one status line per run.
-  if [ "$BOOTSTRAP_FIREWALL" = 1 ] && firewall_apply; then what+=("public SSH closed"); fi
+  # Converge the firewall now that Tailscale is connected. This closes public SSH only with BOOTSTRAP_CLOSE_PUBLIC_SSH=1
+  # (public_ssh_closing). Reported in this line, so the firewall component keeps exactly one status line per run.
+  if [ "$BOOTSTRAP_FIREWALL" = 1 ]; then
+    if firewall_apply; then
+      if public_ssh_closing; then what+=("public SSH closed"); else what+=("firewall converged"); fi
+    fi
+  fi
   if [ "${#what[@]}" -gt 0 ]; then status_changed tailscale "$(IFS=,; echo "${what[*]}")"; else status_ok tailscale; fi
+  if [ "$BOOTSTRAP_FIREWALL" = 1 ]; then firewall_ssh_notice; fi
 }
