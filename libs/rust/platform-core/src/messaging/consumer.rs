@@ -27,11 +27,12 @@ use std::time::{Duration, Instant};
 use anyhow::Context as _;
 use opentelemetry::propagation::Extractor;
 use rdkafka::consumer::{CommitMode, Consumer as _, StreamConsumer};
+use rdkafka::error::{KafkaError, RDKafkaErrorCode};
 use rdkafka::message::{Headers as _, OwnedHeaders, OwnedMessage};
 use rdkafka::{ClientConfig, Message as _, Offset, TopicPartitionList};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn, Instrument as _, Span};
+use tracing::{debug, error, info, warn, Instrument as _, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use super::idempotency::{process_once, Outcome};
@@ -127,6 +128,7 @@ pub async fn run_consumer(
         finished: Mutex::default(),
         metrics: ConsumerMetrics::global(),
     };
+    let mut recv_errors = RecvErrorGuard::default();
     loop {
         // The borrowed message is detached immediately: it is not `Send` and must not live across
         // an await point of this (spawned) future.
@@ -137,19 +139,37 @@ pub async fn run_consumer(
         };
         match received {
             Ok(msg) => {
+                recv_errors.on_message();
                 let span = consumer_span(&msg);
                 if runner.process(&msg).instrument(span).await == Flow::Stop {
                     break;
                 }
             }
             Err(e) => {
-                warn!(
-                    error = %e,
-                    error_type = "KafkaReceiveFailed",
-                    topic = %cfg.topic,
-                    backoff_ms = duration_ms(RECV_ERROR_PAUSE),
-                    "kafka receive failed, retrying"
-                );
+                let kind = classify_recv_error(&e);
+                let decision = recv_errors.on_error(Instant::now(), kind);
+                if decision.give_up {
+                    error!(
+                        error = %e,
+                        error_type = "KafkaReceiveGaveUp",
+                        error_kind = ?kind,
+                        topic = %cfg.topic,
+                        "kafka receive keeps failing; stopping the consumer"
+                    );
+                    runner.flush_commits();
+                    anyhow::bail!("kafka receive keeps failing ({kind:?}): {e}");
+                }
+                if let Some(suppressed) = decision.log {
+                    warn!(
+                        error = %e,
+                        error_type = "KafkaReceiveFailed",
+                        error_kind = ?kind,
+                        topic = %cfg.topic,
+                        backoff_ms = duration_ms(RECV_ERROR_PAUSE),
+                        suppressed,
+                        "kafka receive failed, retrying"
+                    );
+                }
                 if !sleep_or_cancelled(RECV_ERROR_PAUSE, &shutdown).await {
                     break;
                 }
@@ -401,6 +421,91 @@ fn duration_ms(d: Duration) -> u64 {
     u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
 }
 
+/// While receive errors keep coming with no message in between, at most one WARN per this period (the first error
+/// is always logged); the next WARN carries the number of errors suppressed since the last one.
+const RECV_ERROR_LOG_EVERY: Duration = Duration::from_secs(30);
+/// A non-transport receive error (authorization, group, configuration) that persists this long with no message in
+/// between makes `run_consumer` return an error, so the service's supervisor restarts the client or the process.
+const RECV_ERROR_GIVE_UP_AFTER: Duration = Duration::from_secs(600);
+
+/// How a receive error is handled: `Transport` (broker unreachable, coordinator moving, topic not created yet) is
+/// retried for as long as it lasts, librdkafka reconnects by itself; `Fatal` (the client is unusable) stops the
+/// consumer at once; `Other` stops it after [`RECV_ERROR_GIVE_UP_AFTER`] without a message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecvErrorKind {
+    Transport,
+    Fatal,
+    Other,
+}
+
+fn classify_recv_error(e: &KafkaError) -> RecvErrorKind {
+    use RDKafkaErrorCode as C;
+    if matches!(e, KafkaError::MessageConsumptionFatal(_)) {
+        return RecvErrorKind::Fatal;
+    }
+    match e.rdkafka_error_code() {
+        Some(
+            C::BrokerTransportFailure
+            | C::AllBrokersDown
+            | C::Resolve
+            | C::BrokerNotAvailable
+            | C::NetworkException
+            | C::RequestTimedOut
+            | C::OperationTimedOut
+            | C::LeaderNotAvailable
+            | C::NotCoordinator
+            | C::CoordinatorNotAvailable
+            | C::CoordinatorLoadInProgress
+            | C::UnknownTopicOrPartition
+            | C::UnknownTopic,
+        ) => RecvErrorKind::Transport,
+        _ => RecvErrorKind::Other,
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct RecvErrorDecision {
+    /// `Some(n)`: log this error, `n` errors were suppressed since the previous log line.
+    log: Option<u64>,
+    give_up: bool,
+}
+
+/// Rate-limits receive-error logs and decides when to stop; reset by every received message.
+#[derive(Debug, Default)]
+struct RecvErrorGuard {
+    first_other: Option<Instant>,
+    last_log: Option<Instant>,
+    suppressed: u64,
+}
+
+impl RecvErrorGuard {
+    fn on_error(&mut self, now: Instant, kind: RecvErrorKind) -> RecvErrorDecision {
+        let give_up = match kind {
+            RecvErrorKind::Fatal => true,
+            RecvErrorKind::Transport => false,
+            RecvErrorKind::Other => {
+                let first = *self.first_other.get_or_insert(now);
+                now.duration_since(first) >= RECV_ERROR_GIVE_UP_AFTER
+            }
+        };
+        let due = self
+            .last_log
+            .is_none_or(|t| now.duration_since(t) >= RECV_ERROR_LOG_EVERY);
+        let log = if give_up || due {
+            self.last_log = Some(now);
+            Some(std::mem::take(&mut self.suppressed))
+        } else {
+            self.suppressed += 1;
+            None
+        };
+        RecvErrorDecision { log, give_up }
+    }
+
+    fn on_message(&mut self) {
+        *self = Self::default();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,6 +545,89 @@ mod tests {
             KafkaHeaderExtractor(Some(&headers)).get("traceparent"),
             Some("00-last-01")
         );
+    }
+
+    #[test]
+    fn recv_errors_are_classified() {
+        use rdkafka::error::{KafkaError, RDKafkaErrorCode as C};
+        assert_eq!(
+            classify_recv_error(&KafkaError::MessageConsumption(C::AllBrokersDown)),
+            RecvErrorKind::Transport
+        );
+        assert_eq!(
+            classify_recv_error(&KafkaError::MessageConsumption(C::BrokerTransportFailure)),
+            RecvErrorKind::Transport
+        );
+        assert_eq!(
+            classify_recv_error(&KafkaError::MessageConsumptionFatal(C::Fail)),
+            RecvErrorKind::Fatal
+        );
+        assert_eq!(
+            classify_recv_error(&KafkaError::MessageConsumption(C::TopicAuthorizationFailed)),
+            RecvErrorKind::Other
+        );
+    }
+
+    #[test]
+    fn recv_error_logs_are_rate_limited_with_a_suppressed_count() {
+        let t0 = Instant::now();
+        let mut g = RecvErrorGuard::default();
+        assert_eq!(g.on_error(t0, RecvErrorKind::Transport).log, Some(0));
+        for i in 1..=50 {
+            let d = g.on_error(
+                t0 + Duration::from_millis(200 * i),
+                RecvErrorKind::Transport,
+            );
+            assert_eq!(
+                d.log, None,
+                "error {i} within the log period must be suppressed"
+            );
+        }
+        assert_eq!(
+            g.on_error(t0 + RECV_ERROR_LOG_EVERY, RecvErrorKind::Transport)
+                .log,
+            Some(50)
+        );
+    }
+
+    #[test]
+    fn transport_errors_never_give_up() {
+        let t0 = Instant::now();
+        let mut g = RecvErrorGuard::default();
+        for m in 0..120 {
+            let d = g.on_error(t0 + Duration::from_secs(60 * m), RecvErrorKind::Transport);
+            assert!(
+                !d.give_up,
+                "a broker outage of {m} min must not stop the consumer"
+            );
+        }
+    }
+
+    #[test]
+    fn fatal_error_gives_up_at_once_and_is_logged() {
+        let mut g = RecvErrorGuard::default();
+        let t0 = Instant::now();
+        let _ = g.on_error(t0, RecvErrorKind::Transport);
+        let d = g.on_error(t0 + Duration::from_millis(200), RecvErrorKind::Fatal);
+        assert!(d.give_up);
+        assert!(d.log.is_some(), "the give-up error is always logged");
+    }
+
+    #[test]
+    fn persistent_other_error_gives_up_after_the_limit_and_a_message_resets() {
+        let t0 = Instant::now();
+        let mut g = RecvErrorGuard::default();
+        assert!(!g.on_error(t0, RecvErrorKind::Other).give_up);
+        let just_before = t0 + RECV_ERROR_GIVE_UP_AFTER - Duration::from_secs(1);
+        assert!(!g.on_error(just_before, RecvErrorKind::Other).give_up);
+        g.on_message();
+        assert!(
+            !g.on_error(t0 + RECV_ERROR_GIVE_UP_AFTER, RecvErrorKind::Other)
+                .give_up,
+            "reset by a message"
+        );
+        let later = t0 + RECV_ERROR_GIVE_UP_AFTER * 2;
+        assert!(g.on_error(later, RecvErrorKind::Other).give_up);
     }
 
     #[test]
