@@ -239,6 +239,18 @@ JQ_PRODINGRESS="$JQ_DEFS"'
        then "POLICY: prod-ingress \($o | id): the payment-svc route needs a buffering Middleware with 0 < maxRequestBodyBytes <= 65536" else empty end)
   )'
 
+# prod-backup: a sealed ops-secrets (ns data) <=> every BACKUP_REQUIRED of the pg-backup CronJob is "1". Sealed but 0:
+# a broken S3 config would skip silently with real data at stake; 1 without the secret: every nightly backup fails.
+JQ_PRODBACKUP="$JQ_DEFS"'
+([.[] | select(type == "object" and .kind == "SealedSecret" and .metadata.name == "ops-secrets" and ns == "data")] | length > 0) as $sealed
+| [.[] | select(type == "object" and .kind == "CronJob" and .metadata.name == "pg-backup") as $o
+   | (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
+   | ($c.env // [])[] | select(.name == "BACKUP_REQUIRED") | {c: $c.name, v: (.value // "")}] as $req
+| if $sealed and ($req | length) == 0 then "POLICY: prod-backup CronJob/pg-backup: ops-secrets is sealed but no pg-backup BACKUP_REQUIRED found"
+  elif $sealed then ($req[] | select(.v != "1") | "POLICY: prod-backup CronJob/pg-backup: container \(.c): ops-secrets is sealed, so BACKUP_REQUIRED must be \"1\" (got \"\(.v)\")")
+  else ($req[] | select(.v == "1") | "POLICY: prod-backup CronJob/pg-backup: container \(.c): BACKUP_REQUIRED is \"1\" but ops-secrets is not sealed (every backup would fail)")
+  end'
+
 # Prod inventory inputs: a fixture may carry its own, else the real prod overlay's.
 prod_tsv() { if [ -f "$1/secrets.tsv" ]; then echo "$1/secrets.tsv"; else echo deploy/k8s/overlays/prod/secrets.tsv; fi; }
 prod_domain_file() {
@@ -305,6 +317,8 @@ policy() { # $1 = dir; stdin = kustomize output
       [ -n "$res" ] && echo "$res"
       res=$(jq -r "$JQ_PRODINGRESS" <<<"$json") || { echo "POLICY: internal $1: prod-ingress check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
+      res=$(jq -r "$JQ_PRODBACKUP" <<<"$json") || { echo "POLICY: internal $1: prod-backup check failed"; return 1; }
+      [ -n "$res" ] && echo "$res"
       prod_inventory_checks "$1" "$json" || return 1 ;;
     e2e)
       res=$(jq -r "$JQ_SECRETREFS" <<<"$json") || { echo "POLICY: internal $1: secret-refs check failed"; return 1; }
@@ -366,10 +380,10 @@ check_dashboards() {
 
 
 # alerts: Grafana alert rules as code. $1 = dir holding alerting/rules.yaml and metric-names.txt. rules.yaml parses, its
-# uids are exactly the six of the spec (§10), every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
+# uids are exactly the six of the spec (§10) plus backup-skipped and mail-cap-reached (final review I8, I1), every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
 # identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[` and `_bytes` names).
 # Fails closed: missing files or parse errors fail.
-ALERT_UIDS="consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high pod-restart-loop"
+ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high mail-cap-reached pod-restart-loop"
 check_alerts() {
   local dir="$1" f="$1/alerting/rules.yaml" rc=0 res m names json uids
   echo "== $dir (alerts)"

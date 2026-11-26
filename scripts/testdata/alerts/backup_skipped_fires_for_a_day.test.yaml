@@ -1,0 +1,31 @@
+# One skipped backup (platform.backup.skipped=1 pushed once by backup.sh) fires backup-skipped at once and keeps it
+# firing for 26 h (until the next daily run either skips again or backs up); no skip, no alert.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: backup_skipped_fires_for_a_day
+    interval: 1h
+    input_series:
+      - series: 'platform_backup_skipped{job="pg-backup"}'
+        values: '1 _x30'
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: backup-skipped
+        exp_alerts:
+          - exp_labels: {job: pg-backup, severity: warning}
+      - eval_time: 25h
+        alertname: backup-skipped
+        exp_alerts:
+          - exp_labels: {job: pg-backup, severity: warning}
+      - eval_time: 27h
+        alertname: backup-skipped
+        exp_alerts: []
+  - name: backup_skipped_silent_without_skips
+    interval: 1h
+    input_series:
+      - series: 'up{job="pg-backup"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: backup-skipped
+        exp_alerts: []

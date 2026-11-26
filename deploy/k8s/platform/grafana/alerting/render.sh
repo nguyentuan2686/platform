@@ -29,5 +29,7 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
   render "$SRC/policy.tmpl.yaml" >"$OUT/policy.yaml"
   echo "alerting: rules + telegram contact point + policy rendered"
 else
+  # A chat id without a token is a half-filled alerting-secrets: say so loudly (alerts would go nowhere).
+  if [ -n "${TELEGRAM_CHAT_ID:-}" ]; then echo "alerting: WARN TELEGRAM_CHAT_ID set but TELEGRAM_BOT_TOKEN empty: no telegram contact point" >&2; fi
   echo "alerting: TELEGRAM_BOT_TOKEN unset, no contact point"
 fi

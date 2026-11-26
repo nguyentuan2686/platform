@@ -94,7 +94,7 @@ probe_dashboards() {
 
 
 # Alert rules as code (deploy/k8s/platform/grafana/alerting), Grafana basic auth admin:admin (otel-lgtm image default).
-ALERT_UIDS="error-rate-high latency-p95-high pod-restart-loop consumer-lag-rising disk-usage-high deploy-failed"
+ALERT_UIDS="error-rate-high latency-p95-high pod-restart-loop consumer-lag-rising disk-usage-high deploy-failed backup-skipped mail-cap-reached"
 gget() { get "$1" -u admin:admin; }
 
 probe_alert_rules_loaded() {
@@ -113,7 +113,7 @@ probe_alert_rules_healthy() {
   healths=$(printf '%s' "$r" | grep -Eo '"health" *: *"[a-z]*"' | tr -d ' ' | sort | uniq -c | tr '\n' ' ') || true
   printf 'health: %s' "$healths"
   n=$(printf '%s' "$r" | grep -Eo '"health" *: *"(ok|nodata)"' | wc -l | tr -d ' ')
-  [ "$n" -ge 6 ] || return 1
+  [ "$n" -ge "$(wc -w <<<"$ALERT_UIDS")" ] || return 1
   ! has "$r" '"health" *: *"(error|unknown)"'
 }
 

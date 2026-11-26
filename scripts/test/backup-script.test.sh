@@ -27,7 +27,9 @@ case "$name" in
     done
     [ "$db" = "${STUB_PG_DUMP_FAIL_DB:-}" ] && exit 1 ;;
   rclone) [ "$1" = "${STUB_RCLONE_FAIL_ON:-}" ] && exit 1 ;;
-  curl) exit "${STUB_CURL_RC:-0}" ;;
+  curl)
+    case " $* " in *" @- "*) cat >"$STUB_LOG/curl.stdin" ;; esac
+    exit "${STUB_CURL_RC:-0}" ;;
   kubectl) [ "$3" = get ] && echo "Complete=True " ;;
 esac
 exit 0
@@ -180,6 +182,37 @@ heartbeat_failure_propagates() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+
+# Final review I8: a skipped backup reports platform.backup.skipped=1 (alert backup-skipped), once, from `upload`.
+skip_reports_metric_from_upload() {
+  setup
+  env BACKUP_REQUIRED=0 S3_ENDPOINT= S3_BUCKET= BACKUP_METRICS_URL=http://collector.example:4318/v1/metrics \
+    bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$backup' upload; echo \$rc >'$tmp/rc'"
+  [ "$(cat "$tmp/rc")" -eq 0 ] || fail "${FUNCNAME[0]}" "expected exit 0, got $(cat "$tmp/rc"): $(cat "$tmp/out")"
+  [ "$(calls curl)" -eq 1 ] && grep -q 'http://collector.example:4318/v1/metrics$' "$tmp/log/curl.log" || fail "${FUNCNAME[0]}" "curl: $(cat "$tmp/log/curl.log" 2>/dev/null)"
+  grep -q '"name":"platform.backup.skipped"' "$tmp/log/curl.stdin" && grep -q '"asInt":"1"' "$tmp/log/curl.stdin" \
+    && grep -q '"stringValue":"pg-backup"' "$tmp/log/curl.stdin" || fail "${FUNCNAME[0]}" "body: $(cat "$tmp/log/curl.stdin")"
+  grep -q '^backup: reported the skip' "$tmp/out" || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+skip_in_dump_does_not_report() {
+  setup
+  env BACKUP_REQUIRED=0 S3_ENDPOINT= S3_BUCKET= BACKUP_METRICS_URL=http://collector.example:4318/v1/metrics \
+    bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$backup' dump; echo \$rc >'$tmp/rc'"
+  [ "$(cat "$tmp/rc")" -eq 0 ] && [ "$(calls curl)" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$(cat "$tmp/rc") curl calls=$(calls curl)"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+skip_report_failure_still_skips() {
+  setup
+  env BACKUP_REQUIRED=0 S3_ENDPOINT= S3_BUCKET= BACKUP_METRICS_URL=http://collector.example:4318/v1/metrics STUB_CURL_RC=7 \
+    bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$backup' upload; echo \$rc >'$tmp/rc'"
+  [ "$(cat "$tmp/rc")" -eq 0 ] || fail "${FUNCNAME[0]}" "expected exit 0, got $(cat "$tmp/rc")"
+  grep -q '^backup: could not report the skip' "$tmp/out" || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 backup_required_without_s3_fails
 backup_optional_without_s3_skips
 dump_calls_pg_dump_per_db
@@ -199,3 +232,6 @@ restore_refuses_missing_suffix
 restore_accepts_suffix
 restore_accepts_default_target
 restore_accepts_overwrite_of_source
+skip_reports_metric_from_upload
+skip_in_dump_does_not_report
+skip_report_failure_still_skips

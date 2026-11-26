@@ -64,6 +64,8 @@ spec:
                 - {name: BACKUP_REQUIRED, value: "0"}
                 - {name: BACKUP_KEEP, value: 14d}
                 - {name: HOME, value: /tmp}
+                # A skipped backup (S3 not configured) pushes platform.backup.skipped=1 here (alert backup-skipped).
+                - {name: BACKUP_METRICS_URL, value: "http://otel-collector.observability.svc.cluster.local:4318/v1/metrics"}
               envFrom:
                 - secretRef: {name: ops-secrets, optional: true}
               resources:

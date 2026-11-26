@@ -1,0 +1,27 @@
+# identity-svc refuses magic links at the global daily cap: the counter (recorded at 0 from start) rises -> alert;
+# a flat counter -> no alert.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: mail_cap_reached_fires_on_refusals
+    interval: 1m
+    input_series:
+      - series: 'identity_magic_link_daily_cap_reached_total{job="identity-svc"}'
+        values: '0x10 1 2 3 3x20'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: mail-cap-reached
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: mail-cap-reached
+        exp_alerts:
+          - exp_labels: {job: identity-svc, severity: warning}
+  - name: mail_cap_silent_when_flat
+    interval: 1m
+    input_series:
+      - series: 'identity_magic_link_daily_cap_reached_total{job="identity-svc"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: mail-cap-reached
+        exp_alerts: []
