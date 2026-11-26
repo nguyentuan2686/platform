@@ -91,6 +91,10 @@ pub async fn run_consumer(
         .set("enable.auto.commit", "false")
         .set("auto.offset.reset", "earliest")
         .set("enable.partition.eof", "false")
+        // A subscribed topic that does not exist yet (fresh cluster: the producer creates it at its
+        // own startup) is only re-checked on this refresh; librdkafka's 5 min default left the
+        // consumer idle that long. 10 s is cheap on a small cluster.
+        .set("topic.metadata.refresh.interval.ms", "10000")
         .create()
         .context("creating Kafka consumer")?;
     consumer

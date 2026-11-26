@@ -42,7 +42,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Logs: JSON on stdout, one object per line, mandatory fields `timestamp, level, service, trace_id, span_id, message` (exact names; Rust emits the same).
 - HTTP errors: `application/problem+json` with extra property `trace_id`.
 - Config via env vars (12-factor); no plaintext secrets in Git.
-- Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`.
+- Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`. Topics are declared at startup by their producer (Java: a `NewTopic` bean; Spring consumers too), never left to broker auto-create (off in the k8s Redpanda).
 - Event evolution rule: additive changes (new optional `data` fields) stay in v1, so event schemas leave `data` open and consumers ignore unknown fields; breaking changes (remove/rename/retype a field, change meaning) go to a new topic `<name>.v2` with its own schema, published alongside v1 until consumers migrate.
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
 - Dev machine is weak (2 cores / 12GB): local stack <= ~3GB (full `--profile app` is ~2.75GB; identity-svc and payment-svc need `mem_limit: 512m`, the JVM off-heap alone is ~170MiB); heavy verification runs in CI.
