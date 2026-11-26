@@ -60,4 +60,4 @@ wait_until() {
   done
 }
 
-tailscale_up() { ip -o link show tailscale0 2>/dev/null | grep -q '[<,]UP[,>]'; }
+tailscale_up() { local l re="[<,]UP[,>]"; l=$(ip -o link show tailscale0 2>/dev/null) && [[ "$l" =~ $re ]]; }

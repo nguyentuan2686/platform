@@ -23,7 +23,7 @@ step_firewall() {
   ufw allow from "$FIREWALL_POD_CIDR" >/dev/null
   ufw allow from "$FIREWALL_SERVICE_CIDR" >/dev/null
   if tailscale_up; then
-    if ufw show added | grep -qx 'ufw allow 22/tcp'; then ufw delete allow 22/tcp >/dev/null || die "ufw delete allow 22/tcp failed"; fi
+    if grep -qx 'ufw allow 22/tcp' <<<"$(ufw show added)"; then ufw delete allow 22/tcp >/dev/null || die "ufw delete allow 22/tcp failed"; fi
   else
     ufw allow 22/tcp >/dev/null
   fi

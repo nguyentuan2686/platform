@@ -3,7 +3,7 @@
 # (Tailscale SSH off: plain sshd over the tailnet), then the firewall step again so public 22/tcp is dropped.
 
 tailscale_running() {
-  tailscale status --json 2>/dev/null | grep -q '"BackendState": *"Running"'
+  local s; s=$(tailscale status --json 2>/dev/null) && grep -q '"BackendState": *"Running"' <<<"$s"
 }
 
 step_tailscale() {
@@ -12,7 +12,8 @@ step_tailscale() {
   tgz="$dir/tailscale_${TAILSCALE_VERSION}_${ARCH}.tgz"
   fetch_verified "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${ARCH}.tgz" "$(pin_sha TAILSCALE)" "$tgz"
 
-  if [[ "$(/usr/bin/tailscale version 2>/dev/null | head -n1)" != "$TAILSCALE_VERSION" ]]; then
+  local v; v="$(/usr/bin/tailscale version 2>/dev/null || true)"
+  if [[ "${v%%$'\n'*}" != "$TAILSCALE_VERSION" ]]; then
     rm -rf "$dir/x" && mkdir -p "$dir/x"
     tar -xzf "$tgz" -C "$dir/x" --strip-components=1
     src="$dir/x"

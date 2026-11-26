@@ -71,7 +71,7 @@ argocd_ready() {
   [ -z "$bad" ] || { reason="not ready: $bad"; return 1; }
 }
 
-tailscale_up() { ip -o link show tailscale0 2>/dev/null | grep -q '[<,]UP[,>]'; }
+tailscale_up() { local l re="[<,]UP[,>]"; l=$(ip -o link show tailscale0 2>/dev/null) && [[ "$l" =~ $re ]]; }
 
 # ufw user rules that may exist: anything else could open 6443 (or more) to the world.
 allowed_rule='^ufw allow (in on (lo|tailscale0)|from 10\.42\.0\.0/16|from 10\.43\.0\.0/16|22/tcp)$'

@@ -40,7 +40,8 @@ step_k3s() {
   fi
 
   local installed=""
-  [ -x "$K3S_BIN" ] && installed="$("$K3S_BIN" --version 2>/dev/null | head -n1)"
+  # Captured whole, not piped into head: under pipefail an early-closing reader makes the writer die of SIGPIPE (141).
+  [ -x "$K3S_BIN" ] && installed="$("$K3S_BIN" --version 2>/dev/null || true)" && installed="${installed%%$'\n'*}"
   if [[ "$installed" != *" $K3S_VERSION "* ]] || ! systemctl is-enabled --quiet k3s 2>/dev/null; then
     install -m 0755 "$dir/$bin_name" "$K3S_BIN"
     INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_VERSION="$K3S_VERSION" sh "$dir/install.sh" >&2 \

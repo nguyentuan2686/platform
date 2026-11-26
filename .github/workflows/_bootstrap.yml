@@ -42,12 +42,12 @@ jobs:
 
       - name: Bootstrap (run 1)
         run: |
-          sudo -E GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
+          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
             infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run1.log"
 
       - name: Bootstrap (run 2, must change nothing)
         run: |
-          sudo -E GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
+          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
             infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run2.log"
 
       - name: verify.sh
@@ -55,8 +55,10 @@ jobs:
 
       - name: kubectl for the runner user
         run: |
-          mkdir -p ~/.kube "$RUNNER_TEMP/bin"
-          sudo install -m 600 -o "$(id -u)" -g "$(id -g)" /etc/rancher/k3s/k3s.yaml ~/.kube/config
+          # A kubeconfig of the runner user's own (not ~/.kube: root-run tools may have created that root-owned).
+          mkdir -p "$RUNNER_TEMP/bin"
+          sudo install -m 600 -o "$(id -u)" -g "$(id -g)" /etc/rancher/k3s/k3s.yaml "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >>"$GITHUB_ENV"
           # k3s is a multi-call binary: the client matches the server version.
           ln -sf /usr/local/bin/k3s "$RUNNER_TEMP/bin/kubectl"
           echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
