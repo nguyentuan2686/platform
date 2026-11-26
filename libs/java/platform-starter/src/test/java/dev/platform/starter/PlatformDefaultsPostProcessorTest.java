@@ -25,7 +25,7 @@ class PlatformDefaultsPostProcessorTest {
     new PlatformDefaultsPostProcessor().postProcessEnvironment(env, null);
 
     assertThat(env.getProperty("management.endpoint.health.group.ready.include"))
-        .isEqualTo("readinessState,db");
+        .isEqualTo("readinessState,db,kafkaTopics");
     assertThat(env.getProperty("management.endpoint.health.validate-group-membership"))
         .isEqualTo("false");
   }

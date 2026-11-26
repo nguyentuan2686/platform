@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# Adds the wait-for-postgres initContainer to every Deployment of the including base (db-gate policy in k8s-validate.sh).
+patches:
+  - path: patch.yaml
+    target: {kind: Deployment}

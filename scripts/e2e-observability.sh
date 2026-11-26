@@ -46,6 +46,16 @@ probe_red_consumer() {
   done
 }
 
+# Only platform metrics carry `outcome`; a series without it on this metric came from an agent (double count).
+probe_no_agent_double_count() {
+  local r
+  r=$(prom 'count(messaging_process_duration_seconds_count{outcome=""})') || { printf '%s' "$r"; return 1; }
+  printf '%s' "$r"
+  # empty result (no series) or a value of 0 passes
+  if has "$r" '"result" *: *\[\]'; then return 0; fi
+  has "$r" '"value" *: *\[[^]]*"0"\]'
+}
+
 probe_consumer_lag() {
   local r
   r=$(prom 'redpanda_kafka_consumer_group_lag_max{redpanda_group="notify-svc"}') || { printf '%s' "$r"; return 1; }
@@ -101,6 +111,7 @@ failed=0
 check trace-cross-service probe_trace_cross_service || failed=1
 check red-http probe_red_http || failed=1
 check red-consumer probe_red_consumer || failed=1
+check no-agent-double-count probe_no_agent_double_count || failed=1
 check consumer-lag probe_consumer_lag || failed=1
 check outbox-lag probe_outbox_lag || failed=1
 check logs-with-trace probe_logs_with_trace || failed=1

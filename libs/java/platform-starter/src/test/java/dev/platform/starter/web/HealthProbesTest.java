@@ -27,7 +27,7 @@ class HealthProbesTest {
   void ready_probe_is_ok_without_datasource_although_ready_group_lists_db() throws Exception {
     assertThat(context.getBeanNamesForType(DataSource.class)).isEmpty();
     assertThat(environment.getProperty("management.endpoint.health.group.ready.include"))
-        .isEqualTo("readinessState,db");
+        .isEqualTo("readinessState,db,kafkaTopics");
 
     mvc.perform(get("/health/ready"))
         .andExpect(status().isOk())

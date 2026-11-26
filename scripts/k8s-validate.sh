@@ -86,6 +86,7 @@ JQ_NOFAKESEPAY='.[] | select(type == "object") | . as $o
 JQ_PRODIMAGES="$JQ_DEFS"'
 .[] | select(type == "object" and (.kind | IN("Deployment","StatefulSet","DaemonSet","Job","CronJob"))) | select(ns == "apps") as $o
 | (($o | podspec) | (.containers // []) + (.initContainers // []))[]
+| select(.name != "wait-for-postgres" or ((.image // "") | startswith("postgres:17-alpine@sha256:") | not)) # the pinned DB-gate init is the only non-app image
 | select((.image // "") | startswith("ghcr.io/nguyentuan2686/" + $o.metadata.name + ":") | not)
 | "POLICY: prod-images \($o | id): container \(.name): image \"\(.image // "")\" must be ghcr.io/nguyentuan2686/\($o.metadata.name):<tag>"'
 
@@ -104,6 +105,20 @@ JQ_SECRETREFS="$JQ_DEFS"'
     | if $secrets[$k] == null then "POLICY: secret-refs \($o | id): container \($c.name): secretKeyRef \($k) names no Secret in this build"
       elif ($secrets[$k] | index($r.key)) == null then "POLICY: secret-refs \($o | id): container \($c.name): secretKeyRef \($k) has no key \($r.key)"
       else empty end )'
+
+# db-gate: every Deployment in ns apps whose containers reference (envFrom or secretKeyRef) a Secret of this build that has
+# a DB_* key must have an initContainer named wait-for-postgres (a DB pod must not crash-loop while Postgres starts).
+JQ_DBGATE="$JQ_DEFS"'
+(map(select(type == "object" and .kind == "Secret")
+     | {key: "\(ns)/\(.metadata.name)", value: (((.data // {}) + (.stringData // {})) | keys | map(select(startswith("DB_"))) | length > 0)}) | from_entries) as $dbsecrets
+| .[] | select(type == "object" and .kind == "Deployment" and ns == "apps") as $o
+| (($o | podspec) | (.initContainers // []) | map(.name) | index("wait-for-postgres")) as $gate
+| ([(($o | podspec) | (.containers // [])[]
+      | ((.envFrom // [])[] | select(.secretRef != null) | "\($o | ns)/\(.secretRef.name)"),
+        ((.env // [])[] | select(.valueFrom.secretKeyRef != null) | "\($o | ns)/\(.valueFrom.secretKeyRef.name)"))]
+   | map(select($dbsecrets[.] == true)) | unique) as $dbrefs
+| select(($dbrefs | length) > 0 and $gate == null)
+| "POLICY: db-gate \($o | id): references DB secret \($dbrefs | join(", ")) but has no initContainer wait-for-postgres"'
 
 # Overlay kind: the `overlay` file in a fixture, else the directory name (prod | e2e).
 overlay_kind() { # $1 = dir
@@ -127,6 +142,8 @@ policy() { # $1 = dir; stdin = kustomize output
       [ -n "$res" ] && echo "$res" ;;
     e2e)
       res=$(jq -r "$JQ_SECRETREFS" <<<"$json") || { echo "POLICY: internal $1: secret-refs check failed"; return 1; }
+      [ -n "$res" ] && echo "$res"
+      res=$(jq -r "$JQ_DBGATE" <<<"$json") || { echo "POLICY: internal $1: db-gate check failed"; return 1; }
       [ -n "$res" ] && echo "$res" ;;
   esac
   return 0
