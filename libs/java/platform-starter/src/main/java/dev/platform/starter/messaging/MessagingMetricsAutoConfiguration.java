@@ -40,7 +40,7 @@ public class MessagingMetricsAutoConfiguration {
   KafkaTopicsHealthIndicator kafkaTopics(
       KafkaAdmin admin,
       ObjectProvider<NewTopic> topics,
-      @Value("${platform.kafka.topics-health-timeout:3s}") Duration timeout) {
+      @Value("${platform.kafka.topics-health-timeout:2s}") Duration timeout) {
     return new KafkaTopicsHealthIndicator(admin, topics, timeout);
   }
 }

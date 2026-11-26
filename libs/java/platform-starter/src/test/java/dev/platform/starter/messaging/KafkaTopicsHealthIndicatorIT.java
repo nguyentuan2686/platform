@@ -81,4 +81,49 @@ class KafkaTopicsHealthIndicatorIT {
 
     assertThat(indicator.health().getStatus()).isEqualTo(Status.UP);
   }
+
+  private static void pause() {
+    REDPANDA.getDockerClient().pauseContainerCmd(REDPANDA.getContainerId()).exec();
+  }
+
+  private static void unpause() {
+    REDPANDA.getDockerClient().unpauseContainerCmd(REDPANDA.getContainerId()).exec();
+  }
+
+  @Test
+  void up_is_latched_and_survives_a_broker_outage() {
+    var topic = TopicBuilder.name("t.latch.v1").partitions(1).replicas(1).build();
+    var indicator = indicator(REDPANDA.getBootstrapServers(), Duration.ofSeconds(2), topic);
+    try {
+      Awaitility.await()
+          .atMost(DEADLINE)
+          .pollInterval(Duration.ofMillis(500))
+          .until(() -> indicator.health().getStatus().equals(Status.UP));
+
+      pause();
+      try {
+        Health health = assertTimeoutPreemptively(Duration.ofMillis(500), () -> indicator.health());
+        assertThat(health.getStatus()).isEqualTo(Status.UP);
+      } finally {
+        unpause();
+      }
+    } finally {
+      indicator.close();
+    }
+  }
+
+  @Test
+  void missing_topic_probe_is_bounded_by_one_shared_timeout() {
+    var topic = TopicBuilder.name("t.bounded.v1").partitions(1).replicas(1).build();
+    var indicator = indicator(REDPANDA.getBootstrapServers(), Duration.ofSeconds(1), topic);
+    pause();
+    try {
+      // list + create share one 1 s deadline: the whole call stays well under 2 x timeout.
+      Health health = assertTimeoutPreemptively(Duration.ofMillis(1800), () -> indicator.health());
+      assertThat(health.getStatus()).isEqualTo(Status.DOWN);
+    } finally {
+      unpause();
+      indicator.close();
+    }
+  }
 }
