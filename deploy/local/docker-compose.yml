@@ -201,7 +201,8 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "127.0.0.1:${IDENTITY_SVC_PORT:-8084}:8084"
-    mem_limit: 384m
+    # 512m: ~360 MiB RSS at 384m was off-heap (metaspace, OTel agent, threads), ~20 MiB from the OOM killer.
+    mem_limit: 512m
 
   payment-svc:
     profiles: ["app"]
@@ -236,7 +237,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
     ports:
       - "127.0.0.1:${PAYMENT_SVC_PORT:-8085}:8085"
-    mem_limit: 384m
+    mem_limit: 512m # as identity-svc: off-heap growth, not heap
 
   web:
     profiles: ["app"]
