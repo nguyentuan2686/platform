@@ -54,7 +54,7 @@ for _ in $(seq 1 20); do
 done
 [ -n "$MSG_ID" ] || fail "no mail arrived in Mailpit"
 MAIL=$(curl -sS "$MAILPIT/api/v1/message/$MSG_ID" | tr -d '\r\n')
-printf '%s' "$MAIL" | grep -qF "$EMAIL" || fail "newest mail is not addressed to this run"
+grep -qF "$EMAIL" <<<"$MAIL" || fail "newest mail is not addressed to this run"
 LINK_TOKEN=$(printf '%s' "$MAIL" | sed -n 's/.*xac-nhan?token=\([A-Za-z0-9_-]*\).*/\1/p')
 [ -n "$LINK_TOKEN" ] || fail "no token in the newest mail"
 
@@ -74,7 +74,7 @@ CODE=$(field code)
 
 TX="$(date +%s)$$"
 OUT=$("$HERE/sepay-simulate.sh" "$PAYMENT" "$CODE" 119000 "$TX") || fail "sepay-simulate failed: $OUT"
-printf '%s' "$OUT" | grep -q 'HTTP 200' || fail "webhook not accepted: $OUT"
+grep -q 'HTTP 200' <<<"$OUT" || fail "webhook not accepted: $OUT"
 
 C=""
 for _ in $(seq 1 30); do
@@ -86,7 +86,7 @@ done
 
 # The same bank transaction delivered again must change nothing.
 OUT=$("$HERE/sepay-simulate.sh" "$PAYMENT" "$CODE" 119000 "$TX") || fail "duplicate webhook failed: $OUT"
-printf '%s' "$OUT" | grep -q 'HTTP 200' || fail "duplicate webhook not accepted: $OUT"
+grep -q 'HTTP 200' <<<"$OUT" || fail "duplicate webhook not accepted: $OUT"
 sleep 3
 C=$(credits)
 [ "$C" = "6" ] || fail "duplicate delivery changed credits to '$C'"
