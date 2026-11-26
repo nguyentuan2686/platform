@@ -14,6 +14,8 @@ updates:
     groups:
       cargo-minor-patch:
         update-types: [minor, patch]
+  # github-actions: every action is pinned by commit SHA with a "# vX.Y.Z" comment
+  # (scripts/check-action-pins.sh); Dependabot keeps those SHA pins current.
   - package-ecosystem: github-actions
     directory: /
     schedule:

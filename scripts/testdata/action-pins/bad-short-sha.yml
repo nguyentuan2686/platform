@@ -1,0 +1,7 @@
+name: bad
+on: push
+jobs:
+  b:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: aquasecurity/trivy-action@ed142fd # v0.36.0
