@@ -1,0 +1,1 @@
+{"uid":"bad","title":"Bad","panels":[{"id":1,"type":"timeseries","targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"sum(rate(http_requests_total[5m]))"}]}]}

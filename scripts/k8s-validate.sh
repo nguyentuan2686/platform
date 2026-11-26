@@ -147,11 +147,46 @@ validate_one() {
   return $rc
 }
 
+
+# dashboards: Grafana dashboards as code. Each JSON parses, uids are unique, every panel target names a datasource uid,
+# and every metric identifier used in a query (targets[].expr, variable queries) is listed in metric-names.txt.
+# $1 = dir holding dashboards/*.json and metric-names.txt. Fails closed: missing files, parse errors or no dashboards fail.
+# Metric identifiers: the brief's suffixes plus _total, and any name directly followed by a label selector.
+METRIC_RE='[a-z_][a-z0-9_]*(?:_bucket|_count|_sum|_seconds|_total|_lag_max|_lag_sum)\b|[a-z_][a-z0-9_]*(?=\{)'
+check_dashboards() {
+  local dir="$1" f n=0 rc=0 uids="" uid res m names
+  echo "== $dir (dashboards)"
+  if [ ! -d "$dir/dashboards" ]; then echo "POLICY: dashboards $dir: dashboards/ directory missing"; return 1; fi
+  if [ ! -s "$dir/metric-names.txt" ]; then echo "POLICY: dashboards $dir: metric-names.txt missing or empty"; return 1; fi
+  names=$(tr -d '\r' <"$dir/metric-names.txt" | sed '/^[[:space:]]*$/d')
+  for f in "$dir"/dashboards/*.json; do
+    [ -f "$f" ] || continue
+    n=$((n + 1))
+    uid=$(jq -er '.uid | select(type == "string" and length > 0)' "$f" | tr -d '\r') || { echo "POLICY: dashboards $f: not valid JSON or no uid"; rc=1; continue; }
+    if grep -qxF "$uid" <<<"$uids"; then echo "POLICY: dashboards $f: duplicate uid $uid"; rc=1; fi
+    uids+="$uid"$'\n'
+    res=$(jq -r --arg f "$f" '[.. | objects | select(has("targets")) | .targets[] | select((.datasource.uid // "") == "") | (.refId // "?")]
+      | .[] | "POLICY: dashboards \($f): target \(.) has no datasource.uid"' "$f" | tr -d '\r') \
+      || { echo "POLICY: dashboards $f: datasource check failed"; rc=1; continue; }
+    if [ -n "$res" ]; then echo "$res"; rc=1; fi
+    res=$(jq -r --arg re "$METRIC_RE" '[(.. | objects | select(has("expr")) | .expr), (.templating.list[]? | (.query | if type == "object" then .query else . end) // empty)]
+      | .[] | strings | scan($re)' "$f" | tr -d '\r') \
+      || { echo "POLICY: dashboards $f: metric extraction failed"; rc=1; continue; }
+    while IFS= read -r m; do
+      [ -z "$m" ] && continue
+      if ! grep -qxF "$m" <<<"$names"; then echo "POLICY: dashboards $f: metric $m is not listed in metric-names.txt"; rc=1; fi
+    done <<<"$(sort -u <<<"$res")"
+  done
+  if [ "$n" -eq 0 ]; then echo "POLICY: dashboards $dir: no dashboards/*.json found"; return 1; fi
+  return $rc
+}
+
 self_test() {
   local rc=0 d name check out
   for d in scripts/testdata/k8s-validate/*/; do
     name=$(basename "$d"); check=$(tr -d '\r\n' <"$d/expect") # `expect` holds the POLICY check the fixture must trigger
-    out=$(SKIP_KUBECONFORM=1 validate_one "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
+    if [ -d "$d/dashboards" ]; then out=$(check_dashboards "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
+    else out=$(SKIP_KUBECONFORM=1 validate_one "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }; fi
     if grep -q "^POLICY: $check " <<<"$out"; then echo "self-test ok: $name rejected with POLICY: $check"
     else echo "SELF-TEST FAIL: $name rejected without 'POLICY: $check':"; echo "$out"; rc=1; fi
   done
@@ -167,5 +202,6 @@ if [ ${#targets[@]} -eq 0 ]; then
 fi
 fail=0
 for t in "${targets[@]}"; do validate_one "${t%/}" || fail=1; done
+[ $# -eq 0 ] && { check_dashboards deploy/k8s/platform/grafana || fail=1; }
 [ $fail -eq 0 ] && echo "k8s-validate: ok" || echo "k8s-validate: FAILED"
 exit $fail

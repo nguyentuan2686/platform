@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: Platform
+    type: file
+    folder: Platform
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards/platform
+      foldersFromFilesStructure: false

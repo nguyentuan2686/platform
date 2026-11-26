@@ -5,6 +5,7 @@ resources:
   - rbac.yaml
   - lgtm.yaml
   - otel-collector.yaml
+  - ../grafana
 configMapGenerator:
   - name: otel-collector-config
     files:

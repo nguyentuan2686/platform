@@ -1,0 +1,1 @@
+{"uid":"x","title":"T","panels":[{"id":1,"targets":[{"refId":"A","expr":"rate(http_server_request_duration_seconds_count[5m])"}]}]}
