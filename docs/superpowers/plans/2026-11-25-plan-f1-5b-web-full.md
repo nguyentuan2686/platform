@@ -700,15 +700,15 @@ Deferred-to-F1.5b lists: Notes of `docs/superpowers/plans/2026-11-25-plan-f1-3-i
 
   Local only (not in CI); run inside `mcr.microsoft.com/playwright:v1.65.1-noble` with `--network host`.
 
-- [ ] **Step 1:** Write the spec and the config (`testDir: "./e2e-stack"`, no `webServer`, 1 worker, timeout 120 s).
-- [ ] **Step 2: Stack up.** Run `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build postgres redpanda mailpit chart-svc reading-tuvi identity-svc payment-svc web`. Leave lgtm, order-svc and notify-svc down to stay within ~3 GB. If an old `pgdata` lacks the `identity`/`payment` DBs, run `down -v` once.
-- [ ] **Step 3: Smoke + full flow.**
+- [x] **Step 1:** Write the spec and the config (`testDir: "./e2e-stack"`, no `webServer`, 1 worker, timeout 120 s).
+- [x] **Step 2: Stack up.** Run `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build postgres redpanda mailpit chart-svc reading-tuvi identity-svc payment-svc web`. Leave lgtm, order-svc and notify-svc down to stay within ~3 GB. If an old `pgdata` lacks the `identity`/`payment` DBs, run `down -v` once.
+- [x] **Step 3: Smoke + full flow.**
   - `scripts/smoke-web.sh http://localhost:3001`: ready 200; `/vi` contains "Lão Thiên Cơ"; `/vi/kien-thuc` 200; `/robots.txt` 200; prints `OK`.
   - Then run `docker run --rm --network host -v "$PWD/services/web:/w" -w /w mcr.microsoft.com/playwright:v1.65.1-noble sh -c "npm ci && npx playwright test -c playwright.stack.config.ts"`. Expected: 1 passed.
   - `docker stats --no-stream` must show web < 256 MiB.
   - Run `docker compose … down` afterwards (keep it up only if Tuấn asks).
-- [ ] **Step 4: All gates** (web command from `CLAUDE.md`, plus `mvn -q -pl services/identity-svc,services/reading-tuvi -am verify` if not already green in CI).
-- [ ] **Step 5: Commit** `test(web): full-stack flow and docs`. Push the branch, open the PR and wait for `ci-gate` green; a failure triggers the `retro` skill, and registry/font flakes are re-run per the `CLAUDE.md` triage rule. Merge happens after the final whole-branch review (controller).
+- [x] **Step 4: All gates** (web command from `CLAUDE.md`, plus `mvn -q -pl services/identity-svc,services/reading-tuvi -am verify` if not already green in CI).
+- [x] **Step 5: Commit** `test(web): full-stack flow and docs`. Push the branch, open the PR and wait for `ci-gate` green; a failure triggers the `retro` skill, and registry/font flakes are re-run per the `CLAUDE.md` triage rule. Merge happens after the final whole-branch review (controller).
 
 ---
 

@@ -11,6 +11,8 @@ const PENDING_POLL_MS = 3000;
 const LATE_POLL_MS = 30_000;
 const LATE_WINDOW_MS = 24 * 3600_000;
 
+const REFRESH_AFTER_PAID_MS = [2000, 5000, 10_000];
+
 const PAID_TEXT = "Đã nhận tiền. Lượt của con đã được cộng.";
 const LATE_TEXT =
   "Đơn đã quá 30 phút. Nếu con đã chuyển đúng nội dung, lượt vẫn được cộng khi ngân hàng báo về; quá 24 giờ chưa thấy, ta sẽ đối soát thủ công.";
@@ -100,6 +102,9 @@ export function OrderStatus({
     if (status === "PAID" && initial !== "PAID" && !refreshed.current) {
       refreshed.current = true;
       router.refresh(); // header balance chip
+      // The credits are granted asynchronously (PaymentSucceeded over Kafka), a moment after the order is PAID.
+      // Not cleared on cleanup: a refresh after unmount is harmless.
+      for (const ms of REFRESH_AFTER_PAID_MS) setTimeout(() => router.refresh(), ms);
     }
   }, [status, initial, router]);
 

@@ -53,7 +53,8 @@ describe("OrderStatus", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     await act(() => vi.advanceTimersByTimeAsync(60_000));
     expect(orderFetches()).toHaveLength(2);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    // then 3 follow-up refreshes (2, 5, 10 s) while the async credit grant lands; nothing after that
+    expect(refresh).toHaveBeenCalledTimes(4);
   });
 
   it("does not fetch while the tab is hidden, and resumes when it is visible again", async () => {

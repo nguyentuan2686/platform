@@ -243,6 +243,9 @@ services:
     build:
       context: ../..
       dockerfile: services/web/Dockerfile
+      args:
+        # Baked into the static pages (canonical URLs, sitemap). Set to the public domain when deploying.
+        WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
     image: web:local
     depends_on:
       chart-svc:
@@ -261,8 +264,11 @@ services:
       PAYMENT_SVC_URL: http://payment-svc:8085
       # Test value only; server-side, never sent to the browser.
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-local-test-internal-token}
-      WEB_ORIGIN: http://localhost:3001
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3001}
       COOKIE_SECURE: "0"
+      # Google button stays hidden locally (identity-svc has no client id either).
+      GOOGLE_LOGIN: "0"
+      QA_STREAM_TIMEOUT_MS: ${QA_STREAM_TIMEOUT_MS:-95000}
       # Admin page ("chưa khớp"): only for the account ids listed here; the token stays server-side.
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-local-test-admin-token}
       ADMIN_ACCOUNT_IDS: ${ADMIN_ACCOUNT_IDS:-}
