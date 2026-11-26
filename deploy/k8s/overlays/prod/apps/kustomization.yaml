@@ -34,6 +34,9 @@ replacements:
       - select: {kind: Deployment, name: identity-svc}
         fieldPaths: ["spec.template.spec.containers.[name=identity-svc].env.[name=WEB_BASE_URL].value"]
         options: {delimiter: "/", index: 2}
+      - select: {kind: Deployment, name: identity-svc}
+        fieldPaths: ["spec.template.spec.containers.[name=identity-svc].env.[name=MAIL_FROM].value"]
+        options: {delimiter: "@", index: 1} # no-reply@<APP_DOMAIN>; MAIL_HOST is the SMTP relay, not domain-bound
 images:
   - {name: ghcr.io/nguyentuan2686/order-svc, newTag: main}
   - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: main}

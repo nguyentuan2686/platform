@@ -159,9 +159,9 @@ JQ_SECRETSMANIFEST="$JQ_DEFS"'
       elif ($r[$n].keys | index($ref.key)) == null then "POLICY: secrets-manifest \($o | id): container \($c.name): secretKeyRef \($n) key \($ref.key) is not in its secrets.tsv row"
       else empty end )'
 
-# prod-domain: Ingress hosts (rules and tls), the host of WEB_ORIGIN / WEB_BASE_URL and the cloudflared
-# --http-host-header value all equal $d (APP_DOMAIN). With $strict (the real overlay), the Ingress, WEB_ORIGIN and
-# WEB_BASE_URL must exist, so a renamed field cannot silently escape the replacement.
+# prod-domain: Ingress hosts (rules and tls), the host of WEB_ORIGIN / WEB_BASE_URL, the domain of MAIL_FROM and the
+# cloudflared --http-host-header value all equal $d (APP_DOMAIN). With $strict (the real overlay), the Ingress,
+# WEB_ORIGIN, WEB_BASE_URL and MAIL_FROM must exist, so a renamed field cannot silently escape the replacement.
 JQ_PRODDOMAIN="$JQ_DEFS"'
 def hostof: (split("/") | .[2] // "");
 [ .[] | select(type == "object") as $o
@@ -173,6 +173,8 @@ def hostof: (split("/") | .[2] // "");
         (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
         | ( (($c.env // [])[] | select(.name == "WEB_ORIGIN" or .name == "WEB_BASE_URL")
              | {what: .name, where: ($o | id), field: "env \(.name)", got: ((.value // "") | hostof)}),
+            (($c.env // [])[] | select(.name == "MAIL_FROM")
+             | {what: .name, where: ($o | id), field: "env MAIL_FROM domain", got: ((.value // "") | split("@") | .[1] // "")}),
             ($c.args // [] | to_entries[]
              | if .value == "--http-host-header" then {what: "host-header", where: ($o | id), field: "args --http-host-header", got: ($c.args[.key + 1] // "")}
                elif (.value | type) == "string" and (.value | startswith("--http-host-header=")) then {what: "host-header", where: ($o | id), field: "args --http-host-header=", got: (.value | sub("^--http-host-header="; ""))}
@@ -180,16 +182,30 @@ def hostof: (split("/") | .[2] // "");
       else empty end) )
 ] as $found
 | ($found[] | select(.got != $d) | "POLICY: prod-domain \(.where): \(.field) is \"\(.got)\", not APP_DOMAIN \"\($d)\""),
-  (if $strict then (["Ingress", "WEB_ORIGIN", "WEB_BASE_URL"][] as $w
+  (if $strict then (["Ingress", "WEB_ORIGIN", "WEB_BASE_URL", "MAIL_FROM"][] as $w
      | select(($found | map(.what) | index($w)) == null)
      | "POLICY: prod-domain build: no \($w) found (APP_DOMAIN replacement target missing)") else empty end)'
 
-# secrets.tsv -> JSON rows; fails on a malformed row.
+# secrets.tsv -> JSON rows; fails on a malformed row. The `?` (value may be empty) key marker is stripped.
 tsv_json() { # $1 = secrets.tsv
   tr -d '\r' <"$1" | jq -R -s '[split("\n")[] | select(length > 0 and (startswith("#") | not)) | split("\t")
     | if length != 4 or (.[2] | IN("required","optional") | not) or .[3] == "" then error("malformed secrets.tsv row: \(.[0])")
-      else {name: .[0], ns: .[1], req: .[2], keys: (.[3] | split(","))} end]'
+      else {name: .[0], ns: .[1], req: .[2], keys: (.[3] | split(",") | map(rtrimstr("?")))} end]'
 }
+
+# prod-protected: Argo CD must never delete a Namespace or an Argo-managed PersistentVolumeClaim (finalizer or prune):
+# each carries argocd.argoproj.io/sync-options with Delete=false and Prune=false. StatefulSet volumeClaimTemplates PVCs
+# are not Argo-managed; their StatefulSet must state persistentVolumeClaimRetentionPolicy Retain/Retain explicitly.
+JQ_PRODPROTECTED="$JQ_DEFS"'
+.[] | select(type == "object") as $o
+| if ($o.kind | IN("Namespace","PersistentVolumeClaim")) then
+    ((($o.metadata.annotations // {})["argocd.argoproj.io/sync-options"] // "") | split(",") | map(gsub("\\s"; ""))) as $opts
+    | select(($opts | index("Delete=false")) == null or ($opts | index("Prune=false")) == null)
+    | "POLICY: prod-protected \($o | id): needs annotation argocd.argoproj.io/sync-options: Delete=false,Prune=false"
+  elif $o.kind == "StatefulSet" and (($o.spec.volumeClaimTemplates // []) | length) > 0 then
+    select(($o.spec.persistentVolumeClaimRetentionPolicy.whenDeleted // "") != "Retain" or ($o.spec.persistentVolumeClaimRetentionPolicy.whenScaled // "") != "Retain")
+    | "POLICY: prod-protected \($o | id): volumeClaimTemplates need persistentVolumeClaimRetentionPolicy {whenDeleted: Retain, whenScaled: Retain}"
+  else empty end'
 
 # Prod inventory inputs: a fixture may carry its own, else the real prod overlay's.
 prod_tsv() { if [ -f "$1/secrets.tsv" ]; then echo "$1/secrets.tsv"; else echo deploy/k8s/overlays/prod/secrets.tsv; fi; }
@@ -253,6 +269,8 @@ policy() { # $1 = dir; stdin = kustomize output
       [ -n "$res" ] && echo "$res"
       res=$(jq -r "$JQ_NOFAKESEPAY" <<<"$json") || { echo "POLICY: internal $1: prod-no-fake-sepay check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
+      res=$(jq -r "$JQ_PRODPROTECTED" <<<"$json") || { echo "POLICY: internal $1: prod-protected check failed"; return 1; }
+      [ -n "$res" ] && echo "$res"
       prod_inventory_checks "$1" "$json" || return 1 ;;
     e2e)
       res=$(jq -r "$JQ_SECRETREFS" <<<"$json") || { echo "POLICY: internal $1: secret-refs check failed"; return 1; }
@@ -314,10 +332,14 @@ check_dashboards() {
 
 # argocd: every Application under $1 (recursively, *.yaml) has a spec.source.path that exists and builds with
 # `kubectl kustomize`, targetRevision main, and an automated prune + selfHeal sync policy. Paths are repo-relative.
+# Every path other than deploy/argocd/apps (the root's) must be a slice listed in the prod aggregate
+# (deploy/k8s/overlays/prod/kustomization.yaml), so the prod checks (prod-no-secrets, ...) cover everything Argo deploys.
 # Fails closed: unparsable files or no Application at all fail.
 check_argocd() {
-  local dir="$1" f apps n=0 rc=0 name path rev prune heal
+  local dir="$1" f apps n=0 rc=0 name path rev prune heal aggregated
   echo "== $dir (argocd)"
+  aggregated=$(yq -r '.resources[]' deploy/k8s/overlays/prod/kustomization.yaml | tr -d '\r' | sed 's|^|deploy/k8s/overlays/prod/|') \
+    || { echo "POLICY: argocd deploy/k8s/overlays/prod/kustomization.yaml: cannot parse"; return 1; }
   while IFS= read -r f; do
     apps=$(yq -o=json '.' "$f" | jq -c -s '.[] | select(type == "object" and .kind == "Application")
       | {name: .metadata.name, path: (.spec.source.path // ""), rev: (.spec.source.targetRevision // ""),
@@ -332,6 +354,9 @@ check_argocd() {
       elif ! kubectl kustomize "$path" >/dev/null 2>&1; then echo "POLICY: argocd $f Application/$name: source.path $path does not build with kubectl kustomize"; rc=1; fi
       if [ "$rev" != main ]; then echo "POLICY: argocd $f Application/$name: targetRevision \"$rev\" must be main (only bootstrap overrides it)"; rc=1; fi
       if [ "$prune" != true ] || [ "$heal" != true ]; then echo "POLICY: argocd $f Application/$name: syncPolicy.automated needs prune: true and selfHeal: true"; rc=1; fi
+      if [ "$path" != deploy/argocd/apps ] && ! grep -qxF -- "$path" <<<"$aggregated"; then
+        echo "POLICY: argocd $f Application/$name: source.path $path is not a slice of the prod aggregate deploy/k8s/overlays/prod/kustomization.yaml"; rc=1
+      fi
     done <<<"$apps"
   done < <(find "$dir" -name '*.yaml' -type f | sort)
   if [ "$n" -eq 0 ]; then echo "POLICY: argocd $dir: no Application found"; return 1; fi
@@ -353,9 +378,11 @@ self_test() {
 
 REQUIRE_SEALED=0
 if [ "${1:-}" = "--self-test" ]; then self_test; exit $?; fi
-if [ "${1:-}" = "--require-sealed" ]; then REQUIRE_SEALED=1; shift; fi
-
-targets=("$@")
+targets=()
+for a in "$@"; do
+  if [ "$a" = --require-sealed ]; then REQUIRE_SEALED=1; else targets+=("$a"); fi
+done
+set -- "${targets[@]+"${targets[@]}"}"
 if [ ${#targets[@]} -eq 0 ]; then
   targets=(deploy/k8s/platform)
   for d in deploy/k8s/overlays/*/; do [ -d "$d" ] && targets+=("${d%/}"); done

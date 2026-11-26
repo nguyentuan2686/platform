@@ -6,6 +6,9 @@ metadata:
 spec:
   serviceName: postgres
   replicas: 1
+  # The volumeClaimTemplates PVCs are created by the StatefulSet controller, so Argo CD never tracks or prunes them;
+  # they also outlive the StatefulSet and a scale-down (explicit Retain; prod-protected checks it).
+  persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
   selector:
     matchLabels: {app: postgres}
   template:

@@ -1,0 +1,7 @@
+# Self-test fixture: violates only the 'prod-protected' policy check (Argo CD could delete/prune this namespace).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
