@@ -22,7 +22,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use opentelemetry::propagation::Extractor;
@@ -35,6 +35,7 @@ use tracing::{debug, info, warn, Instrument as _, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use super::idempotency::{process_once, Outcome};
+use super::metrics::{ConsumerMetrics, ProcessOutcome};
 use super::{Envelope, EventHandler, MalformedEvent};
 
 /// Default upper bound for the retry backoff.
@@ -109,6 +110,7 @@ pub async fn run_consumer(
         handler: handler.as_ref(),
         shutdown: &shutdown,
         finished: Mutex::default(),
+        metrics: ConsumerMetrics::global(),
     };
     let mut recv_backoff = INITIAL_BACKOFF.min(cfg.max_backoff);
     loop {
@@ -161,18 +163,20 @@ struct Runner<'a> {
     shutdown: &'a CancellationToken,
     /// Next offset to commit per (topic, partition), for finished messages only.
     finished: Mutex<HashMap<(String, i32), i64>>,
+    metrics: ConsumerMetrics,
 }
 
 impl Runner<'_> {
     async fn process(&self, msg: &OwnedMessage) -> Flow {
+        let started = Instant::now();
         let envelope = match msg.payload().map(Envelope::parse) {
             Some(Ok(e)) => e,
             Some(Err(e)) => {
-                self.skip_malformed(msg, &e.to_string());
+                self.skip_malformed(msg, &e.to_string(), started);
                 return Flow::Continue;
             }
             None => {
-                self.skip_malformed(msg, "empty payload");
+                self.skip_malformed(msg, "empty payload", started);
                 return Flow::Continue;
             }
         };
@@ -185,12 +189,14 @@ impl Runner<'_> {
                 event_type = %envelope.event_type,
                 "skipping event of another type"
             );
+            self.record(ProcessOutcome::Ignored, started);
             self.commit(msg);
             return Flow::Continue;
         }
 
         let mut backoff = INITIAL_BACKOFF.min(self.cfg.max_backoff);
         loop {
+            let attempt = Instant::now();
             // Dropping the attempt on shutdown drops its Transaction (rollback); no offset commit.
             let result = tokio::select! {
                 biased;
@@ -208,9 +214,11 @@ impl Runner<'_> {
             };
             match result {
                 Ok(outcome) => {
-                    let what = match outcome {
-                        Outcome::Processed => "event processed",
-                        Outcome::Duplicate => "duplicate event skipped",
+                    let (what, label) = match outcome {
+                        Outcome::Processed => ("event processed", ProcessOutcome::Processed),
+                        Outcome::Duplicate => {
+                            ("duplicate event skipped", ProcessOutcome::Duplicate)
+                        }
                     };
                     info!(
                         topic = msg.topic(),
@@ -220,14 +228,16 @@ impl Runner<'_> {
                         event_type = %envelope.event_type,
                         "{what}"
                     );
+                    self.record(label, attempt);
                     self.commit(msg);
                     return Flow::Continue;
                 }
                 Err(e) => {
                     if let Some(m) = e.chain().find_map(|c| c.downcast_ref::<MalformedEvent>()) {
-                        self.skip_malformed(msg, m.reason());
+                        self.skip_malformed(msg, m.reason(), attempt);
                         return Flow::Continue;
                     }
+                    self.record(ProcessOutcome::Failed, attempt);
                     warn!(
                         error = %format!("{e:#}"),
                         error_type = "EventProcessingFailed",
@@ -247,8 +257,18 @@ impl Runner<'_> {
         }
     }
 
+    fn record(&self, outcome: ProcessOutcome, started: Instant) {
+        self.metrics.record(
+            &self.cfg.topic,
+            &self.cfg.group_id,
+            outcome,
+            started.elapsed(),
+        );
+    }
+
     /// WARN (never the payload) and commit past the message: it can never succeed.
-    fn skip_malformed(&self, msg: &OwnedMessage, reason: &str) {
+    fn skip_malformed(&self, msg: &OwnedMessage, reason: &str, started: Instant) {
+        self.record(ProcessOutcome::Malformed, started);
         warn!(
             error = %reason,
             error_type = "MalformedEvent",

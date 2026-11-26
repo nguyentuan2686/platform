@@ -1,9 +1,10 @@
-//! Telemetry: JSON logs on stdout and optional OTLP (http/protobuf) trace export.
+//! Telemetry: JSON logs on stdout and optional OTLP (http/protobuf) trace and metric export.
 
 pub mod json_layer;
 
 use anyhow::Context as _;
 use opentelemetry::trace::{TraceContextExt, TracerProvider as _};
+use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -13,14 +14,18 @@ use tracing_subscriber::EnvFilter;
 
 pub use json_layer::JsonLayer;
 
-/// Flushes and shuts down the tracer provider (if any) on drop.
+/// Flushes and shuts down the tracer and meter providers on drop.
 pub struct TelemetryGuard {
     provider: Option<SdkTracerProvider>,
+    meter_provider: Option<SdkMeterProvider>,
 }
 
 impl Drop for TelemetryGuard {
     fn drop(&mut self) {
         if let Some(provider) = self.provider.take() {
+            let _ = provider.shutdown();
+        }
+        if let Some(provider) = self.meter_provider.take() {
             let _ = provider.shutdown();
         }
     }
@@ -43,8 +48,9 @@ pub fn init(service_name: &str) -> anyhow::Result<TelemetryGuard> {
     let resource = opentelemetry_sdk::Resource::builder()
         .with_service_name(service_name.to_owned())
         .build();
-    let mut builder = SdkTracerProvider::builder().with_resource(resource);
-    if std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok_and(|v| !v.is_empty()) {
+    let otlp = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").is_ok_and(|v| !v.is_empty());
+    let mut builder = SdkTracerProvider::builder().with_resource(resource.clone());
+    if otlp {
         let exporter = opentelemetry_otlp::SpanExporter::builder()
             .with_http()
             .build()
@@ -52,6 +58,20 @@ pub fn init(service_name: &str) -> anyhow::Result<TelemetryGuard> {
         builder = builder.with_batch_exporter(exporter);
     }
     let provider = builder.build();
+
+    // The meter provider is always installed (instruments are cheap no-ops without a reader);
+    // metrics are only exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. The periodic reader
+    // honours `OTEL_METRIC_EXPORT_INTERVAL` (ms) and exports from its own thread.
+    let mut meter_builder = SdkMeterProvider::builder().with_resource(resource);
+    if otlp {
+        let exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_http()
+            .with_temporality(Temporality::Cumulative)
+            .build()
+            .context("building OTLP metric exporter")?;
+        meter_builder = meter_builder.with_reader(PeriodicReader::builder(exporter).build());
+    }
+    let meter_provider = meter_builder.build();
     let otel_layer =
         tracing_opentelemetry::layer().with_tracer(provider.tracer(service_name.to_owned()));
 
@@ -62,8 +82,11 @@ pub fn init(service_name: &str) -> anyhow::Result<TelemetryGuard> {
         .try_init()
         .context("a global tracing subscriber is already installed")?;
 
+    opentelemetry::global::set_meter_provider(meter_provider.clone());
+
     Ok(TelemetryGuard {
         provider: Some(provider),
+        meter_provider: Some(meter_provider),
     })
 }
 

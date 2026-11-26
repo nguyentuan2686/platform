@@ -6,13 +6,16 @@
 //! own database, topic and consumer group, and failures are reported per scenario by name.
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::future::Future;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{ensure, Context as _};
 use async_trait::async_trait;
 use opentelemetry::trace::{SpanKind, TracerProvider as _};
+use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
+use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::{InMemorySpanExporter, SdkTracerProvider};
 use platform_core::db::migrate_platform;
@@ -345,6 +348,69 @@ impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for WarnLog {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Metrics capture: one global in-memory meter provider, installed once before any consumer runs.
+// Scenarios filter data points by their own (unique) topic.
+// ---------------------------------------------------------------------------------------------
+
+struct MetricsCapture {
+    provider: SdkMeterProvider,
+    exporter: InMemoryMetricExporter,
+}
+
+fn metrics_capture() -> &'static MetricsCapture {
+    static CAPTURE: OnceLock<MetricsCapture> = OnceLock::new();
+    CAPTURE.get_or_init(|| {
+        let exporter = InMemoryMetricExporter::default();
+        let provider = SdkMeterProvider::builder()
+            .with_reader(PeriodicReader::builder(exporter.clone()).build())
+            .build();
+        opentelemetry::global::set_meter_provider(provider.clone());
+        MetricsCapture { provider, exporter }
+    })
+}
+
+/// `messaging.process.duration` counts per `outcome` for `topic` (cumulative).
+fn outcome_counts(topic: &str) -> anyhow::Result<HashMap<String, u64>> {
+    let capture = metrics_capture();
+    capture.provider.force_flush()?;
+    let mut counts: HashMap<String, u64> = HashMap::new();
+    let mut latest: HashMap<String, u64> = HashMap::new();
+    for rm in capture.exporter.get_finished_metrics()? {
+        // Cumulative: a later export supersedes an earlier one, so keep the last seen per outcome.
+        latest.clear();
+        for sm in rm.scope_metrics() {
+            for m in sm
+                .metrics()
+                .filter(|m| m.name() == "messaging.process.duration")
+            {
+                if let AggregatedMetrics::F64(MetricData::Histogram(h)) = m.data() {
+                    for dp in h.data_points() {
+                        let attr = |k: &str| {
+                            dp.attributes()
+                                .find(|kv| kv.key.as_str() == k)
+                                .map(|kv| kv.value.to_string())
+                        };
+                        if attr("messaging.destination.name").as_deref() == Some(topic) {
+                            ensure!(
+                                attr("messaging.consumer.group.name").is_some(),
+                                "group label present"
+                            );
+                            if let Some(o) = attr("outcome") {
+                                *latest.entry(o).or_default() += dp.count();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !latest.is_empty() {
+            counts.clone_from(&latest);
+        }
+    }
+    Ok(counts)
+}
+
 struct Running {
     shutdown: CancellationToken,
     task: JoinHandle<anyhow::Result<()>>,
@@ -504,6 +570,43 @@ async fn malformed_messages_are_skipped_and_consumer_continues(env: &Env) -> any
     consumer.stop().await
 }
 
+async fn consumer_metrics_record_outcomes(env: &Env) -> anyhow::Result<()> {
+    let pool = env.new_db(PgPoolOptions::new()).await?;
+    let topic = env.new_topic().await?;
+    let cfg = env.config(&topic, "it-metrics");
+    let group = cfg.group_id.clone();
+    let consumer = Running::start(cfg, pool.clone());
+
+    let id = Uuid::new_v4();
+    let valid = envelope(id, EVENT_TYPE, &serde_json::json!({}));
+    env.produce(&topic, &valid, None).await?;
+    env.produce(&topic, &valid, None).await?; // same event_id: duplicate
+    env.produce(&topic, b"this is not json", None).await?;
+    env.produce(
+        &topic,
+        &envelope(Uuid::new_v4(), "OrderCancelled", &serde_json::json!({})),
+        None,
+    )
+    .await?;
+
+    wait_for("offset 4 committed", || async {
+        Ok(env.committed(&group, &topic).await? == Some(4))
+    })
+    .await?;
+    wait_for("all four outcomes recorded", || async {
+        let c = outcome_counts(&topic)?;
+        Ok(["processed", "duplicate", "malformed", "ignored"]
+            .iter()
+            .all(|o| c.get(*o) == Some(&1)))
+    })
+    .await?;
+    ensure!(
+        !outcome_counts(&topic)?.contains_key("failed"),
+        "no failed attempts"
+    );
+    consumer.stop().await
+}
+
 async fn continues_trace_from_traceparent_header(env: &Env) -> anyhow::Result<()> {
     opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
     let exporter = InMemorySpanExporter::default();
@@ -643,6 +746,12 @@ async fn db_down_retries_until_db_back(env: &Env) -> anyhow::Result<()> {
         log.count("EventProcessingFailed") >= 1,
         "DB outage surfaced as a logged, retried processing failure"
     );
+    wait_for("processed and failed outcomes recorded", || async {
+        let c = outcome_counts(&topic)?;
+        // Two distinct events (warm-up and the one delayed by the outage), each processed once.
+        Ok(c.get("failed").copied().unwrap_or(0) >= 1 && c.get("processed") == Some(&2))
+    })
+    .await?;
     consumer.stop().await
 }
 
@@ -764,6 +873,7 @@ fn consumer_runner_integration() {
             "containers ready in {:.1}s",
             started.elapsed().as_secs_f64()
         );
+        metrics_capture();
         let mut failures: Vec<String> = Vec::new();
         scenario!(&env, failures, concurrent_platform_migrations_on_fresh_db);
         scenario!(&env, failures, handles_event_once_and_commits);
@@ -773,6 +883,7 @@ fn consumer_runner_integration() {
             failures,
             malformed_messages_are_skipped_and_consumer_continues
         );
+        scenario!(&env, failures, consumer_metrics_record_outcomes);
         scenario!(&env, failures, continues_trace_from_traceparent_header);
         // Last: these pause the shared Postgres.
         scenario!(&env, failures, db_down_retries_until_db_back);
