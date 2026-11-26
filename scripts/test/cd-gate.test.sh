@@ -81,9 +81,30 @@ dispatch_validates_sha_and_ref() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+prod_secrets_only_in_the_prod_environment() {
+  # Final review I6: the CD and verify-deploy secrets live in the GitHub Environment `prod` (deployment branch main
+  # only). Every job of every workflow that names one of them must declare `environment: prod`, or it would see none
+  # (the gate would always say "not set") and a branch workflow must never be able to read them.
+  local wf job bad=""
+  for wf in "$root"/.github/workflows/*.yml "$root"/.github/workflows/*.yaml; do
+    [ -f "$wf" ] || continue
+    while IFS=$'\t' read -r job env; do
+      [ -n "$job" ] || continue
+      [ "$env" = prod ] || bad+=" $(basename "$wf"):$job(environment=$env)"
+    done < <(yq -o=json '.' "$wf" | jq -r '.jobs | to_entries[] | select((.value | tostring) | test("CD_APP_PRIVATE_KEY|CD_APP_ID|TS_OAUTH_CLIENT_ID|TS_OAUTH_SECRET|PROD_KUBECONFIG"))
+      | [.key, (if (.value.environment | type) == "object" then .value.environment.name else (.value.environment // "none") end)] | @tsv')
+  done
+  [ -z "$bad" ] || fail "${FUNCNAME[0]}" "jobs using prod secrets without environment: prod:$bad"
+  for job in gate bump verify-deploy; do
+    [ "$(yq -r ".jobs[\"$job\"].environment" "$root/.github/workflows/cd.yml")" = prod ] || fail "${FUNCNAME[0]}" "cd.yml $job has no environment: prod"
+  done
+  echo "ok ${FUNCNAME[0]}"
+}
+
 nothing_configured_skips_with_notice
 fully_configured_runs
 partial_cd_config_is_an_error
 partial_verify_config_is_an_error
 untrusted_or_failed_runs_are_skipped
 dispatch_validates_sha_and_ref
+prod_secrets_only_in_the_prod_environment

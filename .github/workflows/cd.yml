@@ -34,6 +34,9 @@ permissions:
 jobs:
   gate:
     runs-on: ubuntu-24.04
+    # The secrets are prod Environment secrets: without `environment: prod` this job would see none and always skip.
+    # The Environment allows only main (go-live.md §6), so a workflow on any other branch can never read them.
+    environment: prod
     permissions: {}
     outputs:
       cd: ${{ steps.gate.outputs.cd }}
@@ -113,6 +116,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.cd == 'true'
     runs-on: ubuntu-24.04
+    environment: prod # CD_APP_ID / CD_APP_PRIVATE_KEY are prod Environment variable/secret (deployment branch main only)
     permissions:
       contents: read
       packages: read
@@ -250,6 +254,7 @@ jobs:
     needs: [gate, bump]
     if: needs.bump.outputs.pushed == 'true' && needs.gate.outputs.verify == 'true'
     runs-on: ubuntu-24.04
+    environment: prod # CD_APP_*, TS_OAUTH_* and PROD_KUBECONFIG are prod Environment secrets (deployment branch main only)
     timeout-minutes: 40
     permissions:
       contents: read
