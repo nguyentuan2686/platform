@@ -1,0 +1,23 @@
+# A flat backlog of 500 is not alerting; a backlog growing from 150 for 10 minutes is.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: lag_flat_500_is_silent
+    interval: 1m
+    input_series:
+      - series: 'redpanda_kafka_consumer_group_lag_max{redpanda_group="notify-svc"}'
+        values: '500+0x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: consumer-lag-rising
+        exp_alerts: []
+  - name: lag_growing_from_150_fires
+    interval: 1m
+    input_series:
+      - series: 'redpanda_kafka_consumer_group_lag_max{redpanda_group="notify-svc"}'
+        values: '150+10x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: consumer-lag-rising
+        exp_alerts:
+          - exp_labels: {redpanda_group: notify-svc, severity: warning}

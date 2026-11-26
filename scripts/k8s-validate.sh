@@ -330,6 +330,35 @@ check_dashboards() {
   return $rc
 }
 
+
+# alerts: Grafana alert rules as code. $1 = dir holding alerting/rules.yaml and metric-names.txt. rules.yaml parses, its
+# uids are exactly the six of the spec (§10), every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
+# identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[`).
+# Fails closed: missing files or parse errors fail.
+ALERT_UIDS="consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high pod-restart-loop"
+check_alerts() {
+  local dir="$1" f="$1/alerting/rules.yaml" rc=0 res m names json uids
+  echo "== $dir (alerts)"
+  [ -f "$f" ] || { echo "POLICY: alerts $f: missing"; return 1; }
+  [ -s "$dir/metric-names.txt" ] || { echo "POLICY: alerts $dir: metric-names.txt missing or empty"; return 1; }
+  names=$(tr -d '\r' <"$dir/metric-names.txt" | sed '/^[[:space:]]*$/d')
+  json=$(yq -o=json '.' "$f" | jq -c '.') || { echo "POLICY: alerts $f: cannot parse"; return 1; }
+  uids=$(jq -r '[.groups[]?.rules[]?.uid] | sort | join(" ")' <<<"$json" | tr -d '\r') || { echo "POLICY: alerts $f: no groups/rules"; return 1; }
+  [ "$uids" = "$ALERT_UIDS" ] || { echo "POLICY: alerts $f: rule uids [$uids] != [$ALERT_UIDS]"; rc=1; }
+  res=$(jq -r '.groups[]?.rules[]? | . as $r | .data[]? | select((.datasourceUid // "") | IN("prometheus", "__expr__") | not)
+    | "POLICY: alerts \($r.uid): query \(.refId) datasourceUid \"\(.datasourceUid // "")\" must be prometheus or __expr__"' <<<"$json" | tr -d '\r') \
+    || { echo "POLICY: alerts $f: datasource check failed"; return 1; }
+  if [ -n "$res" ]; then echo "$res"; rc=1; fi
+  res=$(jq -r --arg re "$METRIC_RE|[a-z_][a-z0-9_]*(?=\[)" '.groups[]?.rules[]? | . as $r | .data[]? | select(.refId == "A") | .model.expr // empty
+    | scan($re) | "\($r.uid)\t\(.)"' <<<"$json" | tr -d '\r' | sort -u) \
+    || { echo "POLICY: alerts $f: metric extraction failed"; return 1; }
+  while IFS=$'\t' read -r uid m; do
+    [ -z "$m" ] && continue
+    if ! grep -qxF "$m" <<<"$names"; then echo "POLICY: alerts $f: rule $uid: metric $m is not listed in metric-names.txt"; rc=1; fi
+  done <<<"$res"
+  return $rc
+}
+
 # argocd: every Application under $1 (recursively, *.yaml) has a spec.source.path that exists and builds with
 # `kubectl kustomize`, targetRevision main, and an automated prune + selfHeal sync policy. Paths are repo-relative.
 # Every path other than deploy/argocd/apps (the root's) must be a slice listed in the prod aggregate
@@ -368,6 +397,7 @@ self_test() {
   for d in scripts/testdata/k8s-validate/*/; do
     name=$(basename "$d"); check=$(tr -d '\r\n' <"$d/expect") # `expect` holds the POLICY check the fixture must trigger
     if [ -d "$d/dashboards" ]; then out=$(check_dashboards "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
+    elif [ -d "$d/alerting" ]; then out=$(check_alerts "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
     elif [ -d "$d/argocd" ]; then out=$(check_argocd "${d%/}/argocd" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
     else out=$(SKIP_KUBECONFORM=1 validate_one "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }; fi
     if grep -q "^POLICY: $check " <<<"$out"; then echo "self-test ok: $name rejected with POLICY: $check"
@@ -390,6 +420,7 @@ fi
 fail=0
 for t in "${targets[@]}"; do validate_one "${t%/}" || fail=1; done
 [ $# -eq 0 ] && { check_dashboards deploy/k8s/platform/grafana || fail=1; }
+[ $# -eq 0 ] && { check_alerts deploy/k8s/platform/grafana || fail=1; }
 [ $# -eq 0 ] && { check_argocd deploy/argocd || fail=1; }
 [ $fail -eq 0 ] && echo "k8s-validate: ok" || echo "k8s-validate: FAILED"
 exit $fail

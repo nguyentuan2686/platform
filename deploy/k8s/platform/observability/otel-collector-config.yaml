@@ -17,6 +17,28 @@ receivers:
           metrics_path: /public_metrics
           static_configs:
             - targets: ['redpanda.data.svc.cluster.local:9644']
+        # Argo CD application controller metrics (deploy-failed alert). No target in the kind e2e cluster: the alert stays NoData -> OK.
+        - job_name: argocd
+          scrape_interval: 30s
+          static_configs:
+            - targets: ['argocd-metrics.argocd.svc.cluster.local:8082']
+
+  # Cluster state for alerts (container restarts, node conditions). Single node: one DaemonSet pod. See rbac.yaml.
+  k8s_cluster:
+    collection_interval: 30s
+    node_conditions_to_report: [Ready, DiskPressure]
+
+  # Node disk usage for the disk-usage-high alert; the node's / is mounted read-only at /hostfs.
+  hostmetrics:
+    collection_interval: 30s
+    root_path: /hostfs
+    scrapers:
+      filesystem:
+        metrics:
+          system.filesystem.utilization: {enabled: true}
+        exclude_fs_types:
+          fs_types: [tmpfs, overlay, squashfs, nsfs, proc, sysfs]
+          match_type: strict
 
   # Service logs are JSON lines on stdout (CLAUDE.md logging contract).
   filelog:
@@ -49,8 +71,8 @@ receivers:
 processors:
   memory_limiter:
     check_interval: 1s
-    limit_mib: 200
-    spike_limit_mib: 50
+    limit_mib: 256
+    spike_limit_mib: 64
   resource:
     attributes:
       - {key: deployment.environment.name, value: '${env:DEPLOY_ENV}', action: upsert}
@@ -68,7 +90,7 @@ service:
       processors: [memory_limiter, resource, batch]
       exporters: [otlphttp]
     metrics:
-      receivers: [otlp, prometheus]
+      receivers: [otlp, prometheus, k8s_cluster, hostmetrics]
       processors: [memory_limiter, resource, batch]
       exporters: [otlphttp]
     logs:

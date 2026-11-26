@@ -42,3 +42,4 @@ secretGenerator:
   - {name: payment-svc-secrets, namespace: apps, envs: [secrets/payment-svc-secrets.env]}
   - {name: web-secrets, namespace: apps, envs: [secrets/web-secrets.env]}
   - {name: postgres-secrets, namespace: data, envs: [secrets/postgres-secrets.env]}
+  - {name: alerting-secrets, namespace: observability, envs: [secrets/alerting-secrets.env]} # optional in prod; here it drives the contact-point e2e check

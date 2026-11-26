@@ -92,6 +92,7 @@ jobs:
               - 'infra/**'
               - 'deploy/argocd/**'
               - 'deploy/k8s/overlays/prod/**' # secrets.tsv and domain.yaml feed the script tests
+              - 'deploy/k8s/platform/grafana/alerting/**' # rules.yaml feeds the promtool alert tests
               - '.github/**'
             infra:
               - 'infra/**'
@@ -274,6 +275,8 @@ jobs:
             echo "== $t"
             bash "$t"
           done
+      - name: Alert rule unit tests (promtool, pinned image)
+        run: bash scripts/alerts-promtool.sh
 
   # Host bootstrap on x86 + ARM runners (k3s, firewall, Sealed Secrets, Argo CD syncing this commit): every push to
   # main, and PRs that touch infra, Argo CD apps, the prod overlay or workflows.

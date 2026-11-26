@@ -1,7 +1,50 @@
-# The collector reads pod logs from the node's filesystem and never calls the Kubernetes API,
-# so it gets a dedicated ServiceAccount with no token and no RBAC bindings.
+# The collector reads pod logs from the node's filesystem and, for the k8s_cluster receiver (container restarts,
+# node conditions), watches the Kubernetes API: read-only, only the resources that receiver documents.
+# NOTE (ADR 0004): on a multi-node cluster every DaemonSet pod would report the same cluster-wide metrics, so
+# k8s_cluster must then move to a single-replica Deployment. Fine on the single k3s node.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: otel-collector
-automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+rules:
+  - apiGroups: [""]
+    resources:
+      - events
+      - namespaces
+      - namespaces/status
+      - nodes
+      - nodes/spec
+      - pods
+      - pods/status
+      - replicationcontrollers
+      - replicationcontrollers/status
+      - resourcequotas
+      - services
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [daemonsets, deployments, replicasets, statefulsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: observability

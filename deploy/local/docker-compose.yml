@@ -50,6 +50,8 @@ services:
     volumes: # dashboards as code, same files and paths as the k8s lgtm pod
       - ../k8s/platform/grafana/provisioning/platform-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/platform-dashboards.yaml:ro
       - ../k8s/platform/grafana/dashboards:/var/lib/grafana/dashboards/platform:ro
+      # alert rules as code; no contact point locally (the Telegram one is rendered only in k8s when its secret exists)
+      - ../k8s/platform/grafana/alerting/rules.yaml:/otel-lgtm/grafana/conf/provisioning/alerting/rules.yaml:ro
 
   order-svc:
     profiles: ["app"]

@@ -1,0 +1,19 @@
+# An Argo CD app Degraded for 10 minutes fires deploy-failed; Healthy never does; still pending before 10 minutes.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: deploy_failed_after_10m_degraded
+    interval: 1m
+    input_series:
+      - series: 'argocd_app_info{name="prod-apps", health_status="Degraded", sync_status="Synced"}'
+        values: '1+0x30'
+      - series: 'argocd_app_info{name="prod-platform", health_status="Healthy", sync_status="Synced"}'
+        values: '1+0x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: deploy-failed
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: deploy-failed
+        exp_alerts:
+          - exp_labels: {name: prod-apps, severity: critical}

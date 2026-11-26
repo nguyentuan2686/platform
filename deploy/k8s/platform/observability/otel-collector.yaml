@@ -28,8 +28,8 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           resources:
-            requests: {cpu: 50m, memory: 256Mi}
-            limits: {memory: 256Mi}
+            requests: {cpu: 50m, memory: 320Mi}
+            limits: {memory: 320Mi}
           readinessProbe:
             httpGet: {path: /, port: health}
             periodSeconds: 10
@@ -40,6 +40,7 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/otelcol, readOnly: true}
             - {name: pod-logs, mountPath: /var/log/pods, readOnly: true}
+            - {name: hostfs, mountPath: /hostfs, readOnly: true} # hostmetrics root_path (node disk usage)
       volumes:
         - name: config
           configMap:
@@ -47,6 +48,10 @@ spec:
         - name: pod-logs
           hostPath:
             path: /var/log/pods
+            type: Directory
+        - name: hostfs
+          hostPath:
+            path: /
             type: Directory
 ---
 apiVersion: v1
