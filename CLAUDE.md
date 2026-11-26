@@ -20,9 +20,9 @@ knowledge/tuvi/   # reading-tuvi knowledge base (jsonl), imported at startup
 services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust), reading-tuvi (Java), identity-svc (Java), payment-svc (Java), web (Next.js)}
 libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service}
-deploy/{local/docker-compose.yml, k8s/{base,overlays/prod,platform}, argocd}
+deploy/{local/docker-compose.yml, k8s/{base,overlays/{prod,e2e},platform}, argocd}   # k8s: Kustomize; overlays/e2e = CI kind test values
 infra/bootstrap/   # idempotent host setup: k3s + argocd + sealed-secrets
-scripts/           # cargo.sh/cargo.ps1 (Docker Rust), new-service, verify-deploy, public-url
+scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, verify-deploy, public-url
 docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 .github/{workflows, dependabot.yml}
 ```
@@ -42,7 +42,7 @@ docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
 - Logs: JSON on stdout, one object per line, mandatory fields `timestamp, level, service, trace_id, span_id, message` (exact names; Rust emits the same).
 - HTTP errors: `application/problem+json` with extra property `trace_id`.
 - Config via env vars (12-factor); no plaintext secrets in Git.
-- Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`.
+- Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`. Topics are declared at startup by their producer (Java: a `NewTopic` bean; Spring consumers too), never left to broker auto-create (off in the k8s Redpanda).
 - Event evolution rule: additive changes (new optional `data` fields) stay in v1, so event schemas leave `data` open and consumers ignore unknown fields; breaking changes (remove/rename/retype a field, change meaning) go to a new topic `<name>.v2` with its own schema, published alongside v1 until consumers migrate.
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
 - Dev machine is weak (2 cores / 12GB): local stack <= ~3GB (full `--profile app` is ~2.75GB; identity-svc and payment-svc need `mem_limit: 512m`, the JVM off-heap alone is ~170MiB); heavy verification runs in CI.
@@ -63,6 +63,8 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `scripts/smoke-web.sh http://localhost:3001` - web: /health/ready 200, /vi contains "Lão Thiên Cơ", /vi/kien-thuc and /robots.txt 200, prints `OK`; web e2e (Playwright + stub upstreams, in CI job `e2e`): `npm run e2e` in services/web. Full-stack e2e (local only, never CI; real stack, Mailpit magic link, fake LLM, dev payment simulator): bring up `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build --no-deps postgres redpanda mailpit chart-svc reading-tuvi identity-svc payment-svc web`, then `docker run --rm --network host -v "$PWD/services/web:/w" -w /w mcr.microsoft.com/playwright:v1.65.1-noble sh -c "npm ci && npx playwright test -c playwright.stack.config.ts"`, then `down -v`. Web env and prod rules: `docs/runbooks/web.md`
 - `docker run --rm -v "$PWD/services/web:/app" -v "$PWD/knowledge/tuvi:/knowledge/tuvi:ro" -e KNOWLEDGE_DIR=/knowledge/tuvi -w /app node:22-alpine sh -c "npm ci && npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundle"` - web (Next.js) gates; no native Node. Local: web on http://localhost:3001 (`--profile app`)
 - `scripts/cargo.sh <args>` (PowerShell: `scripts/cargo.ps1`) - run cargo in the dockerized Rust toolchain: `fmt --check`, `clippy --all-targets -- -D warnings`, `deny check`, `test`
+- `docker run --rm -v "$PWD:/w" -w /w alpine/k8s:1.33.4 bash scripts/k8s-validate.sh` - k8s manifests: kustomize build + kubeconform + policy checks + dashboards (CI job `k8s-manifests`; `--self-test` checks the fixtures)
+- kind e2e of the full stack (deploy `overlays/e2e`, every smoke script, then `scripts/e2e-observability.sh`: cross-service trace, RED/consumer/outbox/consumer-lag metrics, logs with trace_id, dashboards) runs only in CI job `k8s-e2e` (`.github/workflows/_k8s-e2e.yml`: every push to main, PRs touching `deploy/k8s/**`, `deploy/local/**`, `scripts/**` or the e2e workflow); never run kind locally. On failure read the `k8s-e2e-diagnostics` artifact first
 
 ## Testing
 - A test must wait on the observable end state with a deadline, never on "an operation returned 0/empty once" or a fixed sleep. Tight timeouts in a test must not turn a slow first call (fresh Kafka topic, container warm-up) into a failure. Loops end on state, not on a return value. A flake that recurs gets a fix, not a rerun.

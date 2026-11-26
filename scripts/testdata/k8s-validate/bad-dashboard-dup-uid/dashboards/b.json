@@ -1,0 +1,1 @@
+{"uid":"same","title":"T","panels":[{"id":1,"targets":[{"refId":"A","datasource":{"uid":"prometheus"},"expr":"rate(http_server_request_duration_seconds_count[5m])"}]}]}

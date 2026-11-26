@@ -1,0 +1,12 @@
+# Self-test fixture: non-string image makes jq error; the validator must fail closed.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fixture, namespace: apps}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      containers:
+        - name: app
+          image: 5

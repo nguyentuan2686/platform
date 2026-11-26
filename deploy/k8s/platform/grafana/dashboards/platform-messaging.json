@@ -1,0 +1,92 @@
+{
+  "uid": "platform-messaging",
+  "title": "Platform / Messaging",
+  "tags": ["platform"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "1m",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Consumer rate (msg/s)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum by (job, messaging_destination_name, outcome) (rate(messaging_process_duration_seconds_count[5m]))",
+          "legendFormat": "{{job}} {{messaging_destination_name}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Consumer failure %",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "100 * sum by (job, messaging_destination_name) (rate(messaging_process_duration_seconds_count{outcome=\"failed\"}[5m])) / sum by (job, messaging_destination_name) (rate(messaging_process_duration_seconds_count[5m]))",
+          "legendFormat": "{{job}} {{messaging_destination_name}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Processing latency p95",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "histogram_quantile(0.95, sum by (job, messaging_destination_name, le) (rate(messaging_process_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{job}} {{messaging_destination_name}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Consumer group lag (max, messages)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "max by (redpanda_group) (redpanda_kafka_consumer_group_lag_max)",
+          "legendFormat": "{{redpanda_group}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Outbox lag (oldest unpublished row)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "max by (job) (platform_outbox_lag_seconds)",
+          "legendFormat": "{{job}}"
+        }
+      ]
+    }
+  ]
+}

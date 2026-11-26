@@ -9,7 +9,7 @@
 use axum::extract::{FromRequest, Request, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use platform_core::http::{health_router, trace_layer, ApiError, FieldError};
+use platform_core::http::{health_router, http_metrics_layer, trace_layer, ApiError, FieldError};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -40,6 +40,7 @@ pub fn router(state: AppState) -> Router {
         .merge(health_router(readiness))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed)
+        .layer(http_metrics_layer())
         .layer(trace_layer())
 }
 

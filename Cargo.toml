@@ -15,7 +15,7 @@ anyhow = "1.0.105"
 time = { version = "0.3.55", features = ["formatting"] }
 opentelemetry = "0.33.1"
 opentelemetry_sdk = "0.33.1"
-opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client"] }
+opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["trace", "metrics", "http-proto", "reqwest-blocking-client"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 tokio = { version = "1.54.1", features = ["time", "rt-multi-thread", "macros"] }
 axum = { version = "0.8.4", default-features = false, features = ["http1", "json", "query", "tokio", "matched-path", "original-uri"] }

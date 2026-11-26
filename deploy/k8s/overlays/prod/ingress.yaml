@@ -1,0 +1,21 @@
+# Plan 4 sets APP_DOMAIN (replaces the .invalid placeholder host).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: platform
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: app.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port: {number: 3000}

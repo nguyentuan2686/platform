@@ -1,2 +1,3 @@
 dev.platform.starter.web.PlatformWebAutoConfiguration
 dev.platform.starter.outbox.OutboxAutoConfiguration
+dev.platform.starter.messaging.MessagingMetricsAutoConfiguration

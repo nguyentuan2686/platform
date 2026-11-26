@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+        app.kubernetes.io/part-of: platform
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: web
+          image: ghcr.io/nguyentuan2686/web
+          ports:
+            - {name: http, containerPort: 3000}
+          env:
+            - {name: PORT, value: "3000"}
+            - {name: CHART_SVC_URL, value: "http://chart-svc.apps.svc.cluster.local:8082"}
+            - {name: READING_URL, value: "http://reading-tuvi.apps.svc.cluster.local:8083"}
+            - {name: IDENTITY_SVC_URL, value: "http://identity-svc.apps.svc.cluster.local:8084"}
+            - {name: PAYMENT_SVC_URL, value: "http://payment-svc.apps.svc.cluster.local:8085"}
+            # Runtime same-origin check. The image also bakes WEB_ORIGIN at build time (Docker build arg, canonical URLs
+            # and sitemap), so the CD build must pass the same public origin; the overlay sets the runtime value.
+            - {name: WEB_ORIGIN, value: "https://app.example.invalid"}
+            - {name: COOKIE_SECURE, value: "1"}
+            - {name: GOOGLE_LOGIN, value: "0"}
+            - {name: QA_STREAM_TIMEOUT_MS, value: "95000"}
+            - {name: ADMIN_ACCOUNT_IDS, value: ""}
+            - {name: DEV_PAYMENT_SIMULATOR, value: "0"}
+            - {name: DEPLOY_ENV, value: prod}
+            - {name: SEPAY_WEBHOOK_AUTH, value: apikey}
+          envFrom:
+            - secretRef: {name: web-secrets}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 256Mi}
+          livenessProbe:
+            httpGet: {path: /health/live, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /health/ready, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: false # Next.js writes .next/cache

@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lgtm-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 5Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lgtm
+  labels: {app: lgtm}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # RWO volume: the old pod must release it first
+  selector:
+    matchLabels: {app: lgtm}
+  template:
+    metadata:
+      labels: {app: lgtm}
+    spec:
+      containers:
+        - name: lgtm
+          image: grafana/otel-lgtm:0.41.1
+          ports:
+            - {name: grafana, containerPort: 3000}
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+            - {name: prometheus, containerPort: 9090}
+            - {name: loki, containerPort: 3100}
+            - {name: tempo, containerPort: 3200}
+          resources:
+            requests: {cpu: 200m, memory: 1024Mi}
+            limits: {memory: 1024Mi}
+          readinessProbe:
+            httpGet: {path: /api/health, port: grafana}
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /api/health, port: grafana}
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            # The image keeps Grafana, Loki, Tempo, Prometheus and Pyroscope state under /data.
+            - {name: data, mountPath: /data}
+            # Dashboards as code (deploy/k8s/platform/grafana): provider file into the image's Grafana provisioning dir, JSONs at the provider path.
+            - name: grafana-dashboard-provider
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/platform-dashboards.yaml
+              subPath: platform-dashboards.yaml
+              readOnly: true
+            - {name: grafana-dashboards, mountPath: /var/lib/grafana/dashboards/platform, readOnly: true}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lgtm-data
+        - name: grafana-dashboard-provider
+          configMap: {name: grafana-dashboard-provider}
+        - name: grafana-dashboards
+          configMap: {name: grafana-dashboards}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lgtm
+  labels: {app: lgtm}
+spec:
+  selector: {app: lgtm}
+  ports:
+    - {name: grafana, port: 3000, targetPort: grafana}
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+    - {name: prometheus, port: 9090, targetPort: prometheus}
+    - {name: loki, port: 3100, targetPort: loki}
+    - {name: tempo, port: 3200, targetPort: tempo}

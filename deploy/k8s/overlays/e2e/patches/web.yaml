@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          env:
+            - {name: WEB_ORIGIN, value: "http://localhost:3001"}
+            - {name: COOKIE_SECURE, value: "0"}
+            - {name: DEV_PAYMENT_SIMULATOR, value: "1"}
+            - {name: DEPLOY_ENV, value: e2e}

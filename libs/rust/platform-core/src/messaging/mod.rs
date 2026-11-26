@@ -8,6 +8,7 @@
 pub mod consumer;
 pub mod envelope;
 mod idempotency;
+pub(crate) mod metrics;
 
 use async_trait::async_trait;
 use sqlx::{Postgres, Transaction};

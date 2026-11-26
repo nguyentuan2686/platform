@@ -1,9 +1,11 @@
 //! One-JSON-object-per-line log layer, field-compatible with the Java `PlatformLogFormatter`:
 //! `timestamp, level, service, trace_id, span_id, message`, optional `error` and `ctx`.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use opentelemetry::trace::TraceContextExt;
 use serde_json::{json, Map, Value};
@@ -25,6 +27,10 @@ pub struct JsonLayer<W> {
     // `Span::current()` is unusable inside a subscriber callback (dispatcher re-entrancy guard),
     // so keep a weak handle to our own dispatcher to look up the event span's OTel context.
     dispatch: OnceLock<WeakDispatch>,
+    /// Min interval between lines from the same OTel-internal target (exporter failures repeat
+    /// every export interval while a collector is down); `None` disables throttling.
+    sdk_window: Option<Duration>,
+    sdk_last: Mutex<HashMap<String, (Instant, u64)>>,
 }
 
 impl<W> JsonLayer<W> {
@@ -33,6 +39,46 @@ impl<W> JsonLayer<W> {
             service: service.into(),
             make_writer,
             dispatch: OnceLock::new(),
+            sdk_window: None,
+            sdk_last: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Emit at most one line per `window` per `opentelemetry*` target (the SDK's own diagnostics,
+    /// e.g. export failures). Later lines carry the number of suppressed events as `ctx.suppressed`.
+    #[must_use]
+    pub fn with_sdk_throttle(mut self, window: Duration) -> Self {
+        self.sdk_window = Some(window);
+        self
+    }
+
+    /// `Some(suppressed)` when the event may be emitted, `None` when it is throttled.
+    fn admit(&self, target: &str, key: &str) -> Option<u64> {
+        let Some(window) = self.sdk_window else {
+            return Some(0);
+        };
+        if !target.starts_with("opentelemetry") {
+            return Some(0);
+        }
+        let Ok(mut last) = self.sdk_last.lock() else {
+            return Some(0);
+        };
+        let now = Instant::now();
+        match last.get_mut(key) {
+            None => {
+                last.insert(key.to_owned(), (now, 0));
+                Some(0)
+            }
+            Some((at, suppressed)) if now.duration_since(*at) >= window => {
+                let n = *suppressed;
+                *at = now;
+                *suppressed = 0;
+                Some(n)
+            }
+            Some((_, suppressed)) => {
+                *suppressed += 1;
+                None
+            }
         }
     }
 
@@ -73,6 +119,30 @@ struct FieldVisitor {
 }
 
 impl FieldVisitor {
+    /// SDK-internal events carry their text in `name`/`reason` fields, not `message`; never emit
+    /// an empty `message`: fall back to those, then to the target.
+    fn fill_empty_message(&mut self, target: &str) {
+        if !self.message.is_empty() {
+            return;
+        }
+        let take = |ctx: &mut Map<String, Value>, k: &str| match ctx.remove(k) {
+            Some(Value::String(s)) if !s.is_empty() => Some(s),
+            _ => None,
+        };
+        let name = take(&mut self.ctx, "name");
+        let reason = take(&mut self.ctx, "reason");
+        self.message = match (name, reason) {
+            (Some(n), Some(r)) => format!("{n}: {r}"),
+            (Some(t), None) | (None, Some(t)) => t,
+            (None, None) => self.error.clone().unwrap_or_else(|| target.to_owned()),
+        };
+    }
+
+    /// Throttle key: target plus event name, so distinct SDK sources do not mask each other.
+    fn source_key(&self, target: &str) -> String {
+        format!("{target}/{}", self.message)
+    }
+
     fn put(&mut self, field: &Field, value: Value) {
         self.ctx.insert(field.name().to_owned(), value);
     }
@@ -135,6 +205,16 @@ where
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
+        visitor.fill_empty_message(event.metadata().target());
+        let Some(suppressed) = self.admit(
+            event.metadata().target(),
+            &visitor.source_key(event.metadata().target()),
+        ) else {
+            return;
+        };
+        if suppressed > 0 {
+            visitor.ctx.insert("suppressed".into(), json!(suppressed));
+        }
         let (trace_id, span_id) = self.event_ids(event, &ctx);
 
         let mut obj = Map::new();
@@ -237,6 +317,50 @@ mod tests {
         OffsetDateTime::parse(ts, &Rfc3339).unwrap();
     }
 
+    #[test]
+    fn event_without_message_falls_back_to_name_then_target() {
+        let v = parse(&capture(|| {
+            tracing::error!(name = "PeriodicReader.ExportError", error = "boom", "");
+        }));
+        assert_eq!(v["message"], "PeriodicReader.ExportError");
+        let v = parse(&capture(|| {
+            tracing::warn!(name = "X.Failed", reason = "bad");
+        }));
+        assert_eq!(v["message"], "X.Failed: bad");
+        let v = parse(&capture(|| tracing::warn!(attempt = 1)));
+        assert!(!v["message"].as_str().unwrap().is_empty(), "{v}");
+    }
+
+    #[test]
+    fn sdk_events_are_throttled_per_source_but_app_events_are_not() {
+        let buf = Buf::default();
+        let layer = JsonLayer::new("svc", buf.clone()).with_sdk_throttle(Duration::from_secs(60));
+        let subscriber = tracing_subscriber::registry().with(layer);
+        tracing::subscriber::with_default(subscriber, || {
+            for _ in 0..5 {
+                tracing::error!(target: "opentelemetry_sdk", name = "A.Export", "");
+                tracing::error!(target: "opentelemetry_sdk", name = "B.Export", "");
+                tracing::info!("app event");
+            }
+        });
+        let text = buf.text();
+        let count = |needle: &str| text.lines().filter(|l| l.contains(needle)).count();
+        assert_eq!(count("A.Export"), 1);
+        assert_eq!(count("B.Export"), 1);
+        assert_eq!(count("app event"), 5);
+    }
+
+    #[test]
+    fn throttle_reports_suppressed_count_after_window() {
+        let layer = JsonLayer::new("svc", Buf::default()).with_sdk_throttle(Duration::ZERO);
+        assert_eq!(layer.admit("opentelemetry_sdk", "k"), Some(0));
+        assert_eq!(layer.admit("opentelemetry_sdk", "k"), Some(0));
+        let layer =
+            JsonLayer::new("svc", Buf::default()).with_sdk_throttle(Duration::from_secs(60));
+        assert_eq!(layer.admit("opentelemetry_sdk", "k"), Some(0));
+        assert_eq!(layer.admit("opentelemetry_sdk", "k"), None);
+        assert_eq!(layer.admit("opentelemetry_sdk", "k"), None);
+    }
     #[test]
     fn no_trace_context_gives_empty_ids() {
         let v = parse(&capture(|| tracing::info!("hello")));

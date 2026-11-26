@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels: {app: postgres}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - {name: postgres, containerPort: 5432}
+          env:
+            # Subdirectory: the volume root holds lost+found on some storage classes.
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          # POSTGRES_PASSWORD and the per-service *_DB_PASSWORD keys; supplied by Plan 4 (SealedSecret) or the e2e overlay.
+          envFrom:
+            - secretRef: {name: postgres-secrets}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 256Mi}
+          readinessProbe:
+            # -h forces TCP: the unix socket is up during initdb, TCP only after the real server starts.
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres]}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            exec: {command: [pg_isready, -h, 127.0.0.1, -U, postgres]}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - {name: pgdata, mountPath: /var/lib/postgresql/data}
+            - {name: init, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+            defaultMode: 0555
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 2Gi}

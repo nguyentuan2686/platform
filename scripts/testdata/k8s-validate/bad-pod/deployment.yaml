@@ -1,0 +1,12 @@
+# Self-test fixture: a bare Pod with a resources violation (no limits, no cpu request).
+apiVersion: v1
+kind: Pod
+metadata: {name: fixture, namespace: apps}
+spec:
+  securityContext: {runAsNonRoot: true, runAsUser: 10001}
+  containers:
+    - name: app
+      image: ghcr.io/example/chart-svc:1.0
+      resources: {requests: {memory: 64Mi}}
+      livenessProbe: {httpGet: {path: /health/live, port: 8080}}
+      readinessProbe: {httpGet: {path: /health/ready, port: 8080}}

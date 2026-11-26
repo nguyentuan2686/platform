@@ -10,7 +10,7 @@ use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
 use platform_core::http::{
-    health_router, trace_layer, ApiError, ApiQuery, FieldError, ReadinessCheck,
+    health_router, http_metrics_layer, trace_layer, ApiError, ApiQuery, FieldError, ReadinessCheck,
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -61,6 +61,7 @@ pub fn router<R: NotificationRepositoryPort + 'static>(
         .route("/notifications", get(list::<R>))
         .with_state(service)
         .merge(health_router(readiness))
+        .layer(http_metrics_layer())
         .layer(trace_layer())
 }
 
