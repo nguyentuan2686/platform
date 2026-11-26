@@ -42,6 +42,7 @@ jobs:
       k8s: ${{ steps.filter.outputs.k8s }}
       ops: ${{ steps.filter.outputs.ops }}
       infra: ${{ steps.filter.outputs.infra }}
+      web_origin: ${{ steps.origin.outputs.web_origin }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -92,6 +93,7 @@ jobs:
             web:
               - 'services/web/**'
               - 'knowledge/tuvi/**'
+              - 'deploy/k8s/overlays/prod/domain/**' # the build-time WEB_ORIGIN (scripts/web-origin.sh)
             k8s:
               - 'deploy/k8s/**'
               - 'deploy/argocd/**'
@@ -115,6 +117,13 @@ jobs:
               - '.mvn/**'
               - 'pom.xml'
               - '.github/**'
+      # The web image bakes WEB_ORIGIN at build time (canonical URLs, sitemap); it comes from the same domain.yaml as the
+      # runtime value, empty while APP_DOMAIN is the *.invalid placeholder.
+      - name: Build-time web origin (deploy/k8s/overlays/prod/domain/domain.yaml)
+        id: origin
+        run: |
+          origin="$(bash scripts/web-origin.sh)" # fails the job on a malformed APP_DOMAIN
+          echo "web_origin=$origin" >>"$GITHUB_OUTPUT"
 
   order-svc:
     needs: changes
@@ -202,6 +211,7 @@ jobs:
       dir: services/web
       image: web
       dockerfile: services/web/Dockerfile
+      build-args: WEB_ORIGIN=${{ needs.changes.outputs.web_origin }}
       publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   k8s-manifests:
