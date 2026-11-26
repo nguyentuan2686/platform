@@ -60,17 +60,31 @@ export async function bindLoginToSession(session: string): Promise<void> {
   (await cookies()).set(loginCookie(), `${nonce}.${tag(nonce, session)}`, { ...base("/"), maxAge: LOGIN_MAX_AGE_S });
 }
 
-/** True only when this browser started the login with this very session (constant time); single use. */
-export async function takeLoginBinding(session: string | undefined): Promise<boolean> {
-  const jar = await cookies();
-  const name = loginCookie();
-  const v = jar.get(name)?.value;
-  if (v === undefined) return false;
-  jar.delete({ name, ...base("/") });
-  if (!session) return false;
+/**
+ * True only when this browser started the login with this very session (constant time). Does not
+ * consume the binding: a confirmation that fails transiently (identity down, a timeout) must be able
+ * to retry and still merge the guest. Call clearLoginBinding() once the link is verified or dead.
+ */
+export async function peekLoginBinding(session: string | undefined): Promise<boolean> {
+  const v = (await cookies()).get(loginCookie())?.value;
+  if (v === undefined || !session) return false;
   const [nonce, got, ...rest] = v.split(".");
   if (rest.length > 0 || !B64URL_43.test(nonce ?? "") || !B64URL_43.test(got ?? "")) return false;
   return timingSafeEqual(Buffer.from(got), Buffer.from(tag(nonce, session)));
+}
+
+/** Consumes the binding (single use): after a verified login, a dead link or an explicit cancel. */
+export async function clearLoginBinding(): Promise<void> {
+  const jar = await cookies();
+  const name = loginCookie();
+  if (jar.get(name) !== undefined) jar.delete({ name, ...base("/") });
+}
+
+/** peekLoginBinding then clearLoginBinding, for a flow that cannot be retried (the OIDC callback). */
+export async function takeLoginBinding(session: string | undefined): Promise<boolean> {
+  const bound = await peekLoginBinding(session);
+  await clearLoginBinding();
+  return bound;
 }
 
 export type PendingLogin = { token: string; expiresAt: string };

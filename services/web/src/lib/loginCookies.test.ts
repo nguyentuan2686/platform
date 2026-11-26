@@ -19,6 +19,8 @@ vi.mock("next/headers", () => ({
 
 import {
   bindLoginToSession,
+  clearLoginBinding,
+  peekLoginBinding,
   rememberNext,
   setOidcState,
   setPendingLogin,
@@ -118,6 +120,19 @@ describe("login binding (tv_login)", () => {
     expect(await takeLoginBinding("guest-token")).toBe(true);
     expect(jar.values.has("tv_login")).toBe(false);
     expect(await takeLoginBinding("guest-token")).toBe(false);
+  });
+
+  it("peek does not consume the binding; clear does", async () => {
+    await bindLoginToSession("guest-token");
+    expect(await peekLoginBinding("guest-token")).toBe(true);
+    expect(await peekLoginBinding("guest-token")).toBe(true);
+    expect(await peekLoginBinding("other-session")).toBe(false);
+    expect(jar.values.has("tv_login")).toBe(true);
+    await clearLoginBinding();
+    expect(jar.values.has("tv_login")).toBe(false);
+    expect(await peekLoginBinding("guest-token")).toBe(false);
+    await clearLoginBinding(); // nothing to clear: no-op
+    expect(jar.deletes).toHaveLength(1);
   });
 
   it("rejects a missing, malformed or forged cookie", async () => {

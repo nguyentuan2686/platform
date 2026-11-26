@@ -6,9 +6,10 @@ import { logRefusalOrThrow } from "@/lib/degrade";
 import { completeLogin } from "@/lib/login";
 import {
   bindLoginToSession,
+  clearLoginBinding,
+  peekLoginBinding,
   rememberNext,
   setPendingLogin,
-  takeLoginBinding,
   takeNext,
   takePendingLogin,
 } from "@/lib/loginCookies";
@@ -76,11 +77,15 @@ export async function confirmLogin(_prev: ConfirmState, fd: FormData): Promise<C
   if (!token || token.length > MAX_TOKEN) return { error: EXPIRED };
   try {
     const guest = await loginGuest({ create: false });
-    const bound = await takeLoginBinding(guest?.token ?? (await readSessionToken()));
+    // Peek, not take: a transient failure below leaves the binding, so the retry still merges.
+    const bound = await peekLoginBinding(guest?.token ?? (await readSessionToken()));
     if (bound) {
-      await completeLogin(await verifyMagicLink(token, guest?.token), guest);
+      const login = await verifyMagicLink(token, guest?.token);
+      await clearLoginBinding();
+      await completeLogin(login, guest);
     } else {
       const login = await verifyMagicLink(token, undefined);
+      await clearLoginBinding();
       let emailMasked: string;
       try {
         const who = await me(login.session_token);
@@ -93,8 +98,12 @@ export async function confirmLogin(_prev: ConfirmState, fd: FormData): Promise<C
       return { pending: { emailMasked } };
     }
   } catch (e) {
-    if (e instanceof UpstreamProblem && e.status === 401) return { error: EXPIRED };
-    if (e instanceof UpstreamValidation) return { error: EXPIRED };
+    // A dead link (401/400) ends this login: consume the binding. Identity down, a timeout or an
+    // unexpected refusal keeps it, so "thử lại" from this browser still carries the guest over.
+    if ((e instanceof UpstreamProblem && e.status === 401) || e instanceof UpstreamValidation) {
+      await clearLoginBinding();
+      return { error: EXPIRED };
+    }
     logRefusalOrThrow(e, "login-confirm");
     return { error: UNAVAILABLE };
   }
@@ -112,6 +121,7 @@ export async function acceptPendingLogin(): Promise<void> {
 /** Interstitial "no": revoke the session the link opened and keep browsing as before. */
 export async function cancelPendingLogin(): Promise<void> {
   const pending = await takePendingLogin();
+  await clearLoginBinding();
   if (pending) await discard(pending.token);
   redirect("/vi");
 }

@@ -7,7 +7,8 @@ const m = vi.hoisted(() => ({
   rememberNext: vi.fn(),
   takeNext: vi.fn(),
   bindLoginToSession: vi.fn(),
-  takeLoginBinding: vi.fn(),
+  peekLoginBinding: vi.fn(),
+  clearLoginBinding: vi.fn(),
   setPendingLogin: vi.fn(),
   takePendingLogin: vi.fn(),
   requestMagicLink: vi.fn(),
@@ -30,7 +31,8 @@ vi.mock("@/lib/loginCookies", () => ({
   rememberNext: (n: unknown) => m.rememberNext(n),
   takeNext: () => m.takeNext(),
   bindLoginToSession: (s: string) => m.bindLoginToSession(s),
-  takeLoginBinding: (s?: string) => m.takeLoginBinding(s),
+  peekLoginBinding: (s?: string) => m.peekLoginBinding(s),
+  clearLoginBinding: () => m.clearLoginBinding(),
   setPendingLogin: (t: string, e: string) => m.setPendingLogin(t, e),
   takePendingLogin: () => m.takePendingLogin(),
 }));
@@ -66,7 +68,7 @@ beforeEach(() => {
   m.verifyMagicLink.mockResolvedValue(LOGIN);
   m.mergeGuest.mockResolvedValue({ moved: 2 });
   m.takeNext.mockResolvedValue("/vi/la-so");
-  m.takeLoginBinding.mockResolvedValue(true);
+  m.peekLoginBinding.mockResolvedValue(true);
   m.me.mockResolvedValue({ kind: "account", account_id: "acc-1", email_masked: "t***@e***.com" });
   m.logout.mockResolvedValue(undefined);
   out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
@@ -147,7 +149,7 @@ describe("confirmLogin, link requested in this browser (matching nonce)", () => 
   it("verifies with the guest bearer, sets the cookie and merges once", async () => {
     await expect(confirmLogin(null, fd({ token: "link-token" }))).rejects.toThrow("REDIRECT:/vi/la-so");
     expect(m.loginGuest).toHaveBeenCalledWith({ create: false });
-    expect(m.takeLoginBinding).toHaveBeenCalledWith("guest-token");
+    expect(m.peekLoginBinding).toHaveBeenCalledWith("guest-token");
     expect(m.verifyMagicLink).toHaveBeenCalledWith("link-token", "guest-token");
     expect(m.setSessionCookie).toHaveBeenCalledWith("acc-session", "2099-01-01T00:00:00Z");
     expect(m.mergeGuest).toHaveBeenCalledTimes(1);
@@ -159,7 +161,7 @@ describe("confirmLogin, link requested in this browser (matching nonce)", () => 
     m.loginGuest.mockResolvedValue(null);
     m.readSessionToken.mockResolvedValue("account-token");
     await expect(confirmLogin(null, fd({ token: "link-token" }))).rejects.toThrow("REDIRECT:");
-    expect(m.takeLoginBinding).toHaveBeenCalledWith("account-token");
+    expect(m.peekLoginBinding).toHaveBeenCalledWith("account-token");
     expect(m.verifyMagicLink).toHaveBeenCalledWith("link-token", undefined);
     expect(m.setSessionCookie).toHaveBeenCalled();
     expect(m.mergeGuest).not.toHaveBeenCalled();
@@ -180,11 +182,50 @@ describe("confirmLogin, link requested in this browser (matching nonce)", () => 
     await expect(confirmLogin(null, fd({ token: "t" }))).rejects.toThrow("REDIRECT:/vi/tai-khoan");
     expect(m.takeNext).toHaveBeenCalledTimes(1);
   });
+
+  it("consumes the binding only after identity verified the link", async () => {
+    await expect(confirmLogin(null, fd({ token: "link-token" }))).rejects.toThrow("REDIRECT:");
+    expect(m.clearLoginBinding).toHaveBeenCalledTimes(1);
+    expect(m.verifyMagicLink.mock.invocationCallOrder[0]).toBeLessThan(m.clearLoginBinding.mock.invocationCallOrder[0]);
+  });
+
+  it("a retry after identity was unavailable (503) still merges the guest, with no interstitial", async () => {
+    // A stateful binding: present until clearLoginBinding() runs.
+    let bindingPresent = true;
+    m.peekLoginBinding.mockImplementation(async () => bindingPresent);
+    m.clearLoginBinding.mockImplementation(async () => {
+      bindingPresent = false;
+    });
+    m.verifyMagicLink.mockRejectedValueOnce(new UpstreamError());
+
+    const first = await confirmLogin(null, fd({ token: "link-token" }));
+    expect(first && "error" in first && first.error).toContain("thử lại");
+    expect(bindingPresent).toBe(true);
+    expect(m.setSessionCookie).not.toHaveBeenCalled();
+
+    await expect(confirmLogin(null, fd({ token: "link-token" }))).rejects.toThrow("REDIRECT:/vi/la-so");
+    expect(m.verifyMagicLink).toHaveBeenLastCalledWith("link-token", "guest-token");
+    expect(m.mergeGuest).toHaveBeenCalledWith("guest-1", "acc-1");
+    expect(m.setPendingLogin).not.toHaveBeenCalled();
+    expect(bindingPresent).toBe(false);
+  });
+
+  it("keeps the binding on an unexpected refusal (logged), consumes it on a dead link", async () => {
+    m.verifyMagicLink.mockRejectedValueOnce(new UpstreamProblem(403, undefined, "identity-svc"));
+    await confirmLogin(null, fd({ token: "t" }));
+    expect(m.clearLoginBinding).not.toHaveBeenCalled();
+    m.verifyMagicLink.mockRejectedValueOnce(new UpstreamProblem(401, undefined, "identity-svc"));
+    expect(await confirmLogin(null, fd({ token: "t" }))).toEqual({ error: EXPIRED });
+    expect(m.clearLoginBinding).toHaveBeenCalledTimes(1);
+    m.verifyMagicLink.mockRejectedValueOnce(new UpstreamValidation({ token: "invalid" }));
+    expect(await confirmLogin(null, fd({ token: "t" }))).toEqual({ error: EXPIRED });
+    expect(m.clearLoginBinding).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("confirmLogin, link not requested in this browser (missing or mismatched nonce)", () => {
   beforeEach(() => {
-    m.takeLoginBinding.mockResolvedValue(false);
+    m.peekLoginBinding.mockResolvedValue(false);
   });
 
   it("a guest: verifies WITHOUT the guest bearer, does not merge, and shows the interstitial instead of logging in", async () => {
@@ -202,7 +243,7 @@ describe("confirmLogin, link not requested in this browser (missing or mismatche
     m.loginGuest.mockResolvedValue(null);
     m.readSessionToken.mockResolvedValue(undefined);
     expect(await confirmLogin(null, fd({ token: "t" }))).toEqual({ pending: { emailMasked: "t***@e***.com" } });
-    expect(m.takeLoginBinding).toHaveBeenCalledWith(undefined);
+    expect(m.peekLoginBinding).toHaveBeenCalledWith(undefined);
     expect(m.mergeGuest).not.toHaveBeenCalled();
     expect(m.setSessionCookie).not.toHaveBeenCalled();
   });
@@ -273,6 +314,7 @@ describe("interstitial", () => {
     await expect(cancelPendingLogin()).rejects.toThrow("REDIRECT:/vi");
     expect(m.logout).toHaveBeenCalledWith("acc-session");
     expect(m.setSessionCookie).not.toHaveBeenCalled();
+    expect(m.clearLoginBinding).toHaveBeenCalled();
   });
 
   it("cancel ignores a revocation failure and a missing pending login", async () => {
