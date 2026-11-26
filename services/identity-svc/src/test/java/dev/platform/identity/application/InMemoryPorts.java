@@ -193,6 +193,11 @@ final class InMemoryPorts {
     }
 
     @Override
+    public long countSince(Instant since) {
+      return saved.stream().filter(l -> l.createdAt().isAfter(since)).count();
+    }
+
+    @Override
     public Optional<ConsumedMagicLink> consume(byte[] tokenSha256, Instant now) {
       return saved.stream()
           .filter(l -> Arrays.equals(l.tokenSha256(), tokenSha256))

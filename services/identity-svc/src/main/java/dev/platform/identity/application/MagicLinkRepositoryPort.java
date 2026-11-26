@@ -15,6 +15,9 @@ public interface MagicLinkRepositoryPort {
   /** Creation times of links sent to the email after {@code since}. */
   List<Instant> requestTimesSince(Email email, Instant since);
 
+  /** Number of links sent to any address after {@code since} (the global daily cap). */
+  long countSince(Instant since);
+
   /** Atomically marks an unused, unexpired link as used and returns it; empty otherwise. */
   Optional<ConsumedMagicLink> consume(byte[] tokenSha256, Instant now);
 }

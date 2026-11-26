@@ -41,8 +41,9 @@ paths:
       operationId: requestMagicLink
       summary: Email a one-time login link (valid 15 minutes, max 3 per email per 15 minutes).
       description: >-
-        Always answers 202 with the same body, whether the email is known, unknown or rate
-        limited. With a guest bearer, the guest is merged into the account at verification.
+        Answers 202 with the same body, whether the email is known, unknown or rate
+        limited per address (only the global daily cap answers 429). With a guest bearer, the guest
+        is merged into the account at verification.
       security:
         - internalToken: []
         - internalToken: []
@@ -60,6 +61,14 @@ paths:
               schema: {$ref: '#/components/schemas/MagicLinkAccepted'}
         '400':
           description: Invalid email or language (`errors[].field` is `email` or `lang`).
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+        '429':
+          description: >-
+            The global daily cap on login mails (all addresses, rolling 24 h, `MAIL_DAILY_CAP`) is
+            reached: nothing is sent or recorded, retry later. `type` is `urn:problem:rate-limited`,
+            `reason` is `mail_daily_cap`; it says nothing about the address.
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}

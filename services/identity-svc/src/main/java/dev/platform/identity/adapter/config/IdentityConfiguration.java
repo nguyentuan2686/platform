@@ -225,8 +225,18 @@ class IdentityConfiguration {
       EntitlementGrantPort grants,
       Clock clock,
       SecureRandom random,
-      @Value("${identity.web-base-url}") String webBaseUrl) {
+      @Value("${identity.web-base-url}") String webBaseUrl,
+      @Value("${identity.mail.daily-cap}") int dailyCap) {
     return new MagicLinkUseCase(
-        accounts, sessions, links, mailer, merges, grants, clock, random, URI.create(webBaseUrl));
+        accounts,
+        sessions,
+        links,
+        mailer,
+        merges,
+        grants,
+        clock,
+        random,
+        URI.create(webBaseUrl),
+        dailyCap);
   }
 }
