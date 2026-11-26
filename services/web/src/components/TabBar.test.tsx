@@ -15,13 +15,13 @@ beforeEach(() => {
 });
 
 describe("TabBar", () => {
-  it("ships Hôm nay, Lá số and Tài khoản with their links", () => {
+  it("ships Hôm nay, Lá số, Hỏi thầy and Tài khoản with their links", () => {
     render(<TabBar />);
     const nav = screen.getByRole("navigation");
     const links = screen.getAllByRole("link");
     expect(nav).toBeTruthy();
-    expect(links.map((l) => l.textContent)).toEqual(["今Hôm nay", "命Lá số", "我Tài khoản"]);
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/vi/la-so#hom-nay", "/vi/la-so", "/vi/tai-khoan"]);
+    expect(links.map((l) => l.textContent)).toEqual(["今Hôm nay", "命Lá số", "問Hỏi thầy", "我Tài khoản"]);
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/vi/la-so#hom-nay", "/vi/la-so", "/vi/hoi", "/vi/tai-khoan"]);
   });
 
   it("marks Tài khoản current on /vi/tai-khoan", () => {
@@ -57,5 +57,21 @@ describe("TabBar", () => {
     pathname.value = "/vi";
     render(<TabBar />);
     for (const l of screen.getAllByRole("link")) expect(l.getAttribute("aria-current")).toBeNull();
+  });
+});
+
+describe("TabBar: Hỏi thầy", () => {
+  it.each(["/vi/hoi", "/vi/hoi/33333333-3333-4333-8333-333333333333", "/vi/lich-su"])("is current on %s", (path) => {
+    pathname.value = path;
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Hỏi thầy/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: /Tài khoản/ }).getAttribute("aria-current")).toBeNull();
+  });
+
+  it("is not current on the account page", () => {
+    pathname.value = "/vi/tai-khoan/giao-dich";
+    render(<TabBar />);
+    expect(screen.getByRole("link", { name: /Hỏi thầy/ }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("link", { name: /Tài khoản/ }).getAttribute("aria-current")).toBe("page");
   });
 });

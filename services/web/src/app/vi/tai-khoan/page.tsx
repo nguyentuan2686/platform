@@ -79,6 +79,9 @@ export default async function AccountPage() {
         <Link href="/vi/mua" className="tag">
           Nạp lượt
         </Link>
+        <Link href="/vi/lich-su" className="tag">
+          Bài đã hỏi
+        </Link>
         <Link href="/vi/tai-khoan/giao-dich" className="tag">
           Giao dịch
         </Link>

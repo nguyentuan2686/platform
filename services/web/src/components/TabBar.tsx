@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type Tab = { key: string; label: string; glyph: string; href: string; path: string; hash?: string };
+type Tab = { key: string; label: string; glyph: string; href: string; path: string; hash?: string; also?: string[] };
 
-// Hỏi thầy (/vi/hoi) joins when its page ships.
 const TABS: Tab[] = [
   { key: "today", label: "Hôm nay", glyph: "今", href: "/vi/la-so#hom-nay", path: "/vi/la-so", hash: "#hom-nay" },
   { key: "chart", label: "Lá số", glyph: "命", href: "/vi/la-so", path: "/vi/la-so" },
+  { key: "ask", label: "Hỏi thầy", glyph: "問", href: "/vi/hoi", path: "/vi/hoi", also: ["/vi/lich-su"] },
   { key: "account", label: "Tài khoản", glyph: "我", href: "/vi/tai-khoan", path: "/vi/tai-khoan" },
 ];
 
@@ -28,7 +28,9 @@ export function TabBar() {
   const pathname = usePathname();
   const [hash, setHash] = useHash();
   const isActive = (t: Tab) => {
-    if (pathname !== t.path) return false;
+    // A tab also owns the pages below it (a reading under /vi/hoi, transactions under /vi/tai-khoan).
+    const own = (p: string) => pathname === p || pathname.startsWith(`${p}/`);
+    if (!own(t.path) && !t.also?.some(own)) return false;
     if (t.hash) return hash === t.hash;
     // A page-level tab is current unless a sibling anchor tab on the same page is.
     return !TABS.some((o) => o.path === t.path && o.hash !== undefined && o.hash === hash);

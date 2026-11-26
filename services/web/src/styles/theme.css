@@ -261,3 +261,48 @@ a.balance-chip { text-decoration: none; }
 .admin-item .s { color: var(--muted); }
 .admin-form { margin: 8px 0 0; }
 .admin-ok { margin: 6px 0 0; font-size: 12.5px; color: var(--metal-soft); }
+
+/* F1.5b Task 5: Hoi thay (topic Q&A), reading page, history */
+.ask-page h1, .reading-page h1, .history h1 { font-size: 26px; margin: 14px 0 10px; }
+.ask-sage { display: block; width: 76px; height: auto; margin: 14px auto 0; }
+.topic-grid { margin: 0 0 14px; padding: 0; border: 0; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.topic { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 10px; border: 1px solid color-mix(in srgb, var(--metal) 35%, transparent); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--bg2) 70%, transparent); cursor: pointer; }
+.topic[data-on="true"] { border-color: var(--metal); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.topic input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.topic:has(input:focus-visible) { outline: 2px solid var(--metal); outline-offset: 2px; }
+.topic-glyph { flex: none; font-family: var(--glyph); font-size: 26px; line-height: 1; color: var(--metal-soft); }
+.topic-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.topic-label { font-family: var(--plain); font-size: 14.5px; color: var(--paper); }
+.topic-hint { font-size: 11px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
+.qa-fields { margin: 0; padding: 0; border: 0; min-width: 0; }
+.counter { align-self: flex-end; font-size: 12px; color: var(--muted); }
+.qa-buttons { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 0; }
+.qa-buttons .btn:disabled { cursor: not-allowed; }
+.qa-login, .qa-history { margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.qa-history a:not(.tag) { color: var(--metal-soft); font-size: 13.5px; }
+.follow-up { margin: 18px 0 0; }
+/* The seal overhangs its bubble and stamps in at 2.3x: clip it sideways inside a gutter-wide box so the page never scrolls. */
+.qa-result, .qa-messages { margin: 18px -8px 0; padding: 0 8px; overflow-x: clip; }
+.ask { margin: 0 0 10px 18%; padding: 9px 12px; font-size: 14px; line-height: 1.55; color: var(--paper); background: color-mix(in srgb, var(--accent) 38%, transparent); border: 1px solid color-mix(in srgb, var(--metal) 40%, transparent); border-radius: 10px 2px 10px 10px; overflow-wrap: anywhere; }
+.qa-turn { margin: 0 0 16px; }
+.qa-wait, .qa-busy, .qa-notice, .qa-refused p, .qa-queued p { margin: 8px 0; font-size: 14px; line-height: 1.6; color: var(--paper); }
+.qa-after, .qa-refused, .qa-queued { margin: 10px 0 0; }
+.qa-after .disclaimer { margin: 8px 0 12px; }
+.qa-refused .disclaimer-line { font-size: 12.5px; color: var(--muted); }
+.qa-notice { padding: 10px 12px; border-left: 3px solid var(--metal); background: color-mix(in srgb, var(--metal) 10%, transparent); }
+.qa-another { margin: 16px 0 0; }
+.qa-meta { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.ink-stream .show-all { margin-top: 10px; }
+.follow-up { padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--metal) 22%, transparent); }
+.follow-up .field { margin-top: 10px; }
+.follow-up textarea.in, .qa-fields textarea.in { resize: vertical; min-height: 92px; }
+.history-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.history-row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid color-mix(in srgb, var(--metal) 18%, transparent); color: inherit; text-decoration: none; }
+.history-row .history-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.history-row .t { color: var(--paper); font-size: 14.5px; }
+.history-row .s { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.history-row .r { flex: none; max-width: 38%; text-align: right; color: var(--metal-soft); font-size: 12.5px; }
+.delete-history { margin: 18px 0 0; }
+@media (prefers-reduced-motion: reduce) {
+  .topic, .pack { transition: none; }
+}

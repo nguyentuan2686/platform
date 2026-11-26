@@ -222,3 +222,26 @@ export function handle(req, res, body, send) {
       return false;
   }
 }
+
+// --- Helpers for the reading-tuvi stub (in-process stand-ins for its identity-svc calls). ---
+
+/** The subject behind a session token: { id, kind: "guest" | "account" }, or null. */
+export function subjectOf(token) {
+  const who = token ? sessions.get(token) : undefined;
+  return who ? { id: subjectId(who), kind: who.kind } : null;
+}
+
+/** Whether the subject (guest or account id) has saved a chart. */
+export function hasProfile(id) {
+  return profiles.has(id);
+}
+
+/** reading-tuvi consuming one credit of the account behind `token`; false when it has none. */
+export function consume(token) {
+  const who = token ? sessions.get(token) : undefined;
+  const acc = who?.kind === "account" ? findAccount(who.account_id) : undefined;
+  if (!acc || acc.credits < 1) return false;
+  acc.credits -= 1;
+  acc.ledger.push({ delta: -1, source: "CREDIT", reason: "consume", topic: null, created_at: new Date().toISOString() });
+  return true;
+}
