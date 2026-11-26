@@ -36,8 +36,11 @@ spec:
                 - {name: PGUSER, value: postgres}
                 - name: PGPASSWORD
                   valueFrom: {secretKeyRef: {name: postgres-secrets, key: POSTGRES_PASSWORD}}
-              envFrom:
-                - secretRef: {name: ops-secrets, optional: true}
+                # Only the two keys the "S3 configured?" check reads; the S3 access keys go to the upload container alone.
+                - name: S3_ENDPOINT
+                  valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_ENDPOINT, optional: true}}
+                - name: S3_BUCKET
+                  valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_BUCKET, optional: true}}
               resources:
                 requests: {cpu: 50m, memory: 128Mi}
                 limits: {memory: 128Mi}
@@ -61,10 +64,6 @@ spec:
                 - {name: BACKUP_REQUIRED, value: "0"}
                 - {name: BACKUP_KEEP, value: 14d}
                 - {name: HOME, value: /tmp}
-                - {name: PGHOST, value: postgres.data.svc.cluster.local}
-                - {name: PGUSER, value: postgres}
-                - name: PGPASSWORD
-                  valueFrom: {secretKeyRef: {name: postgres-secrets, key: POSTGRES_PASSWORD}}
               envFrom:
                 - secretRef: {name: ops-secrets, optional: true}
               resources:

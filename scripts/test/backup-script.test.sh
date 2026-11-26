@@ -13,15 +13,23 @@ fail() { echo "FAIL $1: $2" >&2; exit 1; }
 
 # Stubs record "<argv>" one call per line into $STUB_LOG/<name>.log; curl exits with $STUB_CURL_RC.
 mkdir -p "$tmp/bin"
-for tool in pg_dump rclone curl; do
+for tool in pg_dump rclone curl kubectl yq; do
   cat >"$tmp/bin/$tool" <<'STUB'
 #!/bin/sh
 name=$(basename "$0")
 echo "$*" >>"$STUB_LOG/$name.log"
-if [ "$name" = pg_dump ]; then
-  while [ $# -gt 0 ]; do [ "$1" = -f ] && : >"$2"; shift; done
-fi
-[ "$name" = curl ] && exit "${STUB_CURL_RC:-0}"
+case "$name" in
+  pg_dump)
+    while [ $# -gt 0 ]; do
+      if [ "$1" = -d ]; then db="$2"; fi
+      if [ "$1" = -f ]; then : >"$2"; fi
+      shift
+    done
+    [ "$db" = "${STUB_PG_DUMP_FAIL_DB:-}" ] && exit 1 ;;
+  rclone) [ "$1" = "${STUB_RCLONE_FAIL_ON:-}" ] && exit 1 ;;
+  curl) exit "${STUB_CURL_RC:-0}" ;;
+  kubectl) [ "$3" = get ] && echo "Complete=True " ;;
+esac
 exit 0
 STUB
   chmod +x "$tmp/bin/$tool"
@@ -44,6 +52,56 @@ calls() { if [ -f "$tmp/log/$1.log" ]; then wc -l <"$tmp/log/$1.log" | tr -d ' '
 
 S3_ENV=(S3_ENDPOINT=http://minio.example:9000 S3_BUCKET=pg-backups S3_REGION=us-east-1 S3_ACCESS_KEY_ID=test-ak-id S3_SECRET_ACCESS_KEY=test-sk-secret)
 
+# restore_rc ARGS... -> rc and $tmp/out of scripts/pg-restore.sh with stub kubectl/yq
+restore_rc() {
+  rc=0
+  PATH="$tmp/bin:$PATH" STUB_LOG="$tmp/log" bash "$root/scripts/pg-restore.sh" "$@" >"$tmp/out" 2>&1 || rc=$?
+}
+expect_refused() { # NAME ARGS...
+  local name="$1"; shift
+  setup
+  restore_rc "$@"
+  [ "$rc" -eq 1 ] || fail "$name" "expected exit 1, got $rc: $(cat "$tmp/out")"
+  grep -q 'refusing\|must end in\|pass' "$tmp/out" || fail "$name" "no refusal message: $(cat "$tmp/out")"
+  [ ! -f "$tmp/log/kubectl.log" ] || fail "$name" "kubectl was called for a refused target"
+  echo "ok $name"
+}
+expect_accepted() { # NAME ARGS...
+  local name="$1"; shift
+  setup
+  restore_rc "$@"
+  [ "$rc" -eq 0 ] || fail "$name" "expected exit 0, got $rc: $(cat "$tmp/out")"
+  grep -q '^pg-restore: ok' "$tmp/out" || fail "$name" "no ok line: $(cat "$tmp/out")"
+  echo "ok $name"
+}
+
+restore_refuses_production_target() { expect_refused "${FUNCNAME[0]}" --db orders --target notify; }
+restore_refuses_production_target_with_overwrite() { expect_refused "${FUNCNAME[0]}" --db orders --target notify --overwrite; }
+restore_refuses_source_without_overwrite() { expect_refused "${FUNCNAME[0]}" --db orders --target orders; }
+restore_refuses_postgres() { expect_refused "${FUNCNAME[0]}" --db orders --target postgres; }
+restore_refuses_postgres_with_overwrite() { expect_refused "${FUNCNAME[0]}" --db orders --target postgres --overwrite; }
+restore_refuses_template() { expect_refused "${FUNCNAME[0]}" --db orders --target template1 --overwrite; }
+restore_refuses_missing_suffix() { expect_refused "${FUNCNAME[0]}" --db orders --target scratch; }
+restore_accepts_suffix() { expect_accepted "${FUNCNAME[0]}" --db orders --target orders_restore_check; }
+restore_accepts_default_target() { expect_accepted "${FUNCNAME[0]}" --db reading_tuvi; }
+restore_accepts_overwrite_of_source() { expect_accepted "${FUNCNAME[0]}" --db orders --target orders --overwrite; }
+
+dump_failure_exits_1_without_stamp() {
+  setup
+  env BACKUP_REQUIRED=1 STUB_PG_DUMP_FAIL_DB=reading_tuvi "${S3_ENV[@]}" bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$backup' dump; echo \$rc >'$tmp/rc'"
+  [ "$(cat "$tmp/rc")" -eq 1 ] || fail "${FUNCNAME[0]}" "expected exit 1, got $(cat "$tmp/rc")"
+  [ ! -e "$tmp/backup/STAMP" ] || fail "${FUNCNAME[0]}" "STAMP written after a failed dump"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+copy_failure_does_not_prune_or_ping() {
+  prepare_upload
+  env BACKUP_REQUIRED=1 STUB_RCLONE_FAIL_ON=copy "${S3_ENV[@]}" HEALTHCHECKS_BACKUP_URL=https://hc.example/ping/abc bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$backup' upload; echo \$rc >'$tmp/rc'"
+  [ "$(cat "$tmp/rc")" -ne 0 ] || fail "${FUNCNAME[0]}" "expected non-zero exit"
+  [ "$(calls rclone)" -eq 1 ] || fail "${FUNCNAME[0]}" "rclone called $(calls rclone) times (copy only expected)"
+  [ "$(calls curl)" -eq 0 ] || fail "${FUNCNAME[0]}" "pinged after a failed copy"
+  echo "ok ${FUNCNAME[0]}"
+}
 backup_required_without_s3_fails() {
   setup
   env BACKUP_REQUIRED=1 S3_ENDPOINT= S3_BUCKET= bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$backup' dump; echo \$rc >'$tmp/rc'"
@@ -122,14 +180,6 @@ heartbeat_failure_propagates() {
   echo "ok ${FUNCNAME[0]}"
 }
 
-restore_same_target_requires_overwrite() {
-  local rc=0
-  bash "$root/scripts/pg-restore.sh" --db orders --target orders >"$tmp/out" 2>&1 || rc=$?
-  [ "$rc" -eq 1 ] || fail "${FUNCNAME[0]}" "expected exit 1, got $rc: $(cat "$tmp/out")"
-  grep -q 'pass --overwrite' "$tmp/out" || fail "${FUNCNAME[0]}" "message missing: $(cat "$tmp/out")"
-  echo "ok ${FUNCNAME[0]}"
-}
-
 backup_required_without_s3_fails
 backup_optional_without_s3_skips
 dump_calls_pg_dump_per_db
@@ -137,4 +187,15 @@ upload_uses_stamp_prefix_and_prunes
 upload_pings_backup_heartbeat_when_set
 heartbeat_unset_skips
 heartbeat_failure_propagates
-restore_same_target_requires_overwrite
+dump_failure_exits_1_without_stamp
+copy_failure_does_not_prune_or_ping
+restore_refuses_production_target
+restore_refuses_production_target_with_overwrite
+restore_refuses_source_without_overwrite
+restore_refuses_postgres
+restore_refuses_postgres_with_overwrite
+restore_refuses_template
+restore_refuses_missing_suffix
+restore_accepts_suffix
+restore_accepts_default_target
+restore_accepts_overwrite_of_source

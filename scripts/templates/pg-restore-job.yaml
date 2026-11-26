@@ -60,6 +60,14 @@ spec:
             - /bin/sh
             - -ec
             - |
+              # Defence in depth (scripts/pg-restore.sh checks the same before rendering this Job).
+              case "$RESTORE_TARGET" in postgres | template*) echo "restore: refusing system database $RESTORE_TARGET"; exit 1 ;; esac
+              case "$RESTORE_TARGET" in
+                orders | notify | reading_tuvi | identity | payment)
+                  [ "$RESTORE_OVERWRITE" = 1 ] && [ "$RESTORE_TARGET" = "$RESTORE_DB" ] || { echo "restore: refusing production database $RESTORE_TARGET"; exit 1; } ;;
+                *_restore_check) ;;
+                *) echo "restore: target $RESTORE_TARGET must end in _restore_check"; exit 1 ;;
+              esac
               if [ "$RESTORE_OVERWRITE" = 1 ]; then
                 echo "restore: overwriting $RESTORE_TARGET from the dump"
                 pg_restore --clean --if-exists --no-owner --role="$RESTORE_OWNER" -d "$RESTORE_TARGET" /restore/db.dump

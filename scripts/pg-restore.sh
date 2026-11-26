@@ -3,7 +3,7 @@
 #                              [--deadline-s 600]
 # Restores a pg_dump from S3-compatible storage (ops-secrets) with a one-off Job. The default target is the scratch
 # database <db>_restore_check (dropped and recreated). Restoring over the source database needs --overwrite
-# (pg_restore --clean --if-exists); without it, target == source exits 1. Needs kubectl, yq (v4) and cluster access.
+# (pg_restore --clean --if-exists). Targets: <anything>_restore_check, or --db X --target X --overwrite; production and system databases are refused. Needs kubectl, yq (v4) and cluster access.
 # Prints the Job logs; exit 0 only when the Job completed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,18 +23,31 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$db" ] || usage
 
-# Owner of each database (deploy/k8s/platform/postgres/init-db.sh).
-case "$db" in
-  orders) owner=orders ;;
-  notify) owner=notify ;;
-  reading_tuvi) owner=reading ;;
-  identity) owner=identity ;;
-  payment) owner=payment ;;
-  *) echo "pg-restore: unknown database $db (orders notify reading_tuvi identity payment)" >&2; exit 2 ;;
-esac
+# Owner of each database (deploy/k8s/platform/postgres/init-db.sh); also the list of production databases.
+owner_of() {
+  case "$1" in
+    orders) echo orders ;;
+    notify) echo notify ;;
+    reading_tuvi) echo reading ;;
+    identity) echo identity ;;
+    payment) echo payment ;;
+    *) return 1 ;;
+  esac
+}
+owner=$(owner_of "$db") || { echo "pg-restore: unknown database $db (orders notify reading_tuvi identity payment)" >&2; exit 2; }
 [ -n "$target" ] || target="${db}_restore_check"
-if [ "$target" = "$db" ] && [ "$overwrite" != 1 ]; then
-  echo "pg-restore: target is the source database $db; pass --overwrite to replace it" >&2
+# Target safety: never the maintenance/template databases; a production database only as the explicit
+# --overwrite of the very database being restored; otherwise a scratch name ending in _restore_check.
+case "$target" in
+  postgres | template*) echo "pg-restore: refusing target $target (system database)" >&2; exit 1 ;;
+esac
+if owner_of "$target" >/dev/null; then
+  if [ "$overwrite" != 1 ] || [ "$target" != "$db" ]; then
+    echo "pg-restore: refusing target $target (production database; only --db $target --overwrite may replace it)" >&2
+    exit 1
+  fi
+elif [[ "$target" != *_restore_check ]]; then
+  echo "pg-restore: target $target must end in _restore_check" >&2
   exit 1
 fi
 [[ "$stamp" =~ ^(latest|[0-9]{8}T[0-9]{6}Z)$ ]] || { echo "pg-restore: bad --stamp $stamp" >&2; exit 2; }
