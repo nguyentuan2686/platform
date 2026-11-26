@@ -19,7 +19,7 @@ The first host is the GCP free-trial VM `tuvi-prod-1`:
 |---|---|---|
 | An Ubuntu 24.04 host, x86 or ARM, **≥ 8 GB RAM** (`tuvi-prod-1` has 12 GB). At 8 GB, lower the retention and the lgtm memory as spec §16.3 says: in `deploy/k8s/platform/observability/lgtm.yaml`, set `PROMETHEUS_EXTRA_ARGS` to `--storage.tsdb.retention.time=7d`, `-store.retention` and both Tempo `block-retention` values to `72h`, and the lgtm memory request and limit to `768Mi`. | everything | — |
 | A **Tailscale** account (MagicDNS on). Create two things: (a) a single-use, pre-approved **auth key** for the host, tagged `tag:prod`, and (b) an **OAuth client** with the `auth_keys` write scope and tag `tag:ci`. ACL: the snippet below. | admin access (SSH, kube API) without public ports; CI reaches the API | (a) typed once on the host (b) GitHub secrets `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` |
-| A **GitHub App** installed on this repo only. Repository permissions `Contents: Read and write` and `Issues: Read and write`, nothing else, no webhook. Note its **App ID** (a number on the App's settings page, not the Client ID) and generate a **private key** (`.pem`). If `main` is protected (branch protection or a ruleset that requires PRs or status checks), add the App as a **bypass actor**. GitHub cannot limit a bypass to a path: the limit to `deploy/k8s/overlays/**` is enforced by `cd.yml` (the bump commit may change only `deploy/k8s/overlays/prod/apps/kustomization.yaml`) and by `scripts/deploy-rollback.sh` (refuses any commit outside `deploy/k8s/overlays/`). | CD bump commits, rollback reverts, `deploy-failed` issues | variable `CD_APP_ID`, secret `CD_APP_PRIVATE_KEY` |
+| A **GitHub App** installed on this repo only. Repository permissions `Contents: Read and write` and `Issues: Read and write`, nothing else, no webhook. Note its **App ID** (a number on the App's settings page, not the Client ID) and generate a **private key** (`.pem`). If `main` is protected (branch protection or a ruleset that requires PRs or status checks), add the App as a **bypass actor**. GitHub cannot limit a bypass to a path: the limit to `deploy/k8s/overlays/**` is enforced by `cd.yml` (the bump commit may change only `deploy/k8s/overlays/prod/apps/kustomization.yaml`) and by `scripts/deploy-rollback.sh` (refuses any commit outside `deploy/k8s/overlays/`). The same `Contents: write` lets the App force-move the tag `deploy-verified` (the last verified deploy; branch protection does not cover tags). If you ever add a tag ruleset, allow the App to update and force-push `deploy-verified`. | CD bump commits, rollback reverts, the `deploy-verified` tag, `deploy-failed`/`deploy-unverified` issues | variable `CD_APP_ID`, secret `CD_APP_PRIVATE_KEY` |
 | A **Telegram** bot token (from @BotFather) and the chat id of the chat that receives alerts. | alerts (`docs/runbooks/alerts.md`) | `alerting-secrets` |
 | A **Cloudflare R2** bucket (or any S3-compatible storage) and an access key limited to that bucket: endpoint, bucket, region (`auto` for R2), key id, secret. | daily `pg-backup`, restores | `ops-secrets` |
 | **Healthchecks.io**: two checks. `heartbeat` with period 5 min, grace 5 min. `backup` with period 1 day, grace 2 h (the backup runs 03:00 Asia/Ho_Chi_Minh). Copy both ping URLs. | dead-man's switch for the host and for backups | `ops-secrets` (`HEALTHCHECKS_URL`, `HEALTHCHECKS_BACKUP_URL`) |
@@ -59,24 +59,27 @@ The node joins the tailnet as `platform-prod` (`TS_HOSTNAME`). Public SSH stays 
 
 Argo CD now syncs `main`. Until step 4, `prod-sealed` has nothing to decrypt and the apps cannot start; that is expected.
 
-## 3. Back up the sealing key
+## 3. Back up the sealing keys
 
-This key decrypts every SealedSecret. Without it, the secrets in Git are unreadable on a new host. It never goes into Git, the repo checkout, a chat or a shared drive.
+These keys decrypt every SealedSecret. Without them, the secrets in Git are unreadable on a new host. They never go into Git, the repo checkout, a chat or a shared drive.
 
-On the host, write it to your home directory (not into `platform/`), readable only by you:
+The controller adds a **new key every 30 days** and keeps the old ones. A SealedSecret stays bound to the key that was active when it was sealed: renewal never re-encrypts it. So the backup must hold **all** keys, and it must be **re-exported after each 30-day renewal**. A backup that misses a key cannot decrypt the seals made with that key. Set a monthly reminder (e.g. on the 1st) for this step.
+
+On the host, write all keys into one file in your home directory (not into `platform/`), readable only by you:
 
 ```sh
 cd ~ && umask 077
 sudo k3s kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o json > ~/sealing-key.json
 ls -l ~/sealing-key.json      # must show -rw------- and your user
+python3 -c 'import json; print(len(json.load(open("sealing-key.json"))["items"]), "keys")'   # 1 at go-live, +1 per month
 ```
 
 Move it into the password manager:
-1. Copy it to your computer. In the GCP browser SSH window, open the gear menu (top right) and choose **Download file**. Enter `/home/<your user>/sealing-key.json`. Or, from a terminal with gcloud: `gcloud compute scp tuvi-prod-1:~/sealing-key.json . --zone asia-southeast1-b`.
-2. In the password manager, create an entry "platform sealing key <date>" and attach the file. Bitwarden: New item -> Secure note -> Attachments. 1Password: New item -> Document.
+1. Copy it to your computer, into your Downloads folder (never into the repo folder). In the GCP browser SSH window, open the gear menu (top right) and choose **Download file**. Enter `/home/<your user>/sealing-key.json`. It lands in Downloads. Or, from a terminal with gcloud: `gcloud compute scp tuvi-prod-1:~/sealing-key.json ~/Downloads/ --zone asia-southeast1-b`.
+2. In the password manager, create (or update) the entry "platform sealing keys" and attach the file. Replace the previous attachment: the new file holds every older key too. Bitwarden: New item -> Secure note -> Attachments. 1Password: New item -> Document.
 3. Delete both copies. On your computer, delete the downloaded file and empty the Recycle Bin. On the host: `shred -u ~/sealing-key.json`.
 
-The controller adds a new key every 30 days, and the file holds all of them. Repeat this backup monthly, or at least before a host move.
+The alternative to the monthly re-export is to turn automatic renewal off with the controller flag `--key-renew-period=0`. Then one key is used forever and the go-live backup stays complete. The trade-off: no key rotation at all, so a leaked key decrypts every past and future seal. This repo keeps renewal on, so the monthly re-export is required.
 
 ## 4. Seal the prod secrets
 
@@ -188,14 +191,14 @@ sudo sed 's#https://127.0.0.1:6443#https://platform-prod:6443#' /etc/rancher/k3s
 
 The file to upload is `~/admin.kubeconfig`.
 
-Copy the chosen file to your computer the same way as the sealing key (step 3: **Download file**, or `gcloud compute scp`). Then, on your computer, in the repo folder with `gh` logged in. Each `gh secret set NAME` without `--body` or `<` asks for the value with hidden input: paste it and press Enter.
+Copy the chosen file to your computer **into your Downloads folder, never into the repo folder**. The repo does not ignore `*.kubeconfig`, so a copy inside the checkout could be committed by a `git add`. Use the browser SSH **Download file** (it saves to Downloads), or `gcloud compute scp tuvi-prod-1:~/cd-verify.kubeconfig ~/Downloads/ --zone asia-southeast1-b`. Then, on your computer, in the repo folder with `gh` logged in, run the commands below. The files are read from `~/Downloads`. Each `gh secret set NAME` without `--body` or `<` asks for the value with hidden input: paste it and press Enter.
 
 ```sh
 gh variable set CD_APP_ID --body <App ID>       # the App ID number (not a secret), not the Client ID
-gh secret set CD_APP_PRIVATE_KEY < <app>.private-key.pem
+gh secret set CD_APP_PRIVATE_KEY < ~/Downloads/<app>.private-key.pem
 gh secret set TS_OAUTH_CLIENT_ID                # paste the Tailscale OAuth client id
 gh secret set TS_OAUTH_SECRET                   # paste the Tailscale OAuth client secret
-gh secret set PROD_KUBECONFIG < cd-verify.kubeconfig     # or < admin.kubeconfig (option B)
+gh secret set PROD_KUBECONFIG < ~/Downloads/cd-verify.kubeconfig     # or ~/Downloads/admin.kubeconfig (option B)
 ```
 
 Then delete every copy. Store the App private key in the password manager first. Then delete the downloaded kubeconfig and `.pem` on your computer, and empty the Recycle Bin. On the host: `shred -u ~/cd-verify.kubeconfig ~/admin.kubeconfig 2>/dev/null`. You can recreate either file at any time from the host.
@@ -249,12 +252,17 @@ Healthchecks.io shows `heartbeat` up within 5 minutes and `backup` after the fir
 ## 9. Rollback and moving to a new host
 
 ### Automatic rollback
+Every successful verify-deploy moves the tag **`deploy-verified`** to its bump commit. That tag marks the last verified-good prod state. It never moves backwards, and it moves only when nothing in `deploy/k8s/overlays/` changed after that commit.
+
 When `verify-deploy` fails, the `cd` run always fails and opens an issue with the run URL and the last 100 lines of verify-deploy. What else it does depends on the cause:
-- **Deployed but unhealthy** (verify-deploy exit 1):
-  - It reverts the bump commit on `main` (`revert: deploy sha-<short> failed verify-deploy`, with a CI-skip marker), so Argo CD syncs the previous tags.
+- **Deployed but unhealthy** (verify-deploy exit 1), and this run's bump is the newest `deploy:` commit on `main`:
+  - It restores the last verified state. As **one** revert commit (`revert: deploy sha-<short> failed verify-deploy`, with a CI-skip marker), it reverts every not-yet-reverted CD bump since `deploy-verified`, this one included. So a bad older bump that overlapped with this one is undone too, and Argo CD syncs the last verified tags.
+  - Before the first verified deploy (no tag yet), it reverts only its own bump.
   - The issue is labelled `deploy-failed`.
-- **Superseded** (a newer `deploy:` commit is already on `main`): **no revert**. The newer run's own verify-deploy decides. The `deploy-failed` issue says "a newer deploy commit on main owns the outcome".
+- **Superseded** (a newer `deploy:` commit is already on `main`): **no revert by this run**. The newest run owns the outcome. If its verify-deploy fails too, it reverts everything since `deploy-verified`, this bump included. If it passes, prod is healthy. The issue says so. Act by hand only if the newest run reports the cluster unreachable (next bullet) while prod is broken.
 - **Cluster unreachable** (exit 4: tailnet, API or port-forward down): **no revert**. The deploy is unverified, not known to be bad. One issue labelled `deploy-unverified` is opened, and later runs comment on it. Check Tailscale (the host node and the `tag:ci` ACL) and `PROD_KUBECONFIG`, then close the issue.
+
+Every reverted commit must be a single-parent `deploy:` commit by the CD App that changes only `deploy/k8s/overlays/`. If anything else sits in that range, the rollback is refused and the issue says `deploy-rollback.sh failed`; then revert by hand in a PR.
 
 Read the issue, fix the cause in a normal PR, and the next merge deploys again.
 
@@ -283,25 +291,17 @@ Run every command on a host in `~/platform` (the old host for step 2, the new on
    done
    ```
    Copy `~/dumps` to the new host (`gcloud compute scp --recurse`, or `scp` over the tailnet). Keep the dumps out of Git and off shared drives, because they hold user data. Shred them once step 4 is done.
-3. **Bootstrap with the old sealing key.** Download `sealing-key.json` from the password manager. Copy it to the new host's home directory with `gcloud compute scp` (or the browser SSH **Upload file**). Then, on the new host, unpack the newest key into a private folder:
+3. **Bootstrap with all the old sealing keys.** Download the latest `sealing-key.json` from the password manager into your Downloads folder. Copy it to the new host's home directory with `gcloud compute scp ~/Downloads/sealing-key.json <new-vm>:~/ --zone <zone>` (or the browser SSH **Upload file**). Then, on the new host:
    ```sh
-   cd ~ && umask 077 && mkdir -p ~/sealing-key-dir
-   python3 - ~/sealing-key.json ~/sealing-key-dir <<'PY'
-   import base64, json, sys
-   items = json.load(open(sys.argv[1]))["items"]
-   newest = max(items, key=lambda s: s["metadata"]["creationTimestamp"])
-   for k in ("tls.crt", "tls.key"):
-       open(f"{sys.argv[2]}/{k}", "wb").write(base64.b64decode(newest["data"][k]))
-   print("unpacked", newest["metadata"]["name"])
-   PY
-   ls -l ~/sealing-key-dir                                    # tls.crt and tls.key, both -rw-------
+   cd ~ && chmod 600 ~/sealing-key.json
+   python3 -c 'import json; print(len(json.load(open("sealing-key.json"))["items"]), "keys")'   # every key you backed up
    cd ~/platform
    read -rs TS_AUTHKEY && export TS_AUTHKEY
-   sudo --preserve-env=TS_AUTHKEY SEALED_SECRETS_KEY_DIR="$HOME/sealing-key-dir" infra/bootstrap/bootstrap.sh
+   sudo --preserve-env=TS_AUTHKEY SEALED_SECRETS_KEYS_FILE="$HOME/sealing-key.json" infra/bootstrap/bootstrap.sh
    unset TS_AUTHKEY; sudo infra/bootstrap/verify.sh
-   shred -u ~/sealing-key-dir/* ~/sealing-key.json && rmdir ~/sealing-key-dir
+   shred -u ~/sealing-key.json
    ```
-   The SealedSecrets in Git decrypt with the restored key (the newest key covers every current seal). If that key is older than 30 days, the controller creates a new one at start. Then fetch the cert again (step 4), commit `sealing-cert.crt` in a PR, and back up the keys again (step 3).
+   Bootstrap restores **every** key in the file, under its original name, before the controller starts. Each SealedSecret in Git decrypts with the key it was sealed with: renewal never re-encrypts, so all keys are needed. The CI job `bootstrap` proves this on every run (`OK old-key-unseals`: a seal made with an older restored key still decrypts). If the newest key is older than 30 days, the controller adds a new one at start. Then fetch the cert again (step 4), commit `sealing-cert.crt` in a PR, and back up the keys again (step 3). Then delete the downloaded file on your computer and empty the Recycle Bin.
 4. **Restore the databases** once `prod-platform` is Healthy and before users arrive. From R2:
    ```sh
    for db in orders notify reading_tuvi identity payment; do

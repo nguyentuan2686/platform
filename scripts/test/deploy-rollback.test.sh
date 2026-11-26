@@ -187,6 +187,80 @@ already_reverted_on_origin() {
 }
 
 
+
+# --- Review round 2: the newest failing run restores the last verified deploy -------------------------------------
+deploy() { # deploy <svc> <tag7>: a CD bump commit by the bot; echoes its sha
+  sed -i "s|\($1, newTag: \)[^}]*|\1sha-$2|" "$repo/$kpath"
+  bot commit -q -a -m "deploy: $1 to sha-$2 [skip ci]"
+  git -C "$repo" rev-parse HEAD
+}
+file_at() { git -C "$repo" show "$1:$kpath"; }
+
+overlap_bad_then_good_restores_last_verified() {
+  # V verified; A (bad web) and B (good order-svc) overlap. A's run is superseded; B's run fails too (A is still bad)
+  # and must restore V, i.e. revert A and B in one commit.
+  setup; g tag deploy-verified "$bump"
+  local a b
+  a="$(deploy web aaaaaaa)"; b="$(deploy order-svc bbbbbbb)"
+  run --sha "$a" --repo "$repo"
+  [ "$rc" -eq 4 ] && grep -q 'the newest CD run restores the last verified deploy' "$tmp/out" || fail "${FUNCNAME[0]}" "A: rc=$rc: $(cat "$tmp/out")"
+  run --sha "$b" --repo "$repo"
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "B: rc=$rc: $(cat "$tmp/out")"
+  [ "$(cat "$repo/$kpath")" = "$(file_at "$bump")" ] || fail "${FUNCNAME[0]}" "not at the verified state: $(cat "$repo/$kpath")"
+  [ "$(git -C "$repo" rev-list --count "$b..HEAD")" = 1 ] || fail "${FUNCNAME[0]}" "expected one revert commit"
+  [ "$(git -C "$repo" log -1 --format=%s)" = "revert: deploy sha-bbbbbbb failed verify-deploy [skip ci]" ] || fail "${FUNCNAME[0]}" "subject"
+  local body; body="$(git -C "$repo" log -1 --format=%B)"
+  grep -q "This reverts commit $a " <<<"$body" && grep -q "This reverts commit $b " <<<"$body" \
+    || fail "${FUNCNAME[0]}" "body does not list A and B: $(git -C "$repo" log -1 --format=%B)"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+good_then_bad_reverts_only_the_newest() {
+  # A verified (tag moved to A); B is bad: B's run reverts only B, prod ends at A.
+  setup; local a b
+  a="$(deploy web aaaaaaa)"; g tag deploy-verified "$a"; b="$(deploy order-svc bbbbbbb)"
+  run --sha "$b" --repo "$repo"
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(cat "$repo/$kpath")" = "$(file_at "$a")" ] || fail "${FUNCNAME[0]}" "not at A: $(cat "$repo/$kpath")"
+  if grep -q "This reverts commit $a" <<<"$(git -C "$repo" log -1 --format=%B)"; then fail "${FUNCNAME[0]}" "reverted the verified A"; fi
+  echo "ok ${FUNCNAME[0]}"
+}
+
+first_deploy_reverts_only_this_bump() {
+  # No deploy-verified tag yet: only this run's bump is reverted, an earlier unverified bump stays.
+  setup; local a b
+  a="$(deploy web aaaaaaa)"; b="$(deploy order-svc bbbbbbb)"
+  run --sha "$b" --repo "$repo"
+  [ "$rc" -eq 0 ] && grep -q 'no deploy-verified tag yet' "$tmp/out" || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(cat "$repo/$kpath")" = "$(file_at "$a")" ] || fail "${FUNCNAME[0]}" "not at A: $(cat "$repo/$kpath")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+earlier_revert_is_not_reverted_twice() {
+  # V verified; A failed and was rolled back; B fails: the range holds A (already reverted), so only B is reverted.
+  setup; g tag deploy-verified "$bump"
+  local a b
+  a="$(deploy web aaaaaaa)"
+  run --sha "$a" --repo "$repo"; [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "A rollback: rc=$rc: $(cat "$tmp/out")"
+  b="$(deploy order-svc bbbbbbb)"
+  run --sha "$b" --repo "$repo"
+  [ "$rc" -eq 0 ] && grep -q "${a:0:7} already reverted; skipped" "$tmp/out" || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(cat "$repo/$kpath")" = "$(file_at "$bump")" ] || fail "${FUNCNAME[0]}" "not at V: $(cat "$repo/$kpath")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+untrusted_commit_in_range_refuses_all() {
+  # A human `deploy:` commit between the verified tag and the bump: the whole rollback is refused, nothing changes.
+  setup; g tag deploy-verified "$bump"
+  sed -i "s|web, newTag: main|web, newTag: v1-by-hand|" "$repo/$kpath"
+  g commit -q -a -m "deploy: web by hand"
+  local b before; b="$(deploy order-svc bbbbbbb)"; before="$(git -C "$repo" rev-parse HEAD)"
+  run --sha "$b" --repo "$repo"
+  [ "$rc" -eq 2 ] && grep -q 'not authored by the CD App' "$tmp/out" || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] && [ -z "$(git -C "$repo" status --porcelain)" ] || fail "${FUNCNAME[0]}" "repo changed"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 reverts_only_the_bump
 refuses_commit_outside_overlays
 refuses_non_deploy_message
@@ -197,3 +271,8 @@ refuses_human_deploy_commit
 newer_deploy_supersedes
 newer_deploy_on_origin_supersedes_push
 already_reverted_on_origin
+overlap_bad_then_good_restores_last_verified
+good_then_bad_reverts_only_the_newest
+first_deploy_reverts_only_this_bump
+earlier_revert_is_not_reverted_twice
+untrusted_commit_in_range_refuses_all

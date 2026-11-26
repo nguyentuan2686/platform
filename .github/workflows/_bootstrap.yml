@@ -29,20 +29,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Generate a throwaway CI sealing key
+      - name: Generate throwaway CI sealing keys (an older one in a keys backup, the active one as a key dir)
         run: |
           # Generated per run, never committed (no private key in Git, even a test one). A fresh cert also matters:
           # the controller rotates at start a key whose cert NotBefore is older than its 30-day renew period, so a
           # committed cert would stop being the active one a month later. bootstrap restores it like a migrated key.
+          # The OLDER key goes into a JSON backup in the format of go-live step 3 (SEALED_SECRETS_KEYS_FILE): a host
+          # move must restore every key, because renewal never re-encrypts existing seals (step old-key-unseals).
+          old_dir="$RUNNER_TEMP/sealing-key-old"
+          mkdir -p "$old_dir" && chmod 700 "$old_dir"
+          openssl req -x509 -newkey rsa:4096 -noenc -keyout "$old_dir/tls.key" -out "$old_dir/tls.crt" -days 30 \
+            -subj "/O=sealed-secret/CN=local-test-sealed-secret-old" 2>/dev/null
+          b64() { base64 -w0 <"$1"; }
+          ( umask 077
+            printf '{"apiVersion":"v1","kind":"List","items":[{"apiVersion":"v1","kind":"Secret","type":"kubernetes.io/tls",%s,%s}]}\n' \
+              '"metadata":{"name":"sealed-secrets-keyciold","namespace":"kube-system","uid":"x","resourceVersion":"1"}' \
+              "\"data\":{\"tls.crt\":\"$(b64 "$old_dir/tls.crt")\",\"tls.key\":\"$(b64 "$old_dir/tls.key")\"}" \
+              >"$RUNNER_TEMP/sealing-keys.json" )
+          sleep 2 # the active key is the one with the newest NotBefore (second resolution)
           key_dir="$RUNNER_TEMP/sealing-key"
           mkdir -p "$key_dir" && chmod 700 "$key_dir"
           openssl req -x509 -newkey rsa:4096 -noenc -keyout "$key_dir/tls.key" -out "$key_dir/tls.crt" -days 30 \
             -subj "/O=sealed-secret/CN=local-test-sealed-secret" 2>/dev/null
-          echo "SEALING_KEY_DIR=$key_dir" >>"$GITHUB_ENV"
+          { echo "SEALING_KEY_DIR=$key_dir"; echo "SEALING_KEY_OLD_DIR=$old_dir"; echo "SEALING_KEYS_FILE=$RUNNER_TEMP/sealing-keys.json"; } >>"$GITHUB_ENV"
 
       - name: Bootstrap (run 1)
         run: |
-          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
+          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" SEALED_SECRETS_KEYS_FILE="$SEALING_KEYS_FILE" \
             infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run1.log"
 
       - name: firewall-before-k3s
@@ -56,7 +69,7 @@ jobs:
 
       - name: Bootstrap (run 2, must change nothing)
         run: |
-          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" \
+          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" SEALED_SECRETS_KEYS_FILE="$SEALING_KEYS_FILE" \
             infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run2.log"
 
       - name: verify.sh
@@ -139,6 +152,22 @@ jobs:
             if kubectl -n "${s%%/*}" get secret "${s#*/}" >/dev/null 2>&1; then echo "FAIL secret-materialised: optional $s exists"; exit 1; fi
           done
           echo "OK secret-materialised"
+
+      - name: old-key-unseals
+        run: |
+          # A SealedSecret made with the OLDER restored key (from the keys backup) must still decrypt.
+          ks="$HOME/.cache/platform/bin/kubeseal"
+          kubectl create secret generic old-key-check -n data --from-literal=CHECK=local-test-old-key \
+            --dry-run=client -o yaml | "$ks" --cert "$SEALING_KEY_OLD_DIR/tls.crt" -o yaml >"$RUNNER_TEMP/old-key-check.yaml"
+          kubectl apply -f "$RUNNER_TEMP/old-key-check.yaml"
+          end=$((SECONDS + 120))
+          until got=$(kubectl -n data get secret old-key-check -o jsonpath='{.data.CHECK}' 2>/dev/null) && [ -n "$got" ]; do
+            [ "$SECONDS" -lt "$end" ] || { echo "FAIL old-key-unseals: $(kubectl -n data describe sealedsecret old-key-check 2>&1 | tail -n 5)"; exit 1; }
+            sleep 3
+          done
+          [ "$(base64 -d <<<"$got")" = local-test-old-key ] || { echo "FAIL old-key-unseals: wrong value"; exit 1; }
+          kubectl -n data delete sealedsecret old-key-check
+          echo "OK old-key-unseals"
 
       - name: Argo CD synced this commit
         run: |

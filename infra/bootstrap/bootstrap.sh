@@ -10,7 +10,9 @@
 #   GITOPS_CI_MODE          1 = CI: children follow GITOPS_REVISION, prod-tunnel/prod-apps are not auto-synced (default 0)
 #   TS_AUTHKEY              Tailscale auth key; unset = Tailscale step skipped and public SSH kept
 #   TS_HOSTNAME             Tailscale hostname, also a k3s tls-san (default platform-prod)
-#   SEALED_SECRETS_KEY_DIR  dir with tls.crt + tls.key of an existing sealing key to restore (host migration)
+#   SEALED_SECRETS_KEYS_FILE  JSON backup of ALL sealing keys to restore (host migration; go-live step 3:
+#                           kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o json)
+#   SEALED_SECRETS_KEY_DIR  dir with tls.crt + tls.key of one sealing key to restore (CI; prefer the keys file)
 #   BOOTSTRAP_FIREWALL      0 = leave ufw alone (default 1)
 #   BOOTSTRAP_ADOPT         1 = same as --adopt (default 0)
 #   BOOTSTRAP_CLOSE_PUBLIC_SSH  1 = remove the public SSH rules, honoured only while Tailscale is connected; set it
@@ -47,6 +49,7 @@ GITOPS_CI_MODE="${GITOPS_CI_MODE:-0}"
 TS_HOSTNAME="${TS_HOSTNAME:-platform-prod}"
 BOOTSTRAP_FIREWALL="${BOOTSTRAP_FIREWALL:-1}"
 SEALED_SECRETS_KEY_DIR="${SEALED_SECRETS_KEY_DIR:-}"
+SEALED_SECRETS_KEYS_FILE="${SEALED_SECRETS_KEYS_FILE:-}"
 BOOTSTRAP_ADOPT="${BOOTSTRAP_ADOPT:-0}"
 for arg in "$@"; do
   case "$arg" in
@@ -65,6 +68,10 @@ export BOOTSTRAP_CLOSE_PUBLIC_SSH
 if [ -n "$SEALED_SECRETS_KEY_DIR" ]; then
   [ -d "$SEALED_SECRETS_KEY_DIR" ] || die "SEALED_SECRETS_KEY_DIR $SEALED_SECRETS_KEY_DIR is not a directory"
   SEALED_SECRETS_KEY_DIR="$(cd "$SEALED_SECRETS_KEY_DIR" && pwd)"
+fi
+if [ -n "$SEALED_SECRETS_KEYS_FILE" ]; then
+  [ -r "$SEALED_SECRETS_KEYS_FILE" ] || die "SEALED_SECRETS_KEYS_FILE $SEALED_SECRETS_KEYS_FILE is not readable"
+  command -v python3 >/dev/null 2>&1 || die "SEALED_SECRETS_KEYS_FILE needs python3 (part of Ubuntu 24.04)"
 fi
 
 [ "$(id -u)" = 0 ] || die "run as root (sudo)"

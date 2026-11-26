@@ -26,6 +26,8 @@ lib() { # run "$@" with the bootstrap libs sourced and $tmp/bin first on PATH
     . "$root/infra/bootstrap/lib/tailscale.sh"
     # shellcheck source=../../infra/bootstrap/lib/firewall.sh
     . "$root/infra/bootstrap/lib/firewall.sh"
+    # shellcheck source=../../infra/bootstrap/lib/sealed.sh
+    . "$root/infra/bootstrap/lib/sealed.sh"
     # shellcheck source=../../infra/bootstrap/lib/argocd.sh
     . "$root/infra/bootstrap/lib/argocd.sh"
     PATH="$tmp/bin:$PATH"
@@ -187,6 +189,42 @@ public_ssh_closes_only_on_opt_in_while_connected() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+
+sealing_key_backup_restores_every_key() {
+  # Review round 2: key renewal never re-encrypts existing seals, so a host move must restore ALL backed-up keys.
+  if ! command -v python3 >/dev/null 2>&1; then echo "skip ${FUNCNAME[0]} (no python3)"; return; fi
+  cat >"$tmp/keys.json" <<'JSON'
+{"apiVersion":"v1","kind":"List","items":[
+ {"apiVersion":"v1","kind":"Secret","type":"kubernetes.io/tls","metadata":{"name":"sealed-secrets-keyold","namespace":"kube-system",
+  "uid":"u1","resourceVersion":"7","creationTimestamp":"2026-01-01T00:00:00Z","labels":{"sealedsecrets.bitnami.com/sealed-secrets-key":"active"}},
+  "data":{"tls.crt":"T0xEQ1JU","tls.key":"T0xES0VZ"}},
+ {"apiVersion":"v1","kind":"Secret","type":"kubernetes.io/tls","metadata":{"name":"sealed-secrets-keynew","namespace":"kube-system",
+  "managedFields":[{}],"labels":{"sealedsecrets.bitnami.com/sealed-secrets-key":"active"}},
+  "data":{"tls.crt":"TkVXQ1JU","tls.key":"TkVXS0VZ"}}]}
+JSON
+  local rc=0 m
+  m="$(lib sealed_keys_manifest_from_file "$tmp/keys.json" 2>"$tmp/err")" || rc=$?
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/err")"
+  [ "$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(i["metadata"]["name"] for i in d["items"]))' <<<"$m")" \
+    = "sealed-secrets-keyold sealed-secrets-keynew" ] || fail "${FUNCNAME[0]}" "names: $m"
+  python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for i in d["items"]:
+    md = i["metadata"]
+    assert set(md) == {"name", "namespace", "labels"}, md
+    assert md["namespace"] == "kube-system" and md["labels"] == {"sealedsecrets.bitnami.com/sealed-secrets-key": "active"}
+    assert i["type"] == "kubernetes.io/tls" and set(i["data"]) == {"tls.crt", "tls.key"}
+' <<<"$m" || fail "${FUNCNAME[0]}" "manifest not clean: $m"
+  echo '{"items":[{"kind":"Secret","metadata":{"name":"x"},"data":{"tls.crt":"QQ=="}}]}' >"$tmp/bad.json"
+  rc=0; lib sealed_keys_manifest_from_file "$tmp/bad.json" >/dev/null 2>"$tmp/err" || rc=$?
+  [ "$rc" -ne 0 ] && grep -q 'no name, tls.crt or tls.key' "$tmp/err" || fail "${FUNCNAME[0]}" "missing tls.key accepted"
+  echo 'not json' >"$tmp/bad.json"
+  rc=0; lib sealed_keys_manifest_from_file "$tmp/bad.json" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || fail "${FUNCNAME[0]}" "garbage accepted"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 ssh_ports_union_of_sshd_ss_and_socket
 ssh_ports_falls_back_to_22
 managed_rules_cover_ssh_ports_only
@@ -196,3 +234,4 @@ k3s_config_marker_is_recognised
 tailscale_package_install_is_used_as_is
 argocd_cm_ci_branch_only_in_ci_mode
 public_ssh_closes_only_on_opt_in_while_connected
+sealing_key_backup_restores_every_key

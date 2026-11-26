@@ -20,7 +20,7 @@ job_wiring() {
   # Step order: tailnet, kubeconfig, kubectl, verify, then (on failure) App token, rollback, issue.
   local order
   order="$(q '.jobs["verify-deploy"].steps[] | (.id // .uses // .name)' | sed 's/@.*//' | paste -sd' ' -)"
-  [[ "$order" == *"tailscale/github-action Prod kubeconfig Install kubectl"*" verify app rollback issue Remove the kubeconfig" ]] \
+  [[ "$order" == *"tailscale/github-action Prod kubeconfig Install kubectl"*" verify app mark rollback issue Remove the kubeconfig" ]] \
     || fail "${FUNCNAME[0]}" "step order: $order"
   [ "$(q '.jobs["verify-deploy"].steps[] | select(.uses == "tailscale/*") | .with.tags')" = tag:ci ] \
     || fail "${FUNCNAME[0]}" "tailscale tags not tag:ci"
@@ -30,11 +30,15 @@ job_wiring() {
   [ "$(q '.jobs["verify-deploy"].env.BUMP_SHA')" = '${{ needs.bump.outputs.bump_sha }}' ] || fail "${FUNCNAME[0]}" "BUMP_SHA not from bump"
   [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"rollback\") | .if")" = "failure() && steps.verify.outputs.rc == '1'" ] \
     || fail "${FUNCNAME[0]}" "rollback must run only on verify exit 1 (unhealthy), never on 4 (unreachable)"
-  for s in app issue; do
-    [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"$s\") | .if")" = "failure() && steps.verify.outcome == 'failure'" ] \
-      || fail "${FUNCNAME[0]}" "step $s if"
-  done
-  q '.jobs["verify-deploy"].steps[] | select(.id == "rollback") | .run' | grep -q 'scripts/deploy-rollback.sh --sha "$BUMP_SHA" .*--push' \
+  [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"app\") | .if")" = "always() && (steps.verify.outcome == 'success' || steps.verify.outcome == 'failure')" ] \
+    || fail "${FUNCNAME[0]}" "app token if"
+  [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"mark\") | .if")" = "steps.verify.outcome == 'success'" ] \
+    || fail "${FUNCNAME[0]}" "mark if"
+  grep -q 'scripts/deploy-mark-verified.sh --sha "$BUMP_SHA" .*--push' <<<"$(q '.jobs["verify-deploy"].steps[] | select(.id == "mark") | .run')" \
+    || fail "${FUNCNAME[0]}" "mark step does not run deploy-mark-verified.sh --push"
+  [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"issue\") | .if")" = "failure() && steps.verify.outcome == 'failure'" ] \
+    || fail "${FUNCNAME[0]}" "issue step if"
+  grep -q 'scripts/deploy-rollback.sh --sha "$BUMP_SHA" .*--push' <<<"$(q '.jobs["verify-deploy"].steps[] | select(.id == "rollback") | .run')" \
     || fail "${FUNCNAME[0]}" "rollback step does not run deploy-rollback.sh --push"
   echo "ok ${FUNCNAME[0]}"
 }
@@ -81,7 +85,7 @@ issue_has_title_label_run_and_log_tail() {
   grep -q '^- NOT rolled back: the revert conflicted' "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "conflict not reported"
   grep -qx "~~~~" "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "log not fenced with ~~~~"
   issue_step 1 4
-  grep -q "^- NOT rolled back: a newer deploy commit on main owns the outcome" "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "superseded not reported"
+  grep -q "^- NOT rolled back by this run: a newer deploy commit is on main. The newest CD run owns the outcome: if its verify-deploy fails too, it reverts every deploy since the last verified one" "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "superseded not reported"
   echo "ok ${FUNCNAME[0]}"
 }
 

@@ -308,14 +308,29 @@ jobs:
           exit "$rc"
       - name: CD GitHub App token (contents + issues write on this repo only)
         id: app
-        if: failure() && steps.verify.outcome == 'failure'
+        # Success: push the deploy-verified tag. Failure: revert and/or open an issue.
+        if: always() && (steps.verify.outcome == 'success' || steps.verify.outcome == 'failure')
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ vars.CD_APP_ID }}
           private-key: ${{ secrets.CD_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-issues: write
-      - name: Roll back (revert the bump commit)
+      - name: Record the verified deploy (tag deploy-verified)
+        id: mark
+        # The last verified-good bump: the newest failing run later rolls back to it (scripts/deploy-rollback.sh).
+        if: steps.verify.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_VALUE_0
+          git clone -q "https://github.com/${REPO}.git" "$RUNNER_TEMP/verified"
+          bash scripts/deploy-mark-verified.sh --sha "$BUMP_SHA" --repo "$RUNNER_TEMP/verified" --push
+      - name: Roll back (restore the last verified deploy)
         id: rollback
         # Only a deploy that was checked and found unhealthy (exit 1) is reverted, never an unreachable cluster (4).
         if: failure() && steps.verify.outputs.rc == '1'
@@ -340,7 +355,7 @@ jobs:
           cat "$RUNNER_TEMP/rollback.out"
           echo "rc=$rc" >>"$GITHUB_OUTPUT"
           # 4 = superseded by a newer deploy commit: not an error of this step, the newer run owns the outcome.
-          if [ "$rc" = 4 ]; then echo "::notice::rollback skipped: a newer deploy on main owns the outcome"; exit 0; fi
+          if [ "$rc" = 4 ]; then echo "::notice::rollback skipped: a newer deploy on main owns the outcome (the newest run restores the last verified deploy)"; exit 0; fi
           exit "$rc"
       - name: Open or update a deploy issue
         id: issue
@@ -357,7 +372,7 @@ jobs:
           case "$VERIFY_RC:$ROLLBACK_RC" in
             1:0) result="Rolled back: the bump commit was reverted on main; Argo CD syncs the previous tags." ;;
             1:3) result="NOT rolled back: the revert conflicted (ROLLBACK: conflict, manual action needed)." ;;
-            1:4) result="NOT rolled back: a newer deploy commit on main owns the outcome (its own verify-deploy decides)." ;;
+            1:4) result="NOT rolled back by this run: a newer deploy commit is on main. The newest CD run owns the outcome: if its verify-deploy fails too, it reverts every deploy since the last verified one (tag deploy-verified), this one included. If that run cannot reach the cluster, it opens a deploy-unverified issue instead and nothing is reverted (manual action)." ;;
             1:*) result="NOT rolled back: deploy-rollback.sh failed (rc=${ROLLBACK_RC:-not run}); see the run log." ;;
             4:*) label=deploy-unverified title="deploy unverified: prod cluster unreachable"
                  result="NOT rolled back: verify-deploy could not reach the cluster (tailnet, API or port-forward), so the deploy of \`sha-${SHA:0:7}\` is unverified, not known bad." ;;
