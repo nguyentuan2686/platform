@@ -16,9 +16,11 @@
 # closed and servicelb is off, so this is the internal ingress), waits for it to answer (`OK port-forward`), then runs
 # `SMOKE_HOST_HEADER=<APP_DOMAIN> scripts/smoke-web.sh http://127.0.0.1:18080` until it passes (`OK smoke-web`) or the
 # smoke deadline ends (`FAIL smoke-web: <reason>`). APP_DOMAIN is read from deploy/k8s/overlays/prod/domain/domain.yaml.
-# Exit 0 when everything passed, 1 on a failed check, 2 on bad arguments. Needs kubectl (current context = the
-# cluster), jq and curl. Env: VERIFY_DEPLOY_INTERVAL_S (poll interval, default 10), VERIFY_DEPLOY_PORT (18080),
-# VERIFY_DEPLOY_PF_DEADLINE_S (60), VERIFY_DEPLOY_SMOKE_DEADLINE_S (180).
+# Exit 0 when everything passed, 1 on a failed check (deployed but not healthy: the caller may roll back), 2 on bad
+# arguments, 4 when the cluster could not be checked (no app readable in the last poll, or the port-forward failed;
+# `UNREACHABLE: ...` / `FAIL port-forward: ...`): the deploy is unverified, not known bad, so never roll back on 4.
+# Needs kubectl (current context = the cluster), jq and curl. Env: VERIFY_DEPLOY_INTERVAL_S (poll interval, default
+# 10), VERIFY_DEPLOY_PORT (18080), VERIFY_DEPLOY_PF_DEADLINE_S (60), VERIFY_DEPLOY_SMOKE_DEADLINE_S (180).
 set -euo pipefail
 
 usage() { sed -n '4,5p' "$0" >&2; exit 2; }
@@ -83,7 +85,13 @@ descendant() {
     git -C "$git_dir" fetch -q origin main 2>"$errf" || { echo "verify-deploy: git fetch: $(tr '\n' ' ' <"$errf")" >&2; return 1; }
     git -C "$git_dir" cat-file -e "$1^{commit}" 2>/dev/null || return 1
   fi
-  if git -C "$git_dir" merge-base --is-ancestor "$revision" "$1" 2>/dev/null; then desc[$1]=yes; else desc[$1]=no; return 1; fi
+  local rc=0
+  git -C "$git_dir" merge-base --is-ancestor "$revision" "$1" 2>"$errf" || rc=$?
+  case "$rc" in
+    0) desc[$1]=yes ;;
+    1) desc[$1]=no; return 1 ;;
+    *) echo "verify-deploy: git merge-base: $(tr '\n' ' ' <"$errf")" >&2; return 1 ;; # error: not cached, retried next poll
+  esac
 }
 
 note=""
@@ -102,9 +110,10 @@ reached() { # reached <app> <sync> <health> <revision> <conditions>; sets note f
 
 end=$((SECONDS + deadline_s))
 while :; do
-  missing=()
+  missing=() unread=0
   for a in "${order[@]}"; do
-    s=$(state "$a") || true
+    # unread: the API gave no answer at all (not even NotFound): tailnet, API server or credentials, not the deploy.
+    if ! s=$(state "$a") && [[ "$s" != *NotFound* ]]; then unread=$((unread + 1)); fi
     last[$a]="$s"
     read -r sync health rev conds <<<"$s"
     if reached "$a" "$sync" "$health" "$rev" "$conds"; then
@@ -122,6 +131,10 @@ while :; do
       read -r sync health rev conds <<<"${last[$a]}"
       echo "FAIL argo-$a: sync=$sync health=$health revision=$rev conditions=$conds (want ${want[$a]} at $revision)"
     done
+    if [ "$unread" -eq "${#order[@]}" ]; then
+      echo "UNREACHABLE: no Argo CD application could be read in the last poll (cluster, tailnet or credentials), not judged as a bad deploy"
+      exit 4
+    fi
     exit 1
   fi
   sleep "$interval"
@@ -142,12 +155,12 @@ pf_pid=$!
 pf_end=$((SECONDS + ${VERIFY_DEPLOY_PF_DEADLINE_S:-60}))
 while :; do
   if ! kill -0 "$pf_pid" 2>/dev/null; then
-    echo "FAIL port-forward: kubectl port-forward exited: $(tail -n 3 "$pf_log" | tr '\n' ' ')"; exit 1
+    echo "FAIL port-forward: kubectl port-forward exited: $(tail -n 3 "$pf_log" | tr '\n' ' ')"; exit 4
   fi
   c=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$url/" 2>/dev/null) || c=000
   [ "$c" != 000 ] && break
   if [ "$SECONDS" -ge "$pf_end" ]; then
-    echo "FAIL port-forward: nothing answers on $url: $(tail -n 3 "$pf_log" | tr '\n' ' ')"; exit 1
+    echo "FAIL port-forward: nothing answers on $url: $(tail -n 3 "$pf_log" | tr '\n' ' ')"; exit 4
   fi
   sleep 1
 done

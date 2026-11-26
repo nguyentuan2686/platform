@@ -20,7 +20,7 @@ job_wiring() {
   # Step order: tailnet, kubeconfig, kubectl, verify, then (on failure) App token, rollback, issue.
   local order
   order="$(q '.jobs["verify-deploy"].steps[] | (.id // .uses // .name)' | sed 's/@.*//' | paste -sd' ' -)"
-  [[ "$order" == *"tailscale/github-action Prod kubeconfig Install kubectl"*" verify app rollback issue" ]] \
+  [[ "$order" == *"tailscale/github-action Prod kubeconfig Install kubectl"*" verify app rollback issue Remove the kubeconfig" ]] \
     || fail "${FUNCNAME[0]}" "step order: $order"
   [ "$(q '.jobs["verify-deploy"].steps[] | select(.uses == "tailscale/*") | .with.tags')" = tag:ci ] \
     || fail "${FUNCNAME[0]}" "tailscale tags not tag:ci"
@@ -28,7 +28,9 @@ job_wiring() {
   grep -q 'scripts/verify-deploy.sh --app prod-platform,prod-tunnel,prod-apps --revision "$BUMP_SHA"' "$tmp/verify.sh" \
     || fail "${FUNCNAME[0]}" "verify step: $(cat "$tmp/verify.sh")"
   [ "$(q '.jobs["verify-deploy"].env.BUMP_SHA')" = '${{ needs.bump.outputs.bump_sha }}' ] || fail "${FUNCNAME[0]}" "BUMP_SHA not from bump"
-  for s in app rollback issue; do
+  [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"rollback\") | .if")" = "failure() && steps.verify.outputs.rc == '1'" ] \
+    || fail "${FUNCNAME[0]}" "rollback must run only on verify exit 1 (unhealthy), never on 4 (unreachable)"
+  for s in app issue; do
     [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"$s\") | .if")" = "failure() && steps.verify.outcome == 'failure'" ] \
       || fail "${FUNCNAME[0]}" "step $s if"
   done
@@ -47,11 +49,12 @@ unverified_deploy_warns() {
   echo "ok ${FUNCNAME[0]}"
 }
 
-issue_step() { # issue_step <rollback rc>: runs the issue step with a stub gh; argv per call in $tmp/gh.log
+issue_step() { # issue_step <verify rc> <rollback rc> [existing issue]: runs the issue step with a stub gh; argv per call in $tmp/gh.log
   mkdir -p "$tmp/bin" "$tmp/rt"
   cat >"$tmp/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$GH_LOG"
+[ "$1 $2" = "issue list" ] && { printf '%s' "${GH_EXISTING:-}"; exit 0; }
 for a in "$@"; do [ "$prev" = --body-file ] && cp "$a" "$GH_LOG.body"; prev="$a"; done
 EOF
   chmod +x "$tmp/bin/gh"
@@ -60,11 +63,11 @@ EOF
   q '.jobs["verify-deploy"].steps[] | select(.id == "issue") | .run' >"$tmp/issue.sh"
   rc=0
   env -i PATH="$tmp/bin:$PATH" GH_LOG="$tmp/gh.log" RUNNER_TEMP="$tmp/rt" SHA="$sha" BUMP_SHA="$bump" \
-    RUN_URL=https://github.com/o/platform/actions/runs/42 ROLLBACK_RC="$1" bash "$tmp/issue.sh" >"$tmp/out" 2>&1 || rc=$?
+    RUN_URL=https://github.com/o/platform/actions/runs/42 VERIFY_RC="$1" ROLLBACK_RC="$2" GH_EXISTING="${3:-}" bash "$tmp/issue.sh" >"$tmp/out" 2>&1 || rc=$?
 }
 
 issue_has_title_label_run_and_log_tail() {
-  issue_step 0
+  issue_step 1 0
   [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
   grep -q '^label create deploy-failed .*--force' "$tmp/gh.log" || fail "${FUNCNAME[0]}" "label not created: $(cat "$tmp/gh.log")"
   grep -q "^issue create --title deploy failed: sha-${sha:0:7} --label deploy-failed --body-file " "$tmp/gh.log" \
@@ -74,11 +77,28 @@ issue_has_title_label_run_and_log_tail() {
   grep -q '^- Rolled back' "$body" || fail "${FUNCNAME[0]}" "no rollback line"
   grep -qx 'verify line 51' "$body" && grep -qx 'verify line 150' "$body" || fail "${FUNCNAME[0]}" "log tail missing"
   if grep -qx 'verify line 50' "$body"; then fail "${FUNCNAME[0]}" "more than 100 log lines"; fi
-  issue_step 3
+  issue_step 1 3
   grep -q '^- NOT rolled back: the revert conflicted' "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "conflict not reported"
+  grep -qx "~~~~" "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "log not fenced with ~~~~"
+  issue_step 1 4
+  grep -q "^- NOT rolled back: a newer deploy commit on main owns the outcome" "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "superseded not reported"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+unreachable_opens_or_updates_unverified_issue() {
+  # Review I1(b): exit 4 never reverts; it opens one deploy-unverified issue, later runs comment on it.
+  issue_step 4 ""
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  grep -q "^issue create --title deploy unverified: prod cluster unreachable --label deploy-unverified " "$tmp/gh.log" \
+    || fail "${FUNCNAME[0]}" "create: $(cat "$tmp/gh.log")"
+  grep -q "^- NOT rolled back: verify-deploy could not reach the cluster" "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "wording"
+  issue_step 4 "" 17
+  grep -q "^issue comment 17 --body-file " "$tmp/gh.log" || fail "${FUNCNAME[0]}" "no comment on #17: $(cat "$tmp/gh.log")"
+  if grep -q "^issue create" "$tmp/gh.log"; then fail "${FUNCNAME[0]}" "opened a second issue"; fi
   echo "ok ${FUNCNAME[0]}"
 }
 
 job_wiring
 unverified_deploy_warns
 issue_has_title_label_run_and_log_tail
+unreachable_opens_or_updates_unverified_issue

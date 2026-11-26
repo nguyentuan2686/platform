@@ -12,6 +12,7 @@ trap 'rm -rf "$tmp"' EXIT
 rev=1111111111111111111111111111111111111111
 domain="$(awk '$1 == "APP_DOMAIN:" {print $2}' "$root/deploy/k8s/overlays/prod/domain/domain.yaml")"
 us=$'\x1f'
+mark="vd-$$-$RANDOM" # unique argv marker of this run's fake port-forward (pgrep must not match other processes)
 
 fail() { echo "FAIL $1: $2" >&2; exit 1; }
 
@@ -24,9 +25,10 @@ for a in "$@"; do
   if [ "$a" = port-forward ]; then
     echo "$*" >"$FAKE_APPS/.pf-args"
     [ -f "$FAKE_APPS/.pf-fail" ] && { echo 'error: services "traefik" not found' >&2; exit 1; }
-    exec sleep 600
+    exec -a "fake-port-forward-$FAKE_MARK" sleep 600
   fi
 done
+[ -f "$FAKE_APPS/.down" ] && { echo "Unable to connect to the server: dial tcp 100.64.0.1:6443: i/o timeout" >&2; exit 1; }
 name=""; prev=""
 for a in "$@"; do [ "$prev" = application ] && name="$a"; prev="$a"; done
 f="$FAKE_APPS/$name.json"
@@ -56,7 +58,7 @@ use() { # use <app> <fixture>
 
 run() { # args...; sets rc, writes $tmp/out
   rc=0
-  PATH="$tmp/bin:$PATH" FAKE_APPS="$tmp/apps" FAKE_DATA="$data" VERIFY_DEPLOY_INTERVAL_S=0 VERIFY_DEPLOY_SMOKE_DEADLINE_S=2 \
+  PATH="$tmp/bin:$PATH" FAKE_MARK="$mark" FAKE_APPS="$tmp/apps" FAKE_DATA="$data" VERIFY_DEPLOY_INTERVAL_S=0 VERIFY_DEPLOY_SMOKE_DEADLINE_S=2 \
     bash "$script" "$@" >"$tmp/out" 2>&1 || rc=$?
 }
 
@@ -196,11 +198,33 @@ smoke_failure_exits_1() {
   echo "ok ${FUNCNAME[0]}"
 }
 
-port_forward_failure_exits_1() {
+port_forward_failure_exits_4() {
+  # The cluster could not be checked: unverified, not a bad deploy (exit 4, never a rollback).
   reset; use prod-apps healthy; touch "$tmp/apps/.pf-fail"
   run --app prod-apps --revision "$rev" --deadline-s 5
-  [ "$rc" -eq 1 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$rc" -eq 4 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
   grep -q '^FAIL port-forward: ' "$tmp/out" || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+unreachable_cluster_exits_4() {
+  # Tailnet/API down: no app readable at all -> exit 4 (unverified), not exit 1 (bad deploy, which reverts).
+  reset; use prod-apps healthy; use prod-platform healthy; touch "$tmp/apps/.down"
+  run --app prod-platform,prod-apps --revision "$rev" --deadline-s 1
+  [ "$rc" -eq 4 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  grep -q '^UNREACHABLE: ' "$tmp/out" && grep -q '^FAIL argo-prod-apps: .*Unable to connect' "$tmp/out" \
+    || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+not_found_app_is_a_failed_deploy() {
+  # The API answered (NotFound / Progressing): the cluster was checked, so it is exit 1, not 4.
+  reset; use prod-platform progressing
+  run --app prod-platform,prod-apps --revision "$rev" --deadline-s 1 --no-smoke
+  [ "$rc" -eq 1 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  reset
+  run --app prod-apps --revision "$rev" --deadline-s 1 --no-smoke
+  [ "$rc" -eq 1 ] || fail "${FUNCNAME[0]}" "only NotFound: rc=$rc: $(cat "$tmp/out")"
   echo "ok ${FUNCNAME[0]}"
 }
 
@@ -209,7 +233,7 @@ no_port_forward_left_running() {
   run --app prod-apps --revision "$rev" --deadline-s 5
   [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
   local deadline=$((SECONDS + 5))
-  while pgrep -f 'sleep 600' >/dev/null 2>&1; do
+  while pgrep -f "fake-port-forward-$mark" >/dev/null 2>&1; do
     [ "$SECONDS" -lt "$deadline" ] || fail "${FUNCNAME[0]}" "port-forward still running after exit"
     sleep 0.2
   done
@@ -229,5 +253,7 @@ all_apps_must_hold_at_once
 descendant_revision_needs_opt_in
 smoke_runs_through_traefik_with_app_domain
 smoke_failure_exits_1
-port_forward_failure_exits_1
+port_forward_failure_exits_4
+unreachable_cluster_exits_4
+not_found_app_is_a_failed_deploy
 no_port_forward_left_running

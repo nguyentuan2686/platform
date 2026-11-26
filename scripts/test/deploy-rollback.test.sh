@@ -127,9 +127,73 @@ push_rebases_onto_a_moved_main() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+with_origin() { # bare origin with main = the setup repo
+  git init -q --bare "$tmp/origin.git"; git -C "$tmp/origin.git" symbolic-ref HEAD refs/heads/main
+  g remote add origin "$tmp/origin.git"
+  g push -q origin main
+}
+on_origin() { # on_origin <bot|human> <message> <sed expr on kpath>: lands a commit on origin main from another clone
+  rm -rf "$tmp/other"; git clone -q "$tmp/origin.git" "$tmp/other"
+  local name=o email=o@example.invalid
+  [ "$1" = bot ] && { name='cd-bot[bot]'; email='4242+cd-bot[bot]@users.noreply.github.com'; }
+  sed -i "$3" "$tmp/other/$kpath"
+  git -C "$tmp/other" -c user.name="$name" -c user.email="$email" -c commit.gpgsign=false commit -q -a -m "$2"
+  git -C "$tmp/other" push -q origin main
+  rm -rf "$tmp/other"
+}
+
+refuses_human_deploy_commit() {
+  setup
+  sed -i "s|web, newTag: main|web, newTag: sha-$src|" "$repo/$kpath"
+  g commit -q -a -m "deploy: web to sha-${src:0:7} by hand"
+  local before; before="$(git -C "$repo" rev-parse HEAD)"
+  run --sha "$before" --repo "$repo"
+  [ "$rc" -eq 2 ] && grep -q 'not authored by the CD App' "$tmp/out" || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail "${FUNCNAME[0]}" "HEAD moved"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+newer_deploy_supersedes() {
+  # Review I1(a): a newer CD bump on main owns the outcome; reverting ours could undo good services.
+  setup
+  sed -i "s|web, newTag: main|web, newTag: sha-$src|" "$repo/$kpath"
+  bot commit -q -a -m "deploy: web to sha-1234567 [skip ci]"
+  local before; before="$(git -C "$repo" rev-parse HEAD)"
+  run --sha "$bump" --repo "$repo"
+  [ "$rc" -eq 4 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  grep -q '^ROLLBACK: superseded by newer deploy [0-9a-f]* deploy: web to sha-1234567' "$tmp/out" || fail "${FUNCNAME[0]}" "$(cat "$tmp/out")"
+  [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] || fail "${FUNCNAME[0]}" "HEAD moved"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+newer_deploy_on_origin_supersedes_push() {
+  setup; with_origin
+  on_origin bot "deploy: web to sha-7654321 [skip ci]" "s|web, newTag: main|web, newTag: sha-$src|"
+  run --sha "$bump" --repo "$repo" --push
+  [ "$rc" -eq 4 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(git -C "$tmp/origin.git" log -1 --format=%s main)" = "deploy: web to sha-7654321 [skip ci]" ] \
+    || fail "${FUNCNAME[0]}" "origin main changed: $(git -C "$tmp/origin.git" log -1 --format=%s main)"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+already_reverted_on_origin() {
+  setup; with_origin
+  on_origin human "revert: order-svc by hand" "s|order-svc, newTag: sha-$src|order-svc, newTag: main|"
+  local top; top="$(git -C "$tmp/origin.git" rev-parse main)"
+  run --sha "$bump" --repo "$repo" --push
+  [ "$rc" -eq 0 ] && grep -q 'already reverted on origin main; nothing pushed' "$tmp/out" || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(git -C "$tmp/origin.git" rev-parse main)" = "$top" ] || fail "${FUNCNAME[0]}" "origin main moved"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+
 reverts_only_the_bump
 refuses_commit_outside_overlays
 refuses_non_deploy_message
 conflict_aborts_cleanly
 push_lands_on_origin_main
 push_rebases_onto_a_moved_main
+refuses_human_deploy_commit
+newer_deploy_supersedes
+newer_deploy_on_origin_supersedes_push
+already_reverted_on_origin

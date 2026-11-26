@@ -61,13 +61,22 @@ Argo CD now syncs `main`. Until step 4, `prod-sealed` has nothing to decrypt and
 
 ## 3. Back up the sealing key
 
-On the host:
+This key decrypts every SealedSecret. Without it, the secrets in Git are unreadable on a new host. It never goes into Git, the repo checkout, a chat or a shared drive.
+
+On the host, write it to your home directory (not into `platform/`), readable only by you:
 
 ```sh
-sudo k3s kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > sealing-key.yaml
+cd ~ && umask 077
+sudo k3s kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key -o json > ~/sealing-key.json
+ls -l ~/sealing-key.json      # must show -rw------- and your user
 ```
 
-Put `sealing-key.yaml` into your password manager as an attachment, then `shred -u sealing-key.yaml`. **Never commit it.** Without this key, every SealedSecret in Git is unreadable on a new host. The controller adds a new key every 30 days. Repeat this backup after each rotation (monthly), or at least before a host move.
+Move it into the password manager:
+1. Copy it to your computer. In the GCP browser SSH window, open the gear menu (top right) and choose **Download file**. Enter `/home/<your user>/sealing-key.json`. Or, from a terminal with gcloud: `gcloud compute scp tuvi-prod-1:~/sealing-key.json . --zone asia-southeast1-b`.
+2. In the password manager, create an entry "platform sealing key <date>" and attach the file. Bitwarden: New item -> Secure note -> Attachments. 1Password: New item -> Document.
+3. Delete both copies. On your computer, delete the downloaded file and empty the Recycle Bin. On the host: `shred -u ~/sealing-key.json`.
+
+The controller adds a new key every 30 days, and the file holds all of them. Repeat this backup monthly, or at least before a host move.
 
 ## 4. Seal the prod secrets
 
@@ -114,16 +123,13 @@ Merge when CI is green. Never put a CI-skip marker in the PR title or body (see 
 
 ## 6. GitHub secrets and variables
 
-The kubeconfig for CD must point at the tailnet name. k3s already has `platform-prod` as a TLS SAN. On the host:
+CD needs a kubeconfig that reaches the API at the tailnet name (`platform-prod`, already a TLS SAN of k3s). Choose **one** of the two options, and upload only that file. Every file below is created readable only by you (`umask 077`).
+
+**Option A (recommended): least privilege.** The ServiceAccount `cd-verify` can only read the Argo CD apps and port-forward to Traefik, which is all verify-deploy does. On the host:
 
 ```sh
-sudo sed 's#https://127.0.0.1:6443#https://platform-prod:6443#' /etc/rancher/k3s/k3s.yaml > prod-kubeconfig
-```
-
-This is a cluster-admin credential. A least-privilege alternative that verify-deploy is enough for:
-
-```sh
-sudo k3s kubectl apply -f - <<'EOF'
+cd ~ && umask 077
+sudo k3s kubectl apply -f - <<'YAML'
 apiVersion: v1
 kind: ServiceAccount
 metadata: {name: cd-verify, namespace: kube-system}
@@ -156,27 +162,43 @@ kind: RoleBinding
 metadata: {name: cd-verify-portforward, namespace: kube-system}
 roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: cd-verify-portforward}
 subjects: [{kind: ServiceAccount, name: cd-verify, namespace: kube-system}]
-EOF
+YAML
+rm -f ~/cd-verify.kubeconfig ~/ca.crt
 TOKEN=$(sudo k3s kubectl -n kube-system get secret cd-verify-token -o jsonpath='{.data.token}' | base64 -d)
-sudo k3s kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ca.crt
-KUBECONFIG=prod-kubeconfig kubectl config set-cluster prod --server=https://platform-prod:6443 \
-  --certificate-authority=ca.crt --embed-certs=true
-KUBECONFIG=prod-kubeconfig kubectl config set-credentials cd-verify --token="$TOKEN"
-KUBECONFIG=prod-kubeconfig kubectl config set-context prod --cluster=prod --user=cd-verify
-KUBECONFIG=prod-kubeconfig kubectl config use-context prod
-unset TOKEN; rm -f ca.crt
+sudo k3s kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ~/ca.crt
+export KUBECONFIG=~/cd-verify.kubeconfig
+kubectl config set-cluster prod --server=https://platform-prod:6443 --certificate-authority="$HOME/ca.crt" --embed-certs=true
+kubectl config set-credentials cd-verify --token="$TOKEN"
+kubectl config set-context prod --cluster=prod --user=cd-verify
+kubectl config use-context prod
+unset TOKEN KUBECONFIG; rm -f ~/ca.crt
+ls -l ~/cd-verify.kubeconfig                                  # must show -rw-------
+KUBECONFIG=~/cd-verify.kubeconfig kubectl auth can-i get applications.argoproj.io -n argocd   # yes
+KUBECONFIG=~/cd-verify.kubeconfig kubectl auth can-i get secrets -n apps                      # no
 ```
 
-Use either the admin file or this one as `prod-kubeconfig`, not both. Then, from a machine with `gh` logged in (copy `prod-kubeconfig` there over the tailnet, e.g. `scp`):
+The last two lines go over the tailnet name, so they also prove that `platform-prod` resolves (MagicDNS). The file to upload is `~/cd-verify.kubeconfig`.
+
+**Option B: cluster-admin** (simpler, but a leak gives full control of the cluster from the tailnet):
 
 ```sh
-gh variable set CD_APP_ID --body <App ID>                        # the number, not the Client ID
-gh secret set CD_APP_PRIVATE_KEY < <app>.private-key.pem
-read -rs V && gh secret set TS_OAUTH_CLIENT_ID --body "$V"; unset V
-read -rs V && gh secret set TS_OAUTH_SECRET --body "$V"; unset V
-gh secret set PROD_KUBECONFIG < prod-kubeconfig
-shred -u prod-kubeconfig <app>.private-key.pem                   # after storing the key in the password manager
+cd ~ && umask 077
+sudo sed 's#https://127.0.0.1:6443#https://platform-prod:6443#' /etc/rancher/k3s/k3s.yaml > ~/admin.kubeconfig
 ```
+
+The file to upload is `~/admin.kubeconfig`.
+
+Copy the chosen file to your computer the same way as the sealing key (step 3: **Download file**, or `gcloud compute scp`). Then, on your computer, in the repo folder with `gh` logged in. Each `gh secret set NAME` without `--body` or `<` asks for the value with hidden input: paste it and press Enter.
+
+```sh
+gh variable set CD_APP_ID --body <App ID>       # the App ID number (not a secret), not the Client ID
+gh secret set CD_APP_PRIVATE_KEY < <app>.private-key.pem
+gh secret set TS_OAUTH_CLIENT_ID                # paste the Tailscale OAuth client id
+gh secret set TS_OAUTH_SECRET                   # paste the Tailscale OAuth client secret
+gh secret set PROD_KUBECONFIG < cd-verify.kubeconfig     # or < admin.kubeconfig (option B)
+```
+
+Then delete every copy. Store the App private key in the password manager first. Then delete the downloaded kubeconfig and `.pem` on your computer, and empty the Recycle Bin. On the host: `shred -u ~/cd-verify.kubeconfig ~/admin.kubeconfig 2>/dev/null`. You can recreate either file at any time from the host.
 
 Each feature takes all of its secrets or none. A partial set fails the `cd` gate with `::error::`. CD alone (`CD_APP_ID` + `CD_APP_PRIVATE_KEY`) deploys without verification, and the run then shows `::warning::deployed without verification`.
 
@@ -186,30 +208,40 @@ Each feature takes all of its secrets or none. A partial set fails the `cd` gate
 
 ```sh
 gh workflow run ci.yml --ref main -f publish_all=true
-gh run watch "$(gh run list --workflow ci.yml -L 1 --json databaseId -q '.[0].databaseId')"
-gh run watch "$(gh run list --workflow cd -L 1 --json databaseId -q '.[0].databaseId')"
+gh run watch        # pick the new `ci` run (event workflow_dispatch) from the list
+gh run watch        # once that is green: pick the `cd` run it started
 ```
 
 Expected in the `cd` run:
 - `bump`: 7 `BUMP` lines and a push of `deploy: ... to sha-<short>`.
-- `verify-deploy`: `OK argo-prod-platform`, `OK argo-prod-tunnel`, `OK argo-prod-apps`, `OK port-forward`, `OK smoke-web`.
+- `verify-deploy`: `OK argo-prod-platform`, `OK argo-prod-tunnel`, `OK argo-prod-apps`, `OK port-forward (kube-system/svc/traefik -> http://127.0.0.1:18080)`, `OK smoke-web`.
 
 Argo CD polls Git every 3 minutes, so verify-deploy usually takes 3–10 minutes. Later merges deploy the same way, but only for the services whose images that merge published.
 
 ## 8. Check the live system
 
+Run these on the host, in `~/platform`. `sudo` uses k3s's own admin kubeconfig, so no admin file has to leave the host. `pg-restore.sh` needs yq v4; install it once:
+
 ```sh
-export KUBECONFIG=<an admin kubeconfig with server https://platform-prod:6443>   # or run on the host with sudo k3s kubectl
-scripts/public-url                                   # the URL; open it, the home page says "Lão Thiên Cơ"
+cd ~/platform && git pull -q
+sudo snap install yq                                 # once (mikefarah yq v4)
+sudo scripts/public-url                              # the URL; open it, the home page says "Lão Thiên Cơ"
 ```
 
 Alerts reach Telegram:
-1. Open Grafana: `kubectl -n observability port-forward svc/lgtm 3000:3000`, then http://localhost:3000.
+1. Open Grafana through SSH from your computer:
+   ```sh
+   gcloud compute ssh tuvi-prod-1 --zone asia-southeast1-b -- -L 3000:localhost:3000 \
+     'sudo kubectl -n observability port-forward svc/lgtm 3000:3000'
+   ```
+   Then open http://localhost:3000.
 2. Go to Alerting -> Contact points -> `telegram` -> **Test**. A message must arrive in the chat.
 
-Restore drill. Wait for one 03:00 backup, or run it once now with `kubectl -n data create job --from=cronjob/pg-backup pg-backup-now`. Then:
+Restore drill. Wait for one 03:00 backup, or run it once now. On the host:
 ```sh
-scripts/pg-restore.sh --db orders --stamp latest     # restores into orders_restore_check; exit 0 = restorable
+sudo kubectl -n data create job --from=cronjob/pg-backup pg-backup-now
+sudo kubectl -n data wait --for=condition=complete job/pg-backup-now --timeout=15m
+sudo scripts/pg-restore.sh --db orders --stamp latest     # restores into orders_restore_check; exit 0 = restorable
 ```
 
 Healthchecks.io shows `heartbeat` up within 5 minutes and `backup` after the first backup.
@@ -217,12 +249,14 @@ Healthchecks.io shows `heartbeat` up within 5 minutes and `backup` after the fir
 ## 9. Rollback and moving to a new host
 
 ### Automatic rollback
-When `verify-deploy` fails, CD does three things:
-1. It reverts the bump commit on `main` (`revert: deploy sha-<short> failed verify-deploy`, with a CI-skip marker).
-2. It opens an issue labelled `deploy-failed` with the run URL and the last 100 lines of verify-deploy.
-3. It fails the run.
+When `verify-deploy` fails, the `cd` run always fails and opens an issue with the run URL and the last 100 lines of verify-deploy. What else it does depends on the cause:
+- **Deployed but unhealthy** (verify-deploy exit 1):
+  - It reverts the bump commit on `main` (`revert: deploy sha-<short> failed verify-deploy`, with a CI-skip marker), so Argo CD syncs the previous tags.
+  - The issue is labelled `deploy-failed`.
+- **Superseded** (a newer `deploy:` commit is already on `main`): **no revert**. The newer run's own verify-deploy decides. The `deploy-failed` issue says "a newer deploy commit on main owns the outcome".
+- **Cluster unreachable** (exit 4: tailnet, API or port-forward down): **no revert**. The deploy is unverified, not known to be bad. One issue labelled `deploy-unverified` is opened, and later runs comment on it. Check Tailscale (the host node and the `tag:ci` ACL) and `PROD_KUBECONFIG`, then close the issue.
 
-Argo CD then syncs the previous tags. Read the issue, fix the cause in a normal PR, and the next merge deploys again.
+Read the issue, fix the cause in a normal PR, and the next merge deploys again.
 
 If the issue says `NOT rolled back: the revert conflicted`, a later commit changed the same image line. Revert by hand:
 ```sh
@@ -234,40 +268,55 @@ Then open a PR. Never push to `main` yourself.
 Pin one service back in a PR: set its `newTag` in `deploy/k8s/overlays/prod/apps/kustomization.yaml` to the previous `sha-<40 hex>`. CD never moves a tag backwards on its own. `scripts/cd-bump.sh` keeps a tag that is not an ancestor of the new commit, so your pin stays until a newer commit of that service is published.
 
 ### Move to a new host (GCP trial end, or a host failure)
+Run every command on a host in `~/platform` (the old host for step 2, the new one from step 3 on). `sudo` uses k3s's admin kubeconfig.
 1. **New host:** create an Ubuntu 24.04 host (≥ 8 GB). In Tailscale, remove the old `platform-prod` node first, or give the new one another `TS_HOSTNAME` and update `PROD_KUBECONFIG`.
 2. **Final backup on the old host, if it still runs:**
    ```sh
-   kubectl -n data create job --from=cronjob/pg-backup pg-backup-final
-   kubectl -n data wait --for=condition=complete job/pg-backup-final --timeout=15m
+   sudo kubectl -n data create job --from=cronjob/pg-backup pg-backup-final
+   sudo kubectl -n data wait --for=condition=complete job/pg-backup-final --timeout=15m
    ```
-   Without R2 (`ops-secrets` not set up), dump each database directly:
+   Without R2 (`ops-secrets` not set up), dump each database directly into a private folder:
    ```sh
+   umask 077; mkdir -p ~/dumps
    for db in orders notify reading_tuvi identity payment; do
-     kubectl -n data exec postgres-0 -- pg_dump -U postgres -Fc --no-owner --no-acl "$db" > "$db.dump"
+     sudo kubectl -n data exec postgres-0 -- pg_dump -U postgres -Fc --no-owner --no-acl "$db" > ~/dumps/"$db.dump"
    done
    ```
-   Keep the dumps out of Git and off shared drives; they hold user data.
-3. **Bootstrap with the old sealing key.** Unpack `tls.crt` and `tls.key` of each key from the `sealing-key.yaml` in your password manager into a directory (the newest key is enough for current seals). Then, on the new host:
+   Copy `~/dumps` to the new host (`gcloud compute scp --recurse`, or `scp` over the tailnet). Keep the dumps out of Git and off shared drives, because they hold user data. Shred them once step 4 is done.
+3. **Bootstrap with the old sealing key.** Download `sealing-key.json` from the password manager. Copy it to the new host's home directory with `gcloud compute scp` (or the browser SSH **Upload file**). Then, on the new host, unpack the newest key into a private folder:
    ```sh
+   cd ~ && umask 077 && mkdir -p ~/sealing-key-dir
+   python3 - ~/sealing-key.json ~/sealing-key-dir <<'PY'
+   import base64, json, sys
+   items = json.load(open(sys.argv[1]))["items"]
+   newest = max(items, key=lambda s: s["metadata"]["creationTimestamp"])
+   for k in ("tls.crt", "tls.key"):
+       open(f"{sys.argv[2]}/{k}", "wb").write(base64.b64decode(newest["data"][k]))
+   print("unpacked", newest["metadata"]["name"])
+   PY
+   ls -l ~/sealing-key-dir                                    # tls.crt and tls.key, both -rw-------
+   cd ~/platform
    read -rs TS_AUTHKEY && export TS_AUTHKEY
-   sudo --preserve-env=TS_AUTHKEY SEALED_SECRETS_KEY_DIR=<dir> infra/bootstrap/bootstrap.sh
-   unset TS_AUTHKEY; sudo infra/bootstrap/verify.sh; shred -u <dir>/*
+   sudo --preserve-env=TS_AUTHKEY SEALED_SECRETS_KEY_DIR="$HOME/sealing-key-dir" infra/bootstrap/bootstrap.sh
+   unset TS_AUTHKEY; sudo infra/bootstrap/verify.sh
+   shred -u ~/sealing-key-dir/* ~/sealing-key.json && rmdir ~/sealing-key-dir
    ```
-   The SealedSecrets in Git decrypt with the restored key. If that key is older than 30 days, the controller creates a new one at start. Then fetch the cert again (step 4), commit `sealing-cert.crt` in a PR, and back up the new key (step 3).
+   The SealedSecrets in Git decrypt with the restored key (the newest key covers every current seal). If that key is older than 30 days, the controller creates a new one at start. Then fetch the cert again (step 4), commit `sealing-cert.crt` in a PR, and back up the keys again (step 3).
 4. **Restore the databases** once `prod-platform` is Healthy and before users arrive. From R2:
    ```sh
    for db in orders notify reading_tuvi identity payment; do
-     scripts/pg-restore.sh --db "$db" --stamp latest --target "$db" --overwrite
+     sudo scripts/pg-restore.sh --db "$db" --stamp latest --target "$db" --overwrite
    done
    ```
    From local dumps:
    ```sh
    for db in orders notify reading_tuvi identity payment; do
-     kubectl -n data exec -i postgres-0 -- pg_restore -U postgres --clean --if-exists --no-owner -d "$db" < "$db.dump"
+     sudo kubectl -n data exec -i postgres-0 -- pg_restore -U postgres --clean --if-exists --no-owner -d "$db" < ~/dumps/"$db.dump"
    done
-   kubectl -n apps rollout restart deploy          # services reconnect to the restored data
+   sudo kubectl -n apps rollout restart deploy          # services reconnect to the restored data
+   shred -u ~/dumps/*.dump && rmdir ~/dumps
    ```
-5. **Update and re-run the checks.** Update `PROD_KUBECONFIG` (step 6) if the name or CA changed: a new host has a new k3s CA, so the secret must be replaced in any case. Then `gh workflow run ci.yml --ref main -f publish_all=true` (step 7), and step 8.
+5. **Update and re-run the checks.** A new host has a new k3s CA, so replace `PROD_KUBECONFIG` in any case (step 6). Then run `gh workflow run ci.yml --ref main -f publish_all=true` (step 7), and step 8.
 6. **Shut down the old host.** Named tunnel: the new connector takes over the same hostname. Quick tunnel: the URL changes, see `scripts/public-url`.
 
 ## Known gaps before real users

@@ -7,7 +7,10 @@
 # `revert: deploy sha-<short> failed verify-deploy [skip ci]` (<short> = the image tag in the bump subject).
 # --push: `git push origin HEAD:main`; a rejected push is rebased onto the new origin/main and retried (3 attempts).
 # A revert or rebase conflict is aborted (worktree left clean), prints `ROLLBACK: conflict, manual action needed`
-# and exits 3. Other failures exit 1. The caller sets the git identity (cd.yml: the CD App's bot user).
+# and exits 3. A newer `deploy: ` commit after <sha> (on HEAD, or on origin/main when pushing) means a newer CD run owns
+# the outcome: `ROLLBACK: superseded by newer deploy ...`, exit 4, nothing reverted. Only commits authored by a GitHub
+# App bot (`...[bot]@users.noreply.github.com`) are reverted. Other failures exit 1. The caller sets the git identity
+# (cd.yml: the CD App's bot user).
 set -euo pipefail
 
 usage() { sed -n '3p' "$0" >&2; exit 2; }
@@ -31,6 +34,9 @@ full="$(g rev-parse --verify -q "$sha^{commit}")" || refuse "$sha is not a commi
 
 subject="$(g log -1 --format=%s "$full")"
 [[ "$subject" == "deploy: "* ]] || refuse "$full is not a CD bump commit (subject: $subject)"
+# Only the CD App writes bump commits (cd.yml commits as <slug>[bot]); a human `deploy: ...` commit is never reverted.
+author="$(g log -1 --format=%ae "$full")"
+[[ "$author" == *"[bot]@users.noreply.github.com" ]] || refuse "$full is not authored by the CD App (author: $author)"
 # A merge commit (more than one parent) is never a bump.
 [ "$(g rev-list --parents -n 1 "$full" | wc -w)" -eq 2 ] || refuse "$full is not a single-parent commit"
 changed="$(g diff-tree --no-commit-id --name-only -r "$full")"
@@ -42,6 +48,16 @@ done <<<"$changed"
 tag="$(sed -nE 's/.* to (sha-[0-9a-f]{7,40})( \[skip ci\])?$/\1/p' <<<"$subject")"
 [ -n "$tag" ] || tag="sha-${full:0:7}"
 msg="revert: deploy $tag failed verify-deploy [skip ci]"
+
+# newer_deploy <ref>: the first `deploy: ` commit after the bump on <ref>. A newer bump means a newer CD run deployed
+# on top of this one and owns the outcome (its own verify decides); reverting ours could undo good services.
+newer_deploy() {
+  local log # captured first: an early-exiting reader on a pipe would SIGPIPE git log under pipefail
+  log="$(g log --reverse --format='%h %s' "$full..$1")"
+  awk '$2 == "deploy:" {print; exit}' <<<"$log"
+}
+superseded() { echo "ROLLBACK: superseded by newer deploy $1 on main; not reverting"; exit 4; }
+n="$(newer_deploy HEAD)"; [ -z "$n" ] || superseded "$n"
 
 if ! g revert --no-edit "$full" >/dev/null 2>&1; then
   g revert --abort >/dev/null 2>&1 || g reset -q --hard HEAD
@@ -59,8 +75,13 @@ for attempt in 1 2 3; do
   [ "$attempt" -lt 3 ] || { echo "ROLLBACK: push to main failed 3 times" >&2; exit 1; }
   echo "ROLLBACK: push attempt $attempt rejected; rebasing onto the new origin/main"
   g fetch -q origin main
+  n="$(newer_deploy origin/main)"; [ -z "$n" ] || superseded "$n"
   if ! g rebase -q origin/main >/dev/null 2>&1; then
     g rebase --abort >/dev/null 2>&1 || true # catch-ok: abort after a failed rebase; conflict() reports it
     conflict
+  fi
+  if [ "$(g rev-parse HEAD)" = "$(g rev-parse origin/main)" ]; then
+    echo "ROLLBACK: ${full:0:7} is already reverted on origin main; nothing pushed"
+    exit 0
   fi
 done
