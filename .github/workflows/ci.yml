@@ -209,10 +209,18 @@ jobs:
           severity: CRITICAL
           exit-code: '1'
 
+  # Full stack on kind (spec 16.3): every push to main, and PRs that touch deploy, scripts or workflows.
+  k8s-e2e:
+    needs: changes
+    if: needs.changes.outputs.k8s == 'true' || needs.changes.outputs.root == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_k8s-e2e.yml
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled
