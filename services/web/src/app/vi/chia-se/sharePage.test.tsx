@@ -65,6 +65,18 @@ describe("/vi/chia-se/[shareId]", () => {
     }
   });
 
+  it("shows none of the fixture's lunar day/month/year (1/2, 1994) in the page or its tree", async () => {
+    const chart = (await import("@/test/chart-fixture.json")).default as { lunar: { year: number; month: number; day: number } };
+    const { year, month, day } = chart.lunar;
+    const tree = await Page(params());
+    const { container } = render(tree);
+    const text = container.textContent ?? "";
+    for (const needle of [`${day}/${month}`, `${day}-${month}`, `ngày ${day} tháng ${month}`, String(year)]) {
+      expect(text).not.toContain(needle);
+    }
+    expect(JSON.stringify(tree, (k, v) => (k === "default" || typeof v === "function" ? undefined : v))).not.toMatch(/"day":|"month":/);
+  });
+
   it("hands nothing but the reduced chart to the tree (reduced before anything is serialized)", async () => {
     const tree = await Page(params());
     const serialized = JSON.stringify(tree, (k, v) => (k === "default" || typeof v === "function" ? undefined : v));

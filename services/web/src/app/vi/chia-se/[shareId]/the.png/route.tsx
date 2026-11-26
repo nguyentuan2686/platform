@@ -143,7 +143,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ shareId: strin
         { name: "Charm", data: charm, weight: 700, style: "normal" },
         { name: "Noto Serif", data: serif, weight: 400, style: "normal" },
       ],
-      headers: { "cache-control": "public, max-age=3600" },
+      headers: { "cache-control": "public, max-age=300" },
     },
   );
 }
