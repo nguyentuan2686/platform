@@ -12,7 +12,7 @@ Local test values live in `deploy/local/.env.example`; real values only via Seal
 | `ADMIN_ACCOUNT_IDS` | empty (nobody) | comma list of account UUIDs, env or Sealed Secret, never Git |
 | `ADMIN_API_TOKEN` | test value | Sealed Secret; empty makes `/vi/quan-tri` 404 |
 | `GOOGLE_LOGIN` | `0` | `1` once Google OAuth exists |
-| `SEPAY_WEBHOOK_AUTH` / `SEPAY_WEBHOOK_SECRET` | test values | same as payment-svc |
+| `SEPAY_WEBHOOK_AUTH` / `SEPAY_WEBHOOK_SECRET` | test values | **not set on web in prod**: only the dev payment simulator uses them (force-disabled when `DEPLOY_ENV=prod`); the secret lives in payment-svc only |
 | `QA_STREAM_TIMEOUT_MS` | `95000` | `95000` |
 
 ## 2. When Plan 4 deploys

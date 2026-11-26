@@ -7,7 +7,7 @@
 #       reading-tuvi-secrets DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, QA_ENC_KEY, GROQ_API_KEY, GEMINI_API_KEY
 #       identity-svc-secrets DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, PROFILE_ENC_KEY, OIDC_GOOGLE_CLIENT_SECRET
 #       payment-svc-secrets  DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, ADMIN_API_TOKEN, SEPAY_WEBHOOK_SECRET, PAYPAL_FAKE_WEBHOOK_SECRET
-#       web-secrets          INTERNAL_API_TOKEN, ADMIN_API_TOKEN, SEPAY_WEBHOOK_SECRET
+#       web-secrets          INTERNAL_API_TOKEN, ADMIN_API_TOKEN   (NOT SEPAY_WEBHOOK_SECRET: only the dev payment simulator uses it, forced off in prod)
 #       postgres-secrets (ns data) POSTGRES_PASSWORD, ORDERS_DB_PASSWORD, NOTIFY_DB_PASSWORD, READING_DB_PASSWORD, IDENTITY_DB_PASSWORD, PAYMENT_DB_PASSWORD
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

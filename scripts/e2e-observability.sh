@@ -17,7 +17,7 @@ T0="${E2E_T0:-$(( $(date +%s) - 3600 ))}"
 get() { local url="$1"; shift; curl -sS --fail-with-body --max-time 10 --get "$@" "$url" 2>&1; }
 prom() { get "$PROM/api/v1/query" --data-urlencode "query=$1"; }
 # has TEXT ERE -> TEXT contains a match of ERE
-has() { printf '%s' "$1" | grep -Eq "$2"; }
+has() { printf '%s' "$1" | grep -E "$2" >/dev/null; }
 
 probe_trace_cross_service() {
   local r
@@ -68,7 +68,9 @@ probe_logs_with_trace() {
     --data-urlencode 'limit=100') || { printf '%s' "$r"; return 1; }
   printf '%s' "$r"
   # trace_id comes back as structured metadata (or a stream label); an all-zero id means "no span".
-  printf '%s' "$r" | grep -Eo '"trace_id" *: *"[0-9a-f]{32}"' | grep -Evq '"0{32}"'
+  local ids  # capture first so an early-closing grep cannot SIGPIPE the upstream under pipefail
+  ids=$(printf '%s' "$r" | grep -Eo '"trace_id" *: *"[0-9a-f]{32}"')
+  printf '%s' "$ids" | grep -Ev '"0{32}"' >/dev/null
 }
 
 probe_dashboards() {

@@ -82,9 +82,7 @@ jobs:
             k8s:
               - 'deploy/k8s/**'
               - 'deploy/local/**'
-              - 'scripts/k8s-*.sh'
-              - 'scripts/e2e-*.sh'
-              - 'scripts/smoke-*.sh'
+              - 'scripts/**'
               - '.github/workflows/_k8s-e2e.yml'
             root:
               - 'pom.xml'
@@ -199,7 +197,8 @@ jobs:
       - name: Validate manifests (self-test, schema, policy)
         run: |
           bash scripts/k8s-validate.sh --self-test
-          bash scripts/k8s-validate.sh deploy/k8s/platform deploy/k8s/overlays/prod deploy/k8s/overlays/e2e
+          # No arguments: platform + every overlay + the real dashboards against metric-names.txt
+          bash scripts/k8s-validate.sh
       - name: Trivy config scan
         # Same SHA pin as the Java workflow (tag-hijack incident Mar 2026).
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
