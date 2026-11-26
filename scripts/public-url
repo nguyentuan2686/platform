@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Print the public URL of the prod stack.
+# Usage: scripts/public-url [--namespace edge] [--log-file FILE]
+#   Quick tunnel: the last https://<name>.trycloudflare.com in the cloudflared log (--log-file, else
+#   `kubectl -n <ns> logs deploy/cloudflared --tail=2000`). Named tunnel (the Deployment runs `run`) or no URL in the
+#   log: https://<APP_DOMAIN> from deploy/k8s/overlays/prod/domain/domain.yaml (env PUBLIC_URL_DOMAIN_FILE overrides),
+#   unless that domain is *.invalid. Exit 0 with the URL on stdout; exit 2 with "no public URL yet" on stderr.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+domain_file="${PUBLIC_URL_DOMAIN_FILE:-$root/deploy/k8s/overlays/prod/domain/domain.yaml}"
+ns=edge log_file=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --namespace) ns="${2:?--namespace needs a value}"; shift 2 ;;
+    --log-file) log_file="${2:?--log-file needs a file}"; shift 2 ;;
+    *) echo "public-url: unknown argument $1" >&2; exit 1 ;;
+  esac
+done
+
+named=0
+if [ -n "$log_file" ]; then
+  [ -r "$log_file" ] || { echo "public-url: cannot read $log_file" >&2; exit 1; }
+  logs="$(cat "$log_file")"
+else
+  args="$(kubectl -n "$ns" get deploy cloudflared -o jsonpath='{.spec.template.spec.containers[0].args}')"
+  [[ "$args" == *'"run"'* ]] && named=1
+  logs="$(kubectl -n "$ns" logs deploy/cloudflared --tail=2000)"
+fi
+
+if [ "$named" = 0 ]; then
+  url="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' <<<"$logs" | tail -n 1 || true)"
+  if [ -n "$url" ]; then echo "$url"; exit 0; fi
+fi
+
+domain=""
+if [ -r "$domain_file" ]; then
+  domain="$(tr -d '\r' <"$domain_file" | sed -n 's/^[[:space:]]*APP_DOMAIN:[[:space:]]*["'\'']\{0,1\}\([^"'\''[:space:]#]*\).*/\1/p' | head -n 1)"
+fi
+if [ -n "$domain" ] && [[ "$domain" != *.invalid ]]; then echo "https://$domain"; exit 0; fi
+echo "no public URL yet" >&2
+exit 2

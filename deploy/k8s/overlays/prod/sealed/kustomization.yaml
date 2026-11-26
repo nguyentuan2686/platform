@@ -1,0 +1,10 @@
+# Prod sealed slice (Argo CD app `prod-sealed`, wave -1): the namespaces plus the SealedSecrets that live in them.
+# It owns the namespaces because its SealedSecrets (apps, data, observability, edge) must be applied before
+# prod-platform (wave 0) and prod-tunnel/prod-apps (wave 1) exist; ../platform deletes them from its copy of the platform.
+# scripts/seal-secrets.sh writes <name>.sealedsecret.yaml here and rewrites `resources:` sorted (inventory:
+# ../secrets.tsv). No SealedSecret until go-live (docs/runbooks/go-live.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../platform/namespaces
+  - namespace-edge.yaml

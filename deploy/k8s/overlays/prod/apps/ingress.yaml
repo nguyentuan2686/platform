@@ -1,4 +1,4 @@
-# Plan 4 sets APP_DOMAIN (replaces the .invalid placeholder host).
+# Public entry: Traefik (ClusterIP) behind the cloudflared tunnel. The host is replaced from ../domain/domain.yaml (APP_DOMAIN).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

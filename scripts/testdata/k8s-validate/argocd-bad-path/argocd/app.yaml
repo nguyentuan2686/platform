@@ -1,0 +1,13 @@
+# Self-test fixture: violates only the 'argocd' policy check (source.path does not exist).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: {name: fixture, namespace: argocd}
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nguyentuan2686/platform.git
+    targetRevision: main
+    path: deploy/k8s/overlays/does-not-exist
+  destination: {server: https://kubernetes.default.svc}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

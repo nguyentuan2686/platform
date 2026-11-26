@@ -1,0 +1,11 @@
+2026-11-26T03:00:00Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee.
+2026-11-26T03:00:01Z INF Requesting new quick Tunnel on trycloudflare.com...
+2026-11-26T03:00:02Z INF +--------------------------------------------------------------------------------------------+
+2026-11-26T03:00:02Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+2026-11-26T03:00:02Z INF |  https://first-old-tunnel-name.trycloudflare.com                                           |
+2026-11-26T03:00:02Z INF +--------------------------------------------------------------------------------------------+
+2026-11-26T03:00:03Z INF Registered tunnel connection connIndex=0 connection=0a1b2c3d event=0 ip=198.41.200.13 location=sin01 protocol=quic
+2026-11-26T04:10:00Z INF Requesting new quick Tunnel on trycloudflare.com...
+2026-11-26T04:10:01Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+2026-11-26T04:10:01Z INF |  https://brave-river-42-delta.trycloudflare.com                                            |
+2026-11-26T04:10:02Z INF Registered tunnel connection connIndex=0 connection=4e5f6a7b event=0 ip=198.41.200.23 location=sin02 protocol=quic

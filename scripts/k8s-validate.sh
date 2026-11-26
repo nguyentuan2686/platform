@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Validate Kustomize output: kubeconform (schema) + policy checks (yq/jq).
-# Usage: scripts/k8s-validate.sh [--self-test] [overlay...]
+# Usage: scripts/k8s-validate.sh [--self-test] [--require-sealed] [overlay...]
+#   --require-sealed: also fail when a `required` row of deploy/k8s/overlays/prod/secrets.tsv has no SealedSecret (go-live).
 # Local (no native kubectl): docker run --rm -v "$PWD:/w" -w /w alpine/k8s:1.33.4 bash scripts/k8s-validate.sh
 set -euo pipefail
 
@@ -106,8 +107,9 @@ JQ_SECRETREFS="$JQ_DEFS"'
       elif ($secrets[$k] | index($r.key)) == null then "POLICY: secret-refs \($o | id): container \($c.name): secretKeyRef \($k) has no key \($r.key)"
       else empty end )'
 
-# db-gate: every Deployment in ns apps whose containers reference (envFrom or secretKeyRef) a Secret of this build that has
-# a DB_* key must have an initContainer named wait-for-postgres (a DB pod must not crash-loop while Postgres starts).
+# db-gate: every Deployment in ns apps whose containers take DB settings from a Secret of this build (envFrom of a Secret that
+# has a DB_* key, or a secretKeyRef to a DB_* key) must have an initContainer named wait-for-postgres (a DB pod must not
+# crash-loop while Postgres starts). A secretKeyRef to a non-DB key of such a Secret (web -> SEPAY_WEBHOOK_SECRET) does not count.
 JQ_DBGATE="$JQ_DEFS"'
 (map(select(type == "object" and .kind == "Secret")
      | {key: "\(ns)/\(.metadata.name)", value: (((.data // {}) + (.stringData // {})) | keys | map(select(startswith("DB_"))) | length > 0)}) | from_entries) as $dbsecrets
@@ -115,10 +117,121 @@ JQ_DBGATE="$JQ_DEFS"'
 | (($o | podspec) | (.initContainers // []) | map(.name) | index("wait-for-postgres")) as $gate
 | ([(($o | podspec) | (.containers // [])[]
       | ((.envFrom // [])[] | select(.secretRef != null) | "\($o | ns)/\(.secretRef.name)"),
-        ((.env // [])[] | select(.valueFrom.secretKeyRef != null) | "\($o | ns)/\(.valueFrom.secretKeyRef.name)"))]
+        ((.env // [])[] | select(.valueFrom.secretKeyRef != null and ((.valueFrom.secretKeyRef.key // "") | startswith("DB_")))
+         | "\($o | ns)/\(.valueFrom.secretKeyRef.name)"))]
    | map(select($dbsecrets[.] == true)) | unique) as $dbrefs
 | select(($dbrefs | length) > 0 and $gate == null)
 | "POLICY: db-gate \($o | id): references DB secret \($dbrefs | join(", ")) but has no initContainer wait-for-postgres"'
+
+# --- Prod inventory checks. $rows = secrets.tsv as [{name, ns, req, keys}] (tsv_json). ---
+
+# prod-sealed: every SealedSecret is a secrets.tsv row (name + namespace) and its encryptedData keys equal the row's keys.
+JQ_PRODSEALED="$JQ_DEFS"'
+($rows | map({key: "\(.ns)/\(.name)", value: .}) | from_entries) as $r
+| .[] | select(type == "object" and .kind == "SealedSecret") as $o
+| "\($o | ns)/\($o.metadata.name)" as $k
+| if $r[$k] == null then "POLICY: prod-sealed \($o | id): \($k) is not a row of secrets.tsv"
+  else (($o.spec.encryptedData // {}) | keys | sort) as $have | ($r[$k].keys | sort) as $want
+  | if $have != $want then "POLICY: prod-sealed \($o | id): encryptedData keys [\($have | join(","))] != secrets.tsv keys [\($want | join(","))]"
+    else empty end
+  end'
+
+# --require-sealed: every `required` row has a SealedSecret in the build.
+JQ_REQUIRESEALED="$JQ_DEFS"'
+[.[] | select(type == "object" and .kind == "SealedSecret") | "\(ns)/\(.metadata.name)"] as $have
+| $rows[] | select(.req == "required") | select(("\(.ns)/\(.name)") as $k | $have | index($k) | not)
+| "POLICY: prod-sealed \(.name) (ns \(.ns)): required secret has no SealedSecret (scripts/seal-secrets.sh)"'
+
+# secrets-manifest: every non-optional secretRef / secretKeyRef names a secrets.tsv row in the same namespace,
+# and every referenced key is one of the row's keys.
+JQ_SECRETSMANIFEST="$JQ_DEFS"'
+($rows | map({key: .name, value: .}) | from_entries) as $r
+| .[] | select(type == "object" and (.kind | IN("Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob","ReplicaSet"))) as $o
+| (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
+| ( ($c.envFrom // [])[] | select(.secretRef != null and (.secretRef.optional | not)) | .secretRef.name as $n
+    | if $r[$n] == null then "POLICY: secrets-manifest \($o | id): container \($c.name): secretRef \($n) is not a row of secrets.tsv"
+      elif $r[$n].ns != ($o | ns) then "POLICY: secrets-manifest \($o | id): container \($c.name): secretRef \($n) is in ns \($r[$n].ns) in secrets.tsv, not \($o | ns)"
+      else empty end ),
+  ( ($c.env // [])[] | select(.valueFrom.secretKeyRef != null and (.valueFrom.secretKeyRef.optional | not))
+    | .valueFrom.secretKeyRef as $ref | $ref.name as $n
+    | if $r[$n] == null then "POLICY: secrets-manifest \($o | id): container \($c.name): secretKeyRef \($n) is not a row of secrets.tsv"
+      elif $r[$n].ns != ($o | ns) then "POLICY: secrets-manifest \($o | id): container \($c.name): secretKeyRef \($n) is in ns \($r[$n].ns) in secrets.tsv, not \($o | ns)"
+      elif ($r[$n].keys | index($ref.key)) == null then "POLICY: secrets-manifest \($o | id): container \($c.name): secretKeyRef \($n) key \($ref.key) is not in its secrets.tsv row"
+      else empty end )'
+
+# prod-domain: Ingress hosts (rules and tls), the host of WEB_ORIGIN / WEB_BASE_URL and the cloudflared
+# --http-host-header value all equal $d (APP_DOMAIN). With $strict (the real overlay), the Ingress, WEB_ORIGIN and
+# WEB_BASE_URL must exist, so a renamed field cannot silently escape the replacement.
+JQ_PRODDOMAIN="$JQ_DEFS"'
+def hostof: (split("/") | .[2] // "");
+[ .[] | select(type == "object") as $o
+  | ( (if $o.kind == "Ingress" then
+        (($o.spec.rules // [])[] | {what: "Ingress", where: ($o | id), field: "rules[].host", got: (.host // "")}),
+        (($o.spec.tls // [])[] | (.hosts // [])[] | {what: "Ingress", where: ($o | id), field: "tls[].hosts[]", got: .})
+      else empty end),
+      (if ($o.kind | IN("Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob","ReplicaSet")) then
+        (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
+        | ( (($c.env // [])[] | select(.name == "WEB_ORIGIN" or .name == "WEB_BASE_URL")
+             | {what: .name, where: ($o | id), field: "env \(.name)", got: ((.value // "") | hostof)}),
+            ($c.args // [] | to_entries[]
+             | if .value == "--http-host-header" then {what: "host-header", where: ($o | id), field: "args --http-host-header", got: ($c.args[.key + 1] // "")}
+               elif (.value | type) == "string" and (.value | startswith("--http-host-header=")) then {what: "host-header", where: ($o | id), field: "args --http-host-header=", got: (.value | sub("^--http-host-header="; ""))}
+               else empty end) )
+      else empty end) )
+] as $found
+| ($found[] | select(.got != $d) | "POLICY: prod-domain \(.where): \(.field) is \"\(.got)\", not APP_DOMAIN \"\($d)\""),
+  (if $strict then (["Ingress", "WEB_ORIGIN", "WEB_BASE_URL"][] as $w
+     | select(($found | map(.what) | index($w)) == null)
+     | "POLICY: prod-domain build: no \($w) found (APP_DOMAIN replacement target missing)") else empty end)'
+
+# secrets.tsv -> JSON rows; fails on a malformed row.
+tsv_json() { # $1 = secrets.tsv
+  tr -d '\r' <"$1" | jq -R -s '[split("\n")[] | select(length > 0 and (startswith("#") | not)) | split("\t")
+    | if length != 4 or (.[2] | IN("required","optional") | not) or .[3] == "" then error("malformed secrets.tsv row: \(.[0])")
+      else {name: .[0], ns: .[1], req: .[2], keys: (.[3] | split(","))} end]'
+}
+
+# Prod inventory inputs: a fixture may carry its own, else the real prod overlay's.
+prod_tsv() { if [ -f "$1/secrets.tsv" ]; then echo "$1/secrets.tsv"; else echo deploy/k8s/overlays/prod/secrets.tsv; fi; }
+prod_domain_file() {
+  if [ -f "$1/domain.yaml" ]; then echo "$1/domain.yaml"
+  elif [ -f "$1/domain/domain.yaml" ]; then echo "$1/domain/domain.yaml"
+  else echo deploy/k8s/overlays/prod/domain/domain.yaml; fi
+}
+e2e_secrets_dir() { if [ -d "$1/e2e-secrets" ]; then echo "$1/e2e-secrets"; else echo deploy/k8s/overlays/e2e/secrets; fi; }
+
+# The prod-only inventory checks; $1 = dir, $2 = build as a JSON array. Prints POLICY lines; non-zero on internal errors.
+prod_inventory_checks() {
+  local dir="$1" json="$2" tsv rows dfile domain strict=false res f name have want
+  tsv=$(prod_tsv "$dir")
+  rows=$(tsv_json "$tsv" 2>&1) || { echo "POLICY: secrets-manifest $tsv: cannot parse: $rows"; return 1; }
+  [ "$(jq 'length' <<<"$rows")" -gt 0 ] || { echo "POLICY: secrets-manifest $tsv: no rows"; return 1; }
+  res=$(jq -r --argjson rows "$rows" "$JQ_PRODSEALED" <<<"$json") || { echo "POLICY: internal $dir: prod-sealed check failed"; return 1; }
+  [ -n "$res" ] && echo "$res"
+  if [ "$REQUIRE_SEALED" = 1 ]; then
+    res=$(jq -r --argjson rows "$rows" "$JQ_REQUIRESEALED" <<<"$json") || { echo "POLICY: internal $dir: require-sealed check failed"; return 1; }
+    [ -n "$res" ] && echo "$res"
+  fi
+  res=$(jq -r --argjson rows "$rows" "$JQ_SECRETSMANIFEST" <<<"$json") || { echo "POLICY: internal $dir: secrets-manifest check failed"; return 1; }
+  [ -n "$res" ] && echo "$res"
+  # every e2e env file has exactly its row's keys (the e2e overlay must exercise the prod secret shapes)
+  for f in "$(e2e_secrets_dir "$dir")"/*.env; do
+    [ -f "$f" ] || { echo "POLICY: secrets-manifest $dir: no e2e secrets/*.env found"; continue; }
+    name=$(basename "$f" .env)
+    want=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .keys[]' <<<"$rows" | tr -d '\r' | sort)
+    if [ -z "$want" ]; then echo "POLICY: secrets-manifest $f: $name is not a row of secrets.tsv"; continue; fi
+    have=$(tr -d '\r' <"$f" | sed -n '/^[[:space:]]*#/d; s/^\([^=[:space:]][^=]*\)=.*/\1/p' | sort)
+    [ "$have" = "$want" ] || echo "POLICY: secrets-manifest $f: keys [$(paste -sd, <<<"$have")] != secrets.tsv keys [$(paste -sd, <<<"$want")]"
+  done
+  dfile=$(prod_domain_file "$dir")
+  domain=$(yq -r 'select(.kind == "ConfigMap" and .metadata.name == "app-domain") | .data.APP_DOMAIN // ""' "$dfile" 2>/dev/null | tr -d '\r') \
+    || { echo "POLICY: prod-domain $dfile: cannot parse"; return 1; }
+  [[ "$domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "POLICY: prod-domain $dfile: APP_DOMAIN \"$domain\" is missing or not a hostname"; return 0; }
+  [ "$dfile" = "$dir/domain/domain.yaml" ] && strict=true
+  res=$(jq -r --arg d "$domain" --argjson strict "$strict" "$JQ_PRODDOMAIN" <<<"$json") || { echo "POLICY: internal $dir: prod-domain check failed"; return 1; }
+  [ -n "$res" ] && echo "$res"
+  return 0
+}
 
 # Overlay kind: the `overlay` file in a fixture, else the directory name (prod | e2e).
 overlay_kind() { # $1 = dir
@@ -139,7 +252,8 @@ policy() { # $1 = dir; stdin = kustomize output
       res=$(jq -r "$JQ_PRODIMAGES" <<<"$json") || { echo "POLICY: internal $1: prod-images check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
       res=$(jq -r "$JQ_NOFAKESEPAY" <<<"$json") || { echo "POLICY: internal $1: prod-no-fake-sepay check failed"; return 1; }
-      [ -n "$res" ] && echo "$res" ;;
+      [ -n "$res" ] && echo "$res"
+      prod_inventory_checks "$1" "$json" || return 1 ;;
     e2e)
       res=$(jq -r "$JQ_SECRETREFS" <<<"$json") || { echo "POLICY: internal $1: secret-refs check failed"; return 1; }
       [ -n "$res" ] && echo "$res"
@@ -198,11 +312,38 @@ check_dashboards() {
   return $rc
 }
 
+# argocd: every Application under $1 (recursively, *.yaml) has a spec.source.path that exists and builds with
+# `kubectl kustomize`, targetRevision main, and an automated prune + selfHeal sync policy. Paths are repo-relative.
+# Fails closed: unparsable files or no Application at all fail.
+check_argocd() {
+  local dir="$1" f apps n=0 rc=0 name path rev prune heal
+  echo "== $dir (argocd)"
+  while IFS= read -r f; do
+    apps=$(yq -o=json '.' "$f" | jq -c -s '.[] | select(type == "object" and .kind == "Application")
+      | {name: .metadata.name, path: (.spec.source.path // ""), rev: (.spec.source.targetRevision // ""),
+         prune: (.spec.syncPolicy.automated.prune // false), heal: (.spec.syncPolicy.automated.selfHeal // false)}') \
+      || { echo "POLICY: argocd $f: cannot parse"; rc=1; continue; }
+    while IFS= read -r a; do
+      [ -z "$a" ] && continue
+      n=$((n + 1))
+      name=$(jq -r .name <<<"$a" | tr -d '\r'); path=$(jq -r .path <<<"$a" | tr -d '\r'); rev=$(jq -r .rev <<<"$a" | tr -d '\r')
+      prune=$(jq -r .prune <<<"$a" | tr -d '\r'); heal=$(jq -r .heal <<<"$a" | tr -d '\r')
+      if [ -z "$path" ] || [ ! -d "$path" ]; then echo "POLICY: argocd $f Application/$name: source.path \"$path\" does not exist"; rc=1
+      elif ! kubectl kustomize "$path" >/dev/null 2>&1; then echo "POLICY: argocd $f Application/$name: source.path $path does not build with kubectl kustomize"; rc=1; fi
+      if [ "$rev" != main ]; then echo "POLICY: argocd $f Application/$name: targetRevision \"$rev\" must be main (only bootstrap overrides it)"; rc=1; fi
+      if [ "$prune" != true ] || [ "$heal" != true ]; then echo "POLICY: argocd $f Application/$name: syncPolicy.automated needs prune: true and selfHeal: true"; rc=1; fi
+    done <<<"$apps"
+  done < <(find "$dir" -name '*.yaml' -type f | sort)
+  if [ "$n" -eq 0 ]; then echo "POLICY: argocd $dir: no Application found"; return 1; fi
+  return $rc
+}
+
 self_test() {
   local rc=0 d name check out
   for d in scripts/testdata/k8s-validate/*/; do
     name=$(basename "$d"); check=$(tr -d '\r\n' <"$d/expect") # `expect` holds the POLICY check the fixture must trigger
     if [ -d "$d/dashboards" ]; then out=$(check_dashboards "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
+    elif [ -d "$d/argocd" ]; then out=$(check_argocd "${d%/}/argocd" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }
     else out=$(SKIP_KUBECONFORM=1 validate_one "${d%/}" 2>&1) && { echo "SELF-TEST FAIL: $name was accepted"; rc=1; continue; }; fi
     if grep -q "^POLICY: $check " <<<"$out"; then echo "self-test ok: $name rejected with POLICY: $check"
     else echo "SELF-TEST FAIL: $name rejected without 'POLICY: $check':"; echo "$out"; rc=1; fi
@@ -210,7 +351,9 @@ self_test() {
   return $rc
 }
 
+REQUIRE_SEALED=0
 if [ "${1:-}" = "--self-test" ]; then self_test; exit $?; fi
+if [ "${1:-}" = "--require-sealed" ]; then REQUIRE_SEALED=1; shift; fi
 
 targets=("$@")
 if [ ${#targets[@]} -eq 0 ]; then
@@ -220,5 +363,6 @@ fi
 fail=0
 for t in "${targets[@]}"; do validate_one "${t%/}" || fail=1; done
 [ $# -eq 0 ] && { check_dashboards deploy/k8s/platform/grafana || fail=1; }
+[ $# -eq 0 ] && { check_argocd deploy/argocd || fail=1; }
 [ $fail -eq 0 ] && echo "k8s-validate: ok" || echo "k8s-validate: FAILED"
 exit $fail

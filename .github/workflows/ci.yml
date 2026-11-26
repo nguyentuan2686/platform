@@ -82,6 +82,7 @@ jobs:
               - 'knowledge/tuvi/**'
             k8s:
               - 'deploy/k8s/**'
+              - 'deploy/argocd/**'
               - 'deploy/local/**'
               - 'scripts/**'
               - '.github/workflows/_k8s-e2e.yml'
@@ -89,6 +90,7 @@ jobs:
               - 'scripts/**'
               - 'infra/**'
               - 'deploy/argocd/**'
+              - 'deploy/k8s/overlays/prod/**' # secrets.tsv and domain.yaml feed the script tests
               - '.github/**'
             root:
               - 'pom.xml'
@@ -250,12 +252,14 @@ jobs:
           sudo install -m 0755 actionlint /usr/local/bin/actionlint
       - name: shellcheck
         run: |
-          mapfile -t files < <(git ls-files 'scripts/**/*.sh' 'scripts/*.sh' 'infra/**/*.sh')
+          mapfile -t files < <(git ls-files 'scripts/**/*.sh' 'scripts/*.sh' 'infra/**/*.sh' scripts/public-url)
           shellcheck --severity=warning "${files[@]}"
       - name: actionlint
         run: actionlint
       - name: Action SHA pins
         run: bash scripts/check-action-pins.sh
+      - name: Install kubeseal (pinned in infra/bootstrap/versions.env, sha256-verified)
+        run: bash scripts/seal-secrets.sh --install-only
       - name: Script tests
         run: |
           shopt -s nullglob

@@ -1,0 +1,12 @@
+# The public domain, set in exactly this one place. Kustomize `replacements` (in the apps and tunnel slices) copy it into
+# the Ingress host, the web WEB_ORIGIN / identity-svc WEB_BASE_URL host part and the cloudflared --http-host-header.
+# local-config: used only as a replacement source, never rendered. `.invalid` until go-live (docs/runbooks/go-live.md);
+# scripts/public-url treats a *.invalid domain as "no public domain yet".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-domain
+  annotations:
+    config.kubernetes.io/local-config: "true"
+data:
+  APP_DOMAIN: app.example.invalid

@@ -1,0 +1,21 @@
+# Namespaces + SealedSecrets: first, so every Secret exists before a workload references it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-sealed
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nguyentuan2686/platform.git
+    targetRevision: main
+    path: deploy/k8s/overlays/prod/sealed
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [ServerSideApply=true]
