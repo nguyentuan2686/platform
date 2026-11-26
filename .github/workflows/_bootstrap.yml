@@ -108,7 +108,8 @@ jobs:
               case "$name" in '#'* | '') continue ;; esac
               [ "$req" = required ] || continue
               want=$(tr ',' '\n' <<<"$keys" | sed 's/?$//' | sort | paste -sd, -)
-              have=$(kubectl -n "$ns" get secret "$name" -o json 2>/dev/null | jq -r '.data // {} | keys[]' | sort | paste -sd, -)
+              # Not there yet is a normal state of this loop, not a step failure (bash -e -o pipefail).
+              have=$(kubectl -n "$ns" get secret "$name" -o json 2>/dev/null | jq -r '.data // {} | keys[]' | sort | paste -sd, -) || have=""
               [ "$have" = "$want" ] || missing+=("$ns/$name [$have] want [$want]")
             done < <(tr -d '\r' <deploy/k8s/overlays/prod/secrets.tsv)
             if [ "${#missing[@]}" -eq 0 ]; then

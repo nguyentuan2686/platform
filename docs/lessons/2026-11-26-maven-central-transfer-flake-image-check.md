@@ -19,3 +19,9 @@ CLAUDE.md CI triage rule: "could not transfer artifact" from a registry is an ex
 
 ## Escalation
 none (rule already in CLAUDE.md, see 2026-11-25-registry-and-font-fetch-flakes.md)
+
+## Recurrence (PR #32, Plan 4a)
+`Could not transfer artifact org.springframework.boot:spring-boot-starter-parent:pom:4.2.0`:
+- run 45857609982: order-svc and payment-svc image-check
+- run 45859850009: the k8s-e2e order-svc image build
+The cause was external, and the jobs went green in later runs without any code change (CLAUDE.md CI triage).

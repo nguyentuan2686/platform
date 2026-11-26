@@ -28,4 +28,11 @@ Under `pipefail`, never pipe a producer into `head`, `grep -q` or `grep -m`. Cap
 Never use `sudo -E` for scripts that run kubectl or other tools that write to `$HOME`.
 
 ## Escalation
-none (first occurrence)
+rule (second occurrence, see below)
+
+## Second occurrence (same PR, run 45859850009)
+The `secret-materialised` poll loop in `_bootstrap.yml` exited 1 on its first pass. GitHub runs `run:` with
+`bash -e -o pipefail`. `have=$(kubectl get secret ... | jq ...)` fails while the Secret does not exist yet, which is
+the very state the loop waits out, so `set -e` ended the step. Fix: the probe ends with `|| have=""`.
+Escalation: rule added to CLAUDE.md (Testing): under `-e -o pipefail`, no early-closing pipe reader, and a poll
+probe that may fail ends in `|| <fallback>`.

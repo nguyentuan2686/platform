@@ -68,6 +68,7 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 
 ## Testing
 - A test must wait on the observable end state with a deadline, never on "an operation returned 0/empty once" or a fixed sleep. Tight timeouts in a test must not turn a slow first call (fresh Kafka topic, container warm-up) into a failure. Loops end on state, not on a return value. A flake that recurs gets a fix, not a rerun.
+- Shell under `set -e -o pipefail` (scripts and every workflow `run:`): never pipe a producer into `head`/`grep -q` (SIGPIPE, exit 141); capture first. A probe inside a poll loop that may fail ends in `|| <fallback>`, or the first "not yet" kills the step.
 
 ## Lessons loop
 Record in `docs/lessons/YYYY-MM-DD-<slug>.md` (template in `docs/lessons/README.md`). Escalation ladder:
