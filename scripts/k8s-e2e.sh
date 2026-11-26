@@ -91,8 +91,15 @@ run() {
 run smoke-flow http://localhost:8080 http://localhost:8081
 run smoke-chart http://localhost:8082
 run smoke-reading http://localhost:8083
-run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://localhost:8025
+run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://localhost:8025 http://localhost:3001
 run smoke-qa http://localhost:8084 http://localhost:8083 http://localhost:8025
 run smoke-web http://localhost:3001
 run e2e-observability http://localhost:9090 http://localhost:3200 http://localhost:3100 http://localhost:3000
+
+# --- 5. no app container restarted during the whole run (startup gating: wait-for-postgres init containers,
+# kafkaTopics readiness). RESTARTS > 0 here means a service crash-looped on a dependency it should have waited for.
+restarts=$(kubectl -n apps get pods -o jsonpath='{range .items[*]}{.metadata.name}{range .status.containerStatuses[*]} {.name}={.restartCount}{end}{"\n"}{end}')
+echo "$restarts"
+if grep -Eq '=[1-9][0-9]*( |$)' <<<"$restarts"; then fail "app-restarts-0: $(grep -E '=[1-9]' <<<"$restarts" | paste -sd';' -)"; fi
+echo "OK app-restarts-0"
 echo "k8s-e2e: ok"
