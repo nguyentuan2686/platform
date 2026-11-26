@@ -41,6 +41,16 @@ describe("FollowUpBox", () => {
     expect(screen.getByText("Còn 2 câu hỏi nối tiếp trong chủ đề này.")).toBeTruthy();
   });
 
+
+  it("announces a follow-up's progress in a polite live region mounted before it is asked", async () => {
+    render(<FollowUpBox readingId={RID} left={2} />);
+    const live = screen.getByTestId("qa-live");
+    expect(live.getAttribute("aria-live")).toBe("polite");
+    expect(live.textContent).toBe("");
+    ask();
+    await waitFor(() => expect(live.textContent).toBe("Lão Thiên Cơ đã luận xong."));
+    expect(screen.getByTestId("qa-live")).toBe(live);
+  });
   it("posts one message_id on a double click, to the follow-ups route", async () => {
     render(<FollowUpBox readingId={RID} left={2} />);
     fireEvent.change(screen.getByLabelText("Câu hỏi nối tiếp"), { target: { value: "Còn chuyện tiền bạc thì sao ạ?" } });

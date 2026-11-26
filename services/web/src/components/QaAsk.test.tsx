@@ -79,6 +79,32 @@ describe("QaAsk", () => {
     expect(screen.queryByLabelText("Câu hỏi nối tiếp")).toBeNull(); // FREE has no follow-ups
   });
 
+
+  it("announces progress through one polite live region that exists before anything is asked", async () => {
+    let release: (r: Response) => void = () => {};
+    fetchMock.mockImplementation(() => new Promise<Response>((r) => (release = r)));
+    view();
+    const live = screen.getByTestId("qa-live");
+    expect(live.getAttribute("aria-live")).toBe("polite");
+    expect(live.textContent).toBe("");
+    fill();
+    fireEvent.click(freeBtn());
+    await waitFor(() => expect(live.textContent).toBe("Lão Thiên Cơ bắt đầu luận giải."));
+    release(streamOf([META, sentence("Xong. "), DONE]));
+    await waitFor(() => expect(live.textContent).toBe("Lão Thiên Cơ đã luận xong."));
+    expect(screen.getByTestId("qa-live")).toBe(live); // the same node: a text change, not an insertion
+    expect(document.querySelectorAll('[role="status"]')).toHaveLength(0);
+  });
+
+  it("announces a drop in the same live region", async () => {
+    fetchMock.mockImplementation(async () => streamOf([META], "error"));
+    view();
+    const live = screen.getByTestId("qa-live");
+    fill();
+    fireEvent.click(freeBtn());
+    await waitFor(() => expect(live.textContent).toBe("Mất kết nối khi đang luận. Lời nhắn ở ngay sau câu hỏi."));
+    expect(screen.getByText(DROP)).toBeTruthy(); // the visible text exists once
+  });
   it("a double click sends one request", async () => {
     let release: (r: Response) => void = () => {};
     fetchMock.mockImplementation(() => new Promise<Response>((r) => (release = r)));

@@ -21,6 +21,13 @@ describe("QaMessages", () => {
     expect(screen.getByText("Nội dung do AI biên soạn từ kho tư liệu.")).toBeTruthy();
   });
 
+
+  it("keeps the notice's live region mounted (empty) when there is no notice", () => {
+    render(<QaMessages messages={msgs} status="ANSWERED" notice={null} disclaimer="Chỉ để tham khảo." />);
+    const live = screen.getByRole("status");
+    expect(live.getAttribute("aria-live")).toBe("polite");
+    expect(live.textContent).toBe("");
+  });
   it("has no seal until answered, and shows the notice of a queued or refunded reading", () => {
     render(
       <QaMessages

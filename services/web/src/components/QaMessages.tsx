@@ -41,11 +41,11 @@ export function QaMessages({
           {m.answer && <AnswerText text={m.answer} seal={status === "ANSWERED" && i === lastAnswered} />}
         </section>
       ))}
-      {notice && (
-        <p className="qa-notice" role="status">
-          {notice}
-        </p>
-      )}
+      {/* Always mounted (empty when there is no notice), so a notice that appears after the
+          poller's refresh is a text change in a live region, which screen readers announce. */}
+      <p className={notice ? "qa-notice" : "sr-only"} role="status" aria-live="polite">
+        {notice ?? ""}
+      </p>
       <section className="disclaimer">
         <p>{disclaimer}</p>
         <p>{AI_LABEL}</p>

@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { AnswerText, AskLine } from "@/components/QaMessages";
-import { QaResult } from "@/components/QaResult";
+import { QaLive, QaResult } from "@/components/QaResult";
 import { useQaStream } from "@/components/useQaStream";
 import { newUuid } from "@/lib/ids";
 
@@ -60,6 +60,7 @@ export function FollowUpBox({ readingId, left }: { readingId: string; left: numb
           <AnswerText text={t.text} />
         </div>
       ))}
+      <QaLive view={view} />
       <QaResult view={view} question={asked} readingId={readingId} />
       {remaining > 0 && <p className="fine">Còn {remaining} câu hỏi nối tiếp trong chủ đề này.</p>}
       {remaining > 0 && (

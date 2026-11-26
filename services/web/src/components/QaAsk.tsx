@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import { FollowUpBox } from "@/components/FollowUpBox";
-import { QaResult } from "@/components/QaResult";
+import { QaLive, QaResult } from "@/components/QaResult";
 import { TopicGrid } from "@/components/TopicGrid";
 import { SETTLED, useQaStream } from "@/components/useQaStream";
 import type { Topic } from "@/lib/identity";
@@ -170,6 +170,7 @@ export function QaAsk({
         </p>
       )}
 
+      <QaLive view={view} />
       {asked && <QaResult view={view} question={asked.question} readingId={asked.id} />}
       {asked && view.phase === "done" && asked.kind === "PAID" && view.followUpsLeft > 0 && (
         <FollowUpBox key={asked.id} readingId={asked.id} left={view.followUpsLeft} />
