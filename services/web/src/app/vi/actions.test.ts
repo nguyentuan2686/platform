@@ -148,7 +148,8 @@ describe("submitBirth", () => {
     write.mockRestore();
     expect(state?.unavailable).toBe(true);
     expect(JSON.parse(out)).toMatchObject({ level: "error", upstream: "identity-svc", status: "403", part: "save-chart" });
-    expect(out).not.toMatch(/1990|08:30|Asia\/Ho_Chi_Minh|male/);
+    // Without our own timestamp, which reads "08:30" during that minute (UTC).
+    expect(out.replace(/"timestamp":"[^"]*",?/g, "")).not.toMatch(/1990|08:30|Asia\/Ho_Chi_Minh|male/);
   });
 
   it("rethrows unexpected errors", async () => {

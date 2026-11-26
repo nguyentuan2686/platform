@@ -156,7 +156,8 @@ describe("callJson", () => {
       () => {},
     );
     expect(write).toHaveBeenCalled();
-    const out = write.mock.calls.map((c) => String(c[0])).join("");
+    // The timestamp is ours, not upstream data: at 08:30 UTC it would match "08:30" below.
+    const out = write.mock.calls.map((c) => String(c[0])).join("").replace(/"timestamp":"[^"]*",?/g, "");
     for (const bad of ["bearer-secret-xyz", "1994", "08:30", "someone@", "acc-777", "local-test-secret-token", "/orders", "/me"]) {
       expect(out).not.toContain(bad);
     }
