@@ -9,7 +9,8 @@ const POLL_MS = 15_000;
  * While an answer or a refund is still on its way (PENDING, RETRYING, REFUND_PENDING), asks
  * /api/qa/readings/{id} every 15 s, never while the tab is hidden, and refreshes the page once
  * the status changes: the in-app notice for a queued answer and for a refund. A failed check is
- * only retried at the next tick (the status route logs upstream trouble).
+ * only retried at the next tick (the status route logs upstream trouble); a 401 (session ended)
+ * or 404 stops polling after one refresh.
  */
 export function ReadingStatusPoller({ readingId, status }: { readingId: string; status: string }) {
   const router = useRouter();
@@ -24,6 +25,11 @@ export function ReadingStatusPoller({ readingId, status }: { readingId: string; 
       if (document.visibilityState === "hidden") return schedule();
       try {
         const res = await fetch(`/api/qa/readings/${encodeURIComponent(readingId)}`, { cache: "no-store" });
+        if (res.status === 401 || res.status === 404) {
+          // The session ended or the reading is gone: polling cannot recover; let the page say so.
+          if (!cancelled) router.refresh();
+          return;
+        }
         if (res.ok) {
           const body = (await res.json()) as { status?: unknown };
           if (!cancelled && typeof body.status === "string" && body.status !== status) {
@@ -32,7 +38,7 @@ export function ReadingStatusPoller({ readingId, status }: { readingId: string; 
           }
         }
       } catch {
-        /* offline or interrupted: the next tick looks again */
+        /* catch-ok: browser side; offline or interrupted, the next tick looks again */
       }
       schedule();
     };

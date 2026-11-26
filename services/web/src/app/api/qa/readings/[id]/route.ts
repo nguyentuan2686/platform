@@ -21,6 +21,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return reply(200, { status: r.status, follow_ups_left: r.follow_ups_left });
   } catch (e) {
     if (e instanceof UpstreamProblem && e.status === 404) return reply(404, { reason: "not_found" });
+    // An expired or revoked session: expected while a tab sits open; the poller stops, nothing to log.
+    if (e instanceof UpstreamProblem && e.status === 401) return reply(401, { reason: "unauthenticated" });
     return upstreamFailure(e, "qa-status");
   }
 }

@@ -307,4 +307,12 @@ describe("GET /api/qa/readings/[id]", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ reason: "unavailable" });
   });
+
+  it("answers an expired session (upstream 401) with 401 and logs nothing", async () => {
+    next = () => json(401, { status: 401 });
+    const res = await get();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ reason: "unauthenticated" });
+    expect(logged(out)).toBe("");
+  });
 });

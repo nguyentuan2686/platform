@@ -63,6 +63,14 @@ describe("ReadingStatusPoller", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it.each([401, 404])("stops polling on %i and refreshes the page once", async (code) => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ reason: "x" }), { status: code }));
+    render(<ReadingStatusPoller readingId={RID} status="RETRYING" />);
+    await act(() => vi.advanceTimersByTimeAsync(90_000));
+    expect(polls()).toHaveLength(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores a non-OK answer (the route has logged it) and stops on unmount", async () => {
     fetchMock.mockResolvedValueOnce(new Response("{}", { status: 503 }));
     const { unmount } = render(<ReadingStatusPoller readingId={RID} status="RETRYING" />);
