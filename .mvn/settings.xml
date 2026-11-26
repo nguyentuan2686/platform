@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Read by every mvn run from the repo root (`-s .mvn/settings.xml` in .mvn/maven.config): CI verify, the Java
+  Dockerfile builds (WORKDIR /src) and local builds. Final review I5: Maven Central rate limits (429), outages and brief
+  "not found" answers kept failing CI (docs/lessons/2026-11-2*-maven-central-*.md). Google's public Maven Central mirror
+  is tried first; Central (the super-POM `central`) stays as the fallback, so an artifact missing or failing on one is
+  fetched from the other. A <mirror> is deliberately not used: it would replace Central and remove the fallback.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+  <profiles>
+    <profile>
+      <id>central-mirror-first</id>
+      <repositories>
+        <repository>
+          <id>google-maven-central</id>
+          <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </repository>
+      </repositories>
+      <pluginRepositories>
+        <pluginRepository>
+          <id>google-maven-central</id>
+          <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+          <releases><enabled>true</enabled></releases>
+          <snapshots><enabled>false</enabled></snapshots>
+        </pluginRepository>
+      </pluginRepositories>
+    </profile>
+  </profiles>
+  <activeProfiles>
+    <activeProfile>central-mirror-first</activeProfile>
+  </activeProfiles>
+</settings>

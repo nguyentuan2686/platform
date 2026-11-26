@@ -21,7 +21,7 @@ Not catchable locally. If it recurs, the options are a longer or exponential ret
 retry settings again.
 
 ## Escalation
-none (first occurrence of this job; the verify-job variant is already at ladder step 3)
+check (ladder step 3, Plan 4a final fix wave, review I5): replaced the reliance on resolver retries. `.mvn/settings.xml` (loaded by `-s .mvn/settings.xml` in `.mvn/maven.config`) puts Google's Maven Central mirror first and keeps Central as the fallback, so a 429, an outage or a brief "not found" on one is fetched from the other. Each Java Dockerfile resolves dependencies from the poms alone in a layer of its own before `COPY . .`, so the gha layer cache keeps them between runs. The retry keys stay as a second line.
 
 ## Recurrence (2026-11-27, Task 7, run 45893077574)
 `payment-svc / image-check` failed again with the same 429 `Too Many Requests` from Maven Central on

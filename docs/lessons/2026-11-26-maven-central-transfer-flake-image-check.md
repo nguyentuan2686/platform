@@ -34,3 +34,8 @@ the new retries. The runner image ships Maven 3.10.1, which bundles Maven Resolv
 growing, about 6 min at most. Central had also kept answering 429 for longer than the earlier 3.5 min window.
 How to catch earlier: check the retry evidence in the log (`attempt N of M`) on every runner and image that runs
 Maven, not just one.
+
+## Superseded (Plan 4a final fix wave, review I5)
+The retry keys alone were never seen to rescue a run. The real fix: `.mvn/settings.xml` (Google's Central mirror first,
+Central as fallback) and a cached dependency layer in each Java Dockerfile; see
+`docs/lessons/2026-11-27-image-check-maven-central-flake.md` (Escalation).
