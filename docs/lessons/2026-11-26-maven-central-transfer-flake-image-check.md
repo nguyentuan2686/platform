@@ -18,7 +18,7 @@ None in code. The next push re-ran the job (the run was superseded by a real fix
 CLAUDE.md CI triage rule: "could not transfer artifact" from a registry is an external flake; rerun.
 
 ## Escalation
-none (rule already in CLAUDE.md, see 2026-11-25-registry-and-font-fetch-flakes.md)
+check (Plan 4a fix round 1): the flake recurred in 4 of 6 runs of PR #32, so it was automated per ladder step 3. `.mvn/maven.config` makes the Maven resolver retry HTTP 429/500/502/503/504 six times, 10s apart and growing (about 3.5 min at most, against the default 3 retries over about 30s). It applies to every `mvn` run from the repo root: CI verify, the Dockerfile builds (`COPY . .` into /src) and local builds.
 
 ## Recurrence (PR #32, Plan 4a)
 `Could not transfer artifact org.springframework.boot:spring-boot-starter-parent:pom:4.2.0`:

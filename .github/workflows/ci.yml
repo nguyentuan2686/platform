@@ -99,6 +99,7 @@ jobs:
               - 'deploy/k8s/overlays/prod/**'
               - '.github/workflows/_bootstrap.yml'
             root:
+              - '.mvn/**'
               - 'pom.xml'
               - '.github/**'
 
