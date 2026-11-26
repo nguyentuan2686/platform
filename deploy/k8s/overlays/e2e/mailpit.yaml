@@ -36,6 +36,11 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: {drop: [ALL]}
             readOnlyRootFilesystem: true
+          volumeMounts:
+            # Mailpit keeps its message db in a temp file (/tmp/mailpit-*.db); the root fs is read-only.
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
 ---
 apiVersion: v1
 kind: Service

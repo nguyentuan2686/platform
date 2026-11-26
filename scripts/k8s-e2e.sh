@@ -22,7 +22,7 @@ fi
 
 # --- 2. wait for data, observability, then apps
 # (rollout status takes one resource per call)
-for r in statefulset/postgres statefulset/redpanda; do kubectl -n data rollout status "$r" --timeout=300s; done
+for r in statefulset/postgres statefulset/redpanda deploy/mailpit; do kubectl -n data rollout status "$r" --timeout=300s; done
 for r in deploy/lgtm ds/otel-collector; do kubectl -n observability rollout status "$r" --timeout=300s; done
 kubectl -n apps wait --for=condition=Available deploy --all --timeout=600s
 
