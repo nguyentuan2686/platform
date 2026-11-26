@@ -25,3 +25,13 @@ test("sitemap and robots", async ({ request }) => {
   expect(robots).toContain("Disallow: /vi/la-so");
   expect(robots).toContain("Sitemap:");
 });
+
+test("legal page title carries the site suffix exactly once", async ({ page }) => {
+  await page.goto("/vi/dieu-khoan");
+  await expect(page).toHaveTitle("Điều khoản sử dụng · Tử Vi Đẩu Số");
+});
+
+test("sitemap lists the 31 public URLs", async ({ request }) => {
+  const sm = await (await request.get("/sitemap.xml")).text();
+  expect((sm.match(/<loc>/g) ?? []).length).toBe(31);
+});

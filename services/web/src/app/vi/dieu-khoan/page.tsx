@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Điều khoản sử dụng - Tử Vi Lão Thiên Cơ",
+  title: "Điều khoản sử dụng",
   description: "Điều khoản sử dụng dịch vụ xem lá số tử vi và hỏi đáp.",
   robots: { index: true, follow: true },
 };

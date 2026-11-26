@@ -12,6 +12,7 @@ describe("legal pages", () => {
     for (const m of [privacyMeta, termsMeta, refundMeta]) {
       expect(m.robots).toMatchObject({ index: true });
       expect(m.title).toBeTruthy();
+      expect(String(m.title)).not.toMatch(/ [-·] /); // the layout template adds the suffix once
     }
   });
 

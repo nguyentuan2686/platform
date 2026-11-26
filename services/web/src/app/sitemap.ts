@@ -1,11 +1,10 @@
+// Static on purpose: generated at build time from the knowledge corpus (the runtime image has no knowledge files).
+// The origin is therefore the build-time WEB_ORIGIN, same as the canonical URLs.
 import type { MetadataRoute } from "next";
 import { cfg } from "@/lib/config";
 import { loadPalaces, loadStars } from "@/lib/knowledge";
 
 /** Public pages only: home, knowledge, legal. Private routes never appear. */
-// Read WEB_ORIGIN at request time, not at build time.
-export const dynamic = "force-dynamic";
-
 export default function sitemap(): MetadataRoute.Sitemap {
   const o = cfg().webOrigin;
   const paths = [

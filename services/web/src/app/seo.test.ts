@@ -49,3 +49,10 @@ describe("private pages", () => {
     expect(mod.metadata?.robots?.index).toBe(false);
   });
 });
+
+describe("static sitemap", () => {
+  it("is not force-dynamic: the runtime image has no knowledge files", async () => {
+    const mod = (await import("@/app/sitemap")) as { dynamic?: string };
+    expect(mod.dynamic).toBeUndefined();
+  });
+});

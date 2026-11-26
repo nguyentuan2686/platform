@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Chính sách hoàn tiền - Tử Vi Lão Thiên Cơ",
+  title: "Chính sách hoàn tiền",
   description: "Khi nào lượt hỏi được hoàn và cách yêu cầu hoàn tiền.",
   robots: { index: true, follow: true },
 };

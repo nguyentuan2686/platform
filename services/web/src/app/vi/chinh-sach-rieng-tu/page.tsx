@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Chính sách riêng tư - Tử Vi Lão Thiên Cơ",
+  title: "Chính sách riêng tư",
   description: "Dữ liệu chúng tôi thu thập, cách mã hóa, thời gian lưu và quyền xóa của bạn.",
   robots: { index: true, follow: true },
 };
