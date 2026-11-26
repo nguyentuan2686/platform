@@ -33,3 +33,9 @@ It can also be automated as a later step:
 - Web: self-host the fonts with `next/font/local` so the build makes no network call.
 
 That is tracked as a follow-up and is not part of F1.4.
+
+## Update 2026-11-26: second `next/font` failure, now automated
+Main run 45819818131, job `k8s-e2e` "Build web" failed again with `An error occurred in next/font` (Google Fonts download during `next build`). Second occurrence, so per the ladder it became a hard check:
+- Fonts are self-hosted: woff2 subsets (vietnamese + latin, from the `@fontsource` npm packages, OFL) in `services/web/src/fonts/`, declared in `src/styles/fonts.css` with the same unicode ranges and the same CSS variable names. `next/font/local` cannot express a unicode-range split across files, hence plain `@font-face`.
+- `src/fontPolicy.test.ts` fails if any source file imports `next/font/google` or references a Google Fonts URL.
+The build now makes no network call for fonts. The Maven Central part of this lesson is still tracked separately.
