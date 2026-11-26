@@ -261,6 +261,48 @@ untrusted_commit_in_range_refuses_all() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+
+# --- Final review: M1 (human deploy: commits), M3 (nothing to revert), M4 (--bot) ---------------------------------
+human_deploy_commit_does_not_supersede() {
+  # A human squash-merge titled `deploy: ...` after a bad bump is not a newer CD run: the bump is still reverted.
+  setup
+  mkdir -p "$repo/deploy/k8s/overlays/prod/domain"
+  echo "APP_DOMAIN: tuvi.example.invalid" >"$repo/deploy/k8s/overlays/prod/domain/domain.yaml"
+  g add -A && g commit -q -m "deploy: set the public domain"
+  run --sha "$bump" --repo "$repo"
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  grep -q 'order-svc, newTag: main}' "$repo/$kpath" || fail "${FUNCNAME[0]}" "bump not reverted: $(cat "$repo/$kpath")"
+  [ -f "$repo/deploy/k8s/overlays/prod/domain/domain.yaml" ] || fail "${FUNCNAME[0]}" "human change lost"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+nothing_to_revert_exits_cleanly() {
+  # Every deploy since the verified tag is already reverted (a rerun of a rolled-back run): exit 0, no new commit.
+  setup; g tag deploy-verified "$bump"
+  local a before
+  a="$(deploy web aaaaaaa)"
+  run --sha "$a" --repo "$repo"; [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "first rollback: rc=$rc: $(cat "$tmp/out")"
+  before="$(git -C "$repo" rev-parse HEAD)"
+  run --sha "$a" --repo "$repo"
+  [ "$rc" -eq 0 ] && grep -q '^ROLLBACK: nothing to revert (all deploys since deploy-verified already reverted)' "$tmp/out"     || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  [ "$(git -C "$repo" rev-parse HEAD)" = "$before" ] && [ -z "$(git -C "$repo" status --porcelain)" ] || fail "${FUNCNAME[0]}" "repo changed"
+  echo "ok ${FUNCNAME[0]}"
+}
+
+bot_flag_pins_the_cd_app() {
+  # --bot <slug>[bot]: a bump by another GitHub App is refused, and that App's later deploy: commit supersedes nothing.
+  setup
+  run --sha "$bump" --repo "$repo" --bot 'other-app[bot]'
+  [ "$rc" -eq 2 ] && grep -q 'not authored by the CD App' "$tmp/out" || fail "${FUNCNAME[0]}" "other bot: rc=$rc: $(cat "$tmp/out")"
+  mkdir -p "$repo/deploy/k8s/overlays/prod/tunnel"; echo other >"$repo/deploy/k8s/overlays/prod/tunnel/x.yaml"; g add -A
+  git -C "$repo" -c user.name='other-app[bot]' -c user.email='7+other-app[bot]@users.noreply.github.com' -c commit.gpgsign=false \
+    commit -q -m "deploy: web to sha-9999999 [skip ci]"
+  run --sha "$bump" --repo "$repo" --bot 'cd-bot[bot]'
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "cd-bot: rc=$rc: $(cat "$tmp/out")"
+  grep -q 'order-svc, newTag: main}' "$repo/$kpath" || fail "${FUNCNAME[0]}" "bump not reverted: $(cat "$repo/$kpath")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 reverts_only_the_bump
 refuses_commit_outside_overlays
 refuses_non_deploy_message
@@ -276,3 +318,6 @@ good_then_bad_reverts_only_the_newest
 first_deploy_reverts_only_this_bump
 earlier_revert_is_not_reverted_twice
 untrusted_commit_in_range_refuses_all
+human_deploy_commit_does_not_supersede
+nothing_to_revert_exits_cleanly
+bot_flag_pins_the_cd_app

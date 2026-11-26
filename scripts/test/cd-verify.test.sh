@@ -36,10 +36,14 @@ job_wiring() {
     || fail "${FUNCNAME[0]}" "mark if"
   grep -q 'scripts/deploy-mark-verified.sh --sha "$BUMP_SHA" .*--push' <<<"$(q '.jobs["verify-deploy"].steps[] | select(.id == "mark") | .run')" \
     || fail "${FUNCNAME[0]}" "mark step does not run deploy-mark-verified.sh --push"
-  [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"issue\") | .if")" = "failure() && steps.verify.outcome == 'failure'" ] \
+  [ "$(q ".jobs[\"verify-deploy\"].steps[] | select(.id == \"issue\") | .if")" = "failure() && (steps.verify.outcome == 'failure' || steps.mark.outcome == 'failure')" ] \
     || fail "${FUNCNAME[0]}" "issue step if"
   grep -q 'scripts/deploy-rollback.sh --sha "$BUMP_SHA" .*--push' <<<"$(q '.jobs["verify-deploy"].steps[] | select(.id == "rollback") | .run')" \
     || fail "${FUNCNAME[0]}" "rollback step does not run deploy-rollback.sh --push"
+  grep -q -- '--bot "${APP_SLUG}\[bot\]"' <<<"$(q '.jobs["verify-deploy"].steps[] | select(.id == "rollback") | .run')" \
+    || fail "${FUNCNAME[0]}" "rollback step does not pin the CD App with --bot"
+  [ "$(q '.jobs["verify-deploy"].steps[] | select(.id == "issue") | .env.MARK_OUTCOME')" = '${{ steps.mark.outcome }}' ] \
+    || fail "${FUNCNAME[0]}" "issue step does not get MARK_OUTCOME"
   echo "ok ${FUNCNAME[0]}"
 }
 
@@ -67,7 +71,8 @@ EOF
   q '.jobs["verify-deploy"].steps[] | select(.id == "issue") | .run' >"$tmp/issue.sh"
   rc=0
   env -i PATH="$tmp/bin:$PATH" GH_LOG="$tmp/gh.log" RUNNER_TEMP="$tmp/rt" SHA="$sha" BUMP_SHA="$bump" \
-    RUN_URL=https://github.com/o/platform/actions/runs/42 VERIFY_RC="$1" ROLLBACK_RC="$2" GH_EXISTING="${3:-}" bash "$tmp/issue.sh" >"$tmp/out" 2>&1 || rc=$?
+    RUN_URL=https://github.com/o/platform/actions/runs/42 VERIFY_RC="$1" ROLLBACK_RC="$2" GH_EXISTING="${3:-}" \
+    MARK_OUTCOME="${MARK:-skipped}" bash "$tmp/issue.sh" >"$tmp/out" 2>&1 || rc=$?
 }
 
 issue_has_title_label_run_and_log_tail() {
@@ -102,7 +107,18 @@ unreachable_opens_or_updates_unverified_issue() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+mark_failure_opens_an_issue() {
+  # Final review M2: verified, but the deploy-verified tag push failed; a later rollback would go back past this deploy.
+  MARK=failure issue_step 0 ""
+  [ "$rc" -eq 0 ] || fail "${FUNCNAME[0]}" "rc=$rc: $(cat "$tmp/out")"
+  grep -q "^issue create --title deploy verified but not recorded: sha-${sha:0:7} --label deploy-unrecorded " "$tmp/gh.log" \
+    || fail "${FUNCNAME[0]}" "create: $(cat "$tmp/gh.log")"
+  grep -q '^- Verified, but the deploy-verified tag was not moved' "$tmp/gh.log.body" || fail "${FUNCNAME[0]}" "wording: $(cat "$tmp/gh.log.body")"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 job_wiring
 unverified_deploy_warns
 issue_has_title_label_run_and_log_tail
 unreachable_opens_or_updates_unverified_issue
+mark_failure_opens_an_issue
