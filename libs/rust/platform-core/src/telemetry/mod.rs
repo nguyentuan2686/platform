@@ -2,7 +2,10 @@
 
 pub mod json_layer;
 
+use std::time::Duration;
+
 use anyhow::Context as _;
+
 use opentelemetry::trace::{TraceContextExt, TracerProvider as _};
 use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 use opentelemetry_sdk::propagation::TraceContextPropagator;
@@ -20,15 +23,50 @@ pub struct TelemetryGuard {
     meter_provider: Option<SdkMeterProvider>,
 }
 
+/// Upper bound for flushing and shutting down the exporters on drop. A blackholed collector must
+/// not hold the process past Kubernetes' termination grace period.
+const SHUTDOWN_BUDGET: Duration = Duration::from_secs(5);
+
+/// How often the same OTel-internal (exporter) log source may emit a line.
+const SDK_LOG_WINDOW: Duration = Duration::from_secs(300);
+
 impl Drop for TelemetryGuard {
     fn drop(&mut self) {
-        if let Some(provider) = self.provider.take() {
-            let _ = provider.shutdown();
+        let tracer = self.provider.take();
+        let meter = self.meter_provider.take();
+        if tracer.is_none() && meter.is_none() {
+            return;
         }
-        if let Some(provider) = self.meter_provider.take() {
-            let _ = provider.shutdown();
+        // The SDK's blocking exporters can outlive their own timeouts, so the shutdown runs on a
+        // helper thread and is abandoned (the thread is detached) once the budget is spent.
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("telemetry-shutdown".into())
+            .spawn(move || {
+                if let Some(p) = tracer {
+                    let _ = p.shutdown_with_timeout(SHUTDOWN_BUDGET / 2);
+                }
+                if let Some(p) = meter {
+                    let _ = p.shutdown();
+                }
+                let _ = tx.send(());
+            });
+        if spawned.is_ok() {
+            // Timeout or disconnect both mean: stop waiting.
+            let _ = rx.recv_timeout(SHUTDOWN_BUDGET);
         }
     }
+}
+
+/// `RUST_LOG` when set; otherwise `info` for our code and `warn` for the exporter stack
+/// (`opentelemetry*`, `hyper_util`, `reqwest`, `h2`), whose INFO chatter is not ours.
+pub fn env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new(
+            "info,opentelemetry=warn,opentelemetry_sdk=warn,opentelemetry_otlp=warn,\
+             opentelemetry_http=warn,hyper_util=warn,reqwest=warn,h2=warn",
+        )
+    })
 }
 
 /// Installs the global tracing subscriber (JSON layer on stdout, `RUST_LOG` filter defaulting to
@@ -39,8 +77,8 @@ impl Drop for TelemetryGuard {
 pub fn init(service_name: &str) -> anyhow::Result<TelemetryGuard> {
     opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let json = JsonLayer::new(service_name, std::io::stdout);
+    let filter = env_filter();
+    let json = JsonLayer::new(service_name, std::io::stdout).with_sdk_throttle(SDK_LOG_WINDOW);
 
     // The tracer provider and OTel layer are always installed so an inbound `traceparent` is
     // continued (and `trace_id`/`span_id` reach the logs) even without an exporter; spans are
