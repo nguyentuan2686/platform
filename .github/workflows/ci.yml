@@ -4,6 +4,14 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manual run on main: publish_all builds and pushes every service image as sha-<commit> (go-live pins all 7 once;
+  # also the fix when an image is missing). cd.yml then bumps the prod tags for that commit.
+  workflow_dispatch:
+    inputs:
+      publish_all:
+        description: Build and publish every service image (only on main)
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -107,8 +115,8 @@ jobs:
 
   order-svc:
     needs: changes
-    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true'
-    # packages: write is only exercised when publish is true (push to main)
+    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
+    # packages: write is only exercised when publish is true (push or manual dispatch on main)
     permissions:
       contents: read
       packages: write
@@ -116,11 +124,11 @@ jobs:
     with:
       module: services/order-svc
       image: order-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   notify-svc:
     needs: changes
-    if: needs.changes.outputs.notify == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.notify == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -129,11 +137,11 @@ jobs:
       package: notify-svc
       image: notify-svc
       dockerfile: services/notify-svc/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   chart-svc:
     needs: changes
-    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -142,11 +150,11 @@ jobs:
       package: chart-svc
       image: chart-svc
       dockerfile: services/chart-svc/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   reading-tuvi:
     needs: changes
-    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -154,11 +162,11 @@ jobs:
     with:
       module: services/reading-tuvi
       image: reading-tuvi
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   identity-svc:
     needs: changes
-    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -166,11 +174,11 @@ jobs:
     with:
       module: services/identity-svc
       image: identity-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   payment-svc:
     needs: changes
-    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -178,11 +186,11 @@ jobs:
     with:
       module: services/payment-svc
       image: payment-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   web:
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -191,7 +199,7 @@ jobs:
       dir: services/web
       image: web
       dockerfile: services/web/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   k8s-manifests:
     needs: changes

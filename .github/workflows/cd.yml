@@ -1,0 +1,234 @@
+name: cd
+
+# CD (spec 7): after a green `ci` run for a push to main, bump the prod image tags in
+# deploy/k8s/overlays/prod/apps/kustomization.yaml to sha-<commit> for exactly the images published for that commit,
+# commit as the CD GitHub App with `[skip ci]` and push to main (CLAUDE.md: the CD bot may push to main only under
+# deploy/k8s/overlays/). Argo CD (`prod-apps`, tracks main) rolls the change out.
+# Review Focus 1: scripts/cd-bump.sh never moves a tag to an older/unrelated commit; unpublished services keep theirs.
+# Security: never checks out or runs code from the triggering run's head; only `main` of this repo is checked out,
+# and only for successful `push`/`workflow_dispatch` runs of this repo's main. github.event fields reach shell via env.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit on main (40 hex) whose published images to deploy
+        required: true
+
+# One CD run at a time, in order; a queued run is never cancelled by a running one.
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    permissions: {}
+    outputs:
+      cd: ${{ steps.gate.outputs.cd }}
+      verify: ${{ steps.gate.outputs.verify }}
+      sha: ${{ steps.gate.outputs.sha }}
+    steps:
+      - name: Gate on the triggering run and on the CD / verify-deploy secrets
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPO: ${{ github.repository }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+          # Only "is it set" reaches the shell, never a secret value.
+          HAS_CD_APP_ID: ${{ vars.CD_APP_ID != '' }}
+          HAS_CD_APP_PRIVATE_KEY: ${{ secrets.CD_APP_PRIVATE_KEY != '' }}
+          HAS_TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
+          HAS_TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET != '' }}
+          HAS_PROD_KUBECONFIG: ${{ secrets.PROD_KUBECONFIG != '' }}
+        run: |
+          set -euo pipefail
+          runbook="see docs/runbooks/go-live.md"
+          # feature <name> <NAME...>: prints true (all set) / false (none set, notice) or fails on a partial set.
+          feature() {
+            local name="$1"; shift
+            local set=() missing=() n v
+            for n in "$@"; do
+              v="HAS_$n"
+              if [ "${!v}" = true ]; then set+=("$n"); else missing+=("$n"); fi
+            done
+            if [ "${#missing[@]}" -eq 0 ]; then echo true; return; fi
+            if [ "${#set[@]}" -eq 0 ]; then
+              echo "::notice::$name skipped: ${missing[0]} not set ($runbook)" >&2
+              echo false; return
+            fi
+            echo "::error::$name is partially configured: ${set[*]} set but ${missing[*]} not set ($runbook)" >&2
+            return 1
+          }
+          cd="$(feature CD CD_APP_ID CD_APP_PRIVATE_KEY)"
+          verify="$(feature verify-deploy TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET PROD_KUBECONFIG)"
+
+          sha=""
+          case "$EVENT" in
+            workflow_run)
+              if [ "$RUN_CONCLUSION" != success ] || { [ "$RUN_EVENT" != push ] && [ "$RUN_EVENT" != workflow_dispatch ]; } \
+                || [ "$RUN_HEAD_BRANCH" != main ] || [ "$RUN_HEAD_REPO" != "$REPO" ]; then
+                echo "::notice::CD skipped: ci run is not a successful push/dispatch on $REPO main (conclusion=$RUN_CONCLUSION event=$RUN_EVENT branch=$RUN_HEAD_BRANCH repo=$RUN_HEAD_REPO)"
+                cd=false verify=false
+              else
+                sha="$RUN_HEAD_SHA"
+              fi
+              ;;
+            workflow_dispatch)
+              [ "$REF" = refs/heads/main ] || { echo "::error::cd must be dispatched on main, not $REF"; exit 1; }
+              sha="$INPUT_SHA"
+              ;;
+            *) echo "::error::unexpected event $EVENT"; exit 1 ;;
+          esac
+          if [ -n "$sha" ] && ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be 40 lowercase hex, got '$sha'"; exit 1
+          fi
+          echo "gate: cd=$cd verify=$verify sha=${sha:-none}"
+          {
+            echo "cd=$cd"
+            echo "verify=$verify"
+            echo "sha=$sha"
+          } >>"$GITHUB_OUTPUT"
+
+  bump:
+    needs: gate
+    if: needs.gate.outputs.cd == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      bump_sha: ${{ steps.push.outputs.bump_sha }}
+    env:
+      SHA: ${{ needs.gate.outputs.sha }}
+      KUSTOMIZATION: deploy/k8s/overlays/prod/apps/kustomization.yaml
+      SERVICES: order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web
+    steps:
+      - name: CD GitHub App token (contents write on this repo only)
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ vars.CD_APP_ID }}
+          private-key: ${{ secrets.CD_APP_PRIVATE_KEY }}
+          permission-contents: write
+      # Always main of this repo (trusted code), never the triggering run's head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+      - name: The commit is on main
+        run: |
+          git merge-base --is-ancestor "$SHA" HEAD || { echo "::error::$SHA is not on main"; exit 1; }
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Images published for this commit
+        id: published
+        run: |
+          set -euo pipefail
+          list=()
+          for s in $SERVICES; do
+            ref="ghcr.io/nguyentuan2686/$s:sha-$SHA"
+            if docker buildx imagetools inspect "$ref" >/dev/null 2>"$RUNNER_TEMP/inspect.err"; then
+              echo "PUBLISHED $s"
+              list+=("$s")
+            elif grep -qiE 'not found|manifest unknown' "$RUNNER_TEMP/inspect.err"; then
+              echo "SKIP $s: not published for $SHA"
+            else
+              # Registry/auth error: fail (rerun) rather than silently leave a published service undeployed.
+              echo "::error::cannot inspect $ref: $(cat "$RUNNER_TEMP/inspect.err")"
+              exit 1
+            fi
+          done
+          echo "services=${list[*]}" >>"$GITHUB_OUTPUT"
+      - name: Bump tags (never backwards)
+        id: bump
+        if: steps.published.outputs.services != ''
+        env:
+          PUBLISHED: ${{ steps.published.outputs.services }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # PUBLISHED is a space-separated list of known service names
+          bash scripts/cd-bump.sh --file "$KUSTOMIZATION" --sha "$SHA" $PUBLISHED | tee "$RUNNER_TEMP/bump.out"
+          if git diff --quiet; then echo "changed=false" >>"$GITHUB_OUTPUT"; else echo "changed=true" >>"$GITHUB_OUTPUT"; fi
+      - name: Install kubeconform
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          KUBECONFORM_VERSION: v0.7.0
+          # sha256 of kubeconform-linux-amd64.tar.gz, as published in the release CHECKSUMS file
+          KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/kubeconform.tar.gz" "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  $RUNNER_TEMP/kubeconform.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          sudo install -m 0755 "$RUNNER_TEMP/kubeconform" /usr/local/bin/kubeconform
+      - name: Commit and push as the CD App
+        id: push
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          CHANGED: ${{ steps.bump.outputs.changed }}
+          PUBLISHED: ${{ steps.published.outputs.services }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/bump.out"
+          if [ "$CHANGED" != true ]; then
+            echo "cd: nothing to push for $SHA"
+            { echo "pushed=false"; echo "bump_sha=$(git rev-parse HEAD)"; } >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          uid="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${uid}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          # Validate the rendered prod overlay and allow exactly one changed file, then commit.
+          check_and_commit() {
+            bash scripts/k8s-validate.sh deploy/k8s/overlays/prod
+            local status
+            status="$(git status --porcelain)"
+            if [ "$status" != " M $KUSTOMIZATION" ]; then
+              echo "::error::CD may change only $KUSTOMIZATION, got: $status"
+              exit 1
+            fi
+            local svcs
+            svcs="$(awk '/^BUMP /{print $2}' "$out" | paste -sd, -)"
+            git commit -q -a -F - <<MSG
+          deploy: ${svcs} to sha-${SHA:0:7} [skip ci]
+
+          $(grep '^BUMP ' "$out")
+          MSG
+            git log -1 --format='%an <%ae>%n%B'
+          }
+
+          check_and_commit
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then pushed=true; break; fi
+            [ "$attempt" -lt 3 ] || { echo "::error::push to main failed 3 times"; exit 1; }
+            echo "push attempt $attempt rejected; re-applying on the new main"
+            # Re-run the bump on the new main tip: a newer tag pushed meanwhile is kept (never backwards).
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            # shellcheck disable=SC2086 # PUBLISHED is a space-separated list of known service names
+            bash scripts/cd-bump.sh --file "$KUSTOMIZATION" --sha "$SHA" $PUBLISHED | tee "$out"
+            if git diff --quiet; then echo "cd: nothing left to do on the new main"; break; fi
+            check_and_commit
+          done
+          { echo "pushed=$pushed"; echo "bump_sha=$(git rev-parse HEAD)"; } >>"$GITHUB_OUTPUT"

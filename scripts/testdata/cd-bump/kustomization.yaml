@@ -1,0 +1,19 @@
+# Fixture for scripts/test/cd-bump.test.sh: same shape as deploy/k8s/overlays/prod/apps/kustomization.yaml.
+# CD bumps the image tags below; every comment and the order of entries must survive a bump.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/order-svc # base comment
+patches:
+  - target: {kind: ConfigMap, name: app-domain}
+    patch: |-
+      - {op: add, path: /metadata/namespace, value: apps} # inside a block scalar
+images:
+  # order-svc first, web last
+  - {name: ghcr.io/nguyentuan2686/order-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: main} # trailing comment
+  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/web, newTag: main}
