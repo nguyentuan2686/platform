@@ -1,0 +1,27 @@
+# Applied by infra/bootstrap (lib/argocd.sh) server-side with its own field manager on top of Argo CD's install.yaml.
+# Application health: Argo CD >= 1.8 no longer assesses the health of an Application resource, so without this the
+# root app's sync waves (prod-sealed -1, prod-platform 0, prod-tunnel/prod-apps 1) would not wait for a child app to be
+# Healthy before syncing the next wave. A child carrying platform.dev/ci-manual-sync: "true" (set only by bootstrap's
+# GITOPS_CI_MODE=1 on the apps it leaves unsynced) counts as Healthy, so the root app can still become Healthy in CI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+data:
+  resource.customizations.health.argoproj.io_Application: |
+    hs = {}
+    hs.status = "Progressing"
+    hs.message = ""
+    if obj.metadata.annotations ~= nil and obj.metadata.annotations["platform.dev/ci-manual-sync"] == "true" then
+      hs.status = "Healthy"
+      hs.message = "CI mode: left unsynced by infra/bootstrap"
+      return hs
+    end
+    if obj.status ~= nil and obj.status.health ~= nil then
+      hs.status = obj.status.health.status
+      if obj.status.health.message ~= nil then
+        hs.message = obj.status.health.message
+      end
+    end
+    return hs

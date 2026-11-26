@@ -1,0 +1,22 @@
+# AppProject of the four prod child Applications (synced by root before them, wave -2). Plain Secrets are forbidden:
+# prod Secrets exist only as SealedSecrets (prod-sealed), decrypted in-cluster by the Sealed Secrets controller, so an
+# accidental plaintext Secret in Git fails the sync instead of being applied. infra/bootstrap patches sourceRepos when
+# GITOPS_REPO_URL is not this repo.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  description: Prod overlay slices (deploy/k8s/overlays/prod)
+  sourceRepos:
+    - https://github.com/nguyentuan2686/platform.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+  clusterResourceWhitelist:
+    - {group: "*", kind: "*"}
+  namespaceResourceBlacklist:
+    - {group: "", kind: Secret}

@@ -9,7 +9,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: default
+  project: prod
   source:
     repoURL: https://github.com/nguyentuan2686/platform.git
     targetRevision: main

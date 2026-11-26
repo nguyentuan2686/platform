@@ -1,0 +1,12 @@
+# Copied by infra/bootstrap (lib/k3s.sh) into /var/lib/rancher/k3s/server/manifests/. k3s's bundled Traefik becomes a
+# ClusterIP Service: nothing listens publicly (spec §11); public traffic arrives only through the outbound cloudflared
+# tunnel to http://traefik.kube-system.svc.cluster.local:80.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    service:
+      type: ClusterIP

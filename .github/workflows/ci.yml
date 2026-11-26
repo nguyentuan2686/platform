@@ -30,6 +30,7 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       k8s: ${{ steps.filter.outputs.k8s }}
       ops: ${{ steps.filter.outputs.ops }}
+      infra: ${{ steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -92,6 +93,11 @@ jobs:
               - 'deploy/argocd/**'
               - 'deploy/k8s/overlays/prod/**' # secrets.tsv and domain.yaml feed the script tests
               - '.github/**'
+            infra:
+              - 'infra/**'
+              - 'deploy/argocd/**'
+              - 'deploy/k8s/overlays/prod/**'
+              - '.github/workflows/_bootstrap.yml'
             root:
               - 'pom.xml'
               - '.github/**'
@@ -268,10 +274,19 @@ jobs:
             bash "$t"
           done
 
+  # Host bootstrap on x86 + ARM runners (k3s, firewall, Sealed Secrets, Argo CD syncing this commit): every push to
+  # main, and PRs that touch infra, Argo CD apps, the prod overlay or workflows.
+  bootstrap:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.root == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_bootstrap.yml
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e, ops-scripts]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e, ops-scripts, bootstrap]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

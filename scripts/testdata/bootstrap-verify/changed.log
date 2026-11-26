@@ -1,0 +1,7 @@
+OK k3s
+CHANGED firewall: ufw rules
+SKIP tailscale: TS_AUTHKEY not set
+OK sealed-secrets
+OK argocd
+OK gitops-root
+bootstrap: 1 changed
