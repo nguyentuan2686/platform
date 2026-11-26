@@ -18,6 +18,10 @@ tests:
         values: '0+60x30'
       - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/readings", le="+Inf"}'
         values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_count{job="reading-tuvi", http_route="/tuvi/readings", http_response_status_code="200"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_count{job="reading-tuvi", http_route="/tuvi/qa/readings", http_response_status_code="200"}'
+        values: '0+60x30'
     alert_rule_test:
       - eval_time: 20m
         alertname: latency-p95-high
@@ -30,6 +34,8 @@ tests:
       - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="10"}'
         values: '0+60x30'
       - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="+Inf"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_count{job="order-svc", http_route="/orders", http_response_status_code="200"}'
         values: '0+60x30'
     alert_rule_test:
       - eval_time: 20m

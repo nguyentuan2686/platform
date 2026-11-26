@@ -49,7 +49,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "p95 latency above 1s on {{ $$labels.job }}"
+          summary: "p95 latency above 1s on {{ $$labels.job }} (at more than 0.05 req/s)"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#latency-p95-high
         data:
           - refId: A
@@ -61,7 +61,7 @@ groups:
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
-              expr: 'histogram_quantile(0.95, sum by (job, le) (rate(http_server_request_duration_seconds_bucket{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m]))) > 1'
+              expr: 'histogram_quantile(0.95, sum by (job, le) (rate(http_server_request_duration_seconds_bucket{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m]))) > 1 and on (job) sum by (job) (rate(http_server_request_duration_seconds_count{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m])) > 0.05'
           - refId: B
             datasourceUid: __expr__
             model:

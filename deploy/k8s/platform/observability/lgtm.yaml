@@ -31,7 +31,7 @@ spec:
       # emptyDir by the init container below.
       initContainers:
         - name: alerting-render
-          image: grafana/otel-lgtm:0.41.1 # the lgtm image itself: no extra pull
+          image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5 # the lgtm image itself: no extra pull
           command: [sh, /alerting/render.sh]
           # The Telegram secret is optional (alerting-secrets, ns observability): without it only the rules are provisioned.
           envFrom:
@@ -44,7 +44,7 @@ spec:
             - {name: provisioning-alerting, mountPath: /provisioning-alerting}
       containers:
         - name: lgtm
-          image: grafana/otel-lgtm:0.41.1
+          image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
           ports:
             - {name: grafana, containerPort: 3000}
             - {name: otlp-grpc, containerPort: 4317}
