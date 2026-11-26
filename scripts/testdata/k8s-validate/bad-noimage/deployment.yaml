@@ -1,0 +1,15 @@
+# Self-test fixture: container without image (must not slip through).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fixture, namespace: apps}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: app
+          resources: {requests: {memory: 64Mi, cpu: 10m}, limits: {memory: 64Mi}}
+          livenessProbe: {httpGet: {path: /health/live, port: 8080}}
+          readinessProbe: {httpGet: {path: /health/ready, port: 8080}}
