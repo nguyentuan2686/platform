@@ -29,3 +29,11 @@ none (first occurrence of this job; the verify-job variant is already at ladder 
 Second occurrence: the CLAUDE.md CI-triage rule already covers it (ladder step 2). Since it recurs inside the docker
 build, the next step is a real fix (longer/exponential retry window in the image build, or a Maven cache shared with
 the verify job), tracked for the plan's final fix wave rather than done inside an unrelated task.
+
+## Recurrence (2026-11-27, Task 8, run 45899391121)
+A new variant in a Maven `verify` job: `identity-svc / verify` failed with `Could not find artifact
+org.springframework.boot:spring-boot-starter-mail:jar:4.2.0 in central` and the same for `com.nimbusds:nimbus-jose-jwt:jar:10.10`
+(`The POM ... is missing`), with no 429 in the log. Both artifacts exist and resolved in the previous green run (45896150778) on an
+unchanged `pom.xml`, and the commit touched no Java. Central answered "not found" for a moment instead of 429/5xx, so the resolver retries
+(429/5xx only) did not apply. Handled as an external flake (`gh run rerun --failed`). This adds weight to the open real fix (a Maven cache
+or mirror) for the final fix wave; a not-found from Central cannot safely be retried by status code alone.
