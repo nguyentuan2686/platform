@@ -1,6 +1,8 @@
 package dev.platform.starter.outbox;
 
+import dev.platform.starter.telemetry.PlatformMeter;
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import java.time.Duration;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
@@ -71,6 +73,12 @@ public class OutboxAutoConfiguration {
         kafkaTemplate,
         jsonMapper.getIfAvailable(JsonMapper::shared),
         properties);
+  }
+
+  @Bean(destroyMethod = "close")
+  @ConditionalOnMissingBean
+  OutboxLagGauge outboxLagGauge(DataSource dataSource, ObjectProvider<OpenTelemetry> otel) {
+    return new OutboxLagGauge(dataSource, PlatformMeter.of(otel));
   }
 
   /**
