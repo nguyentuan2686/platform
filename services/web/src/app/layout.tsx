@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Charm, Ma_Shan_Zheng, Noto_Serif, Noto_Serif_Display } from "next/font/google";
+import { PassBanner } from "@/components/PassBanner";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { TabBar } from "@/components/TabBar";
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     >
       <body>
         <SiteHeader />
+        <PassBanner />
         {children}
         <SiteFooter />
         <TabBar />

@@ -1,4 +1,4 @@
-// Stub upstreams for the e2e suite: chart-svc, reading-tuvi and identity-svc on their own ports.
+// Stub upstreams for the e2e suite: chart-svc, reading-tuvi, identity-svc and payment-svc on their own ports.
 // Controls (any port, any method): /__down → every stub answers 503, /__up → back, /__reset → up
 // and in-memory state cleared. GET /__calls → the "METHOD /path" calls that port received since the
 // last reset (no query, no body). Request bodies are never logged (they carry birth data).
@@ -6,9 +6,10 @@ import { createServer } from "node:http";
 import * as chart from "./chart.mjs";
 import * as reading from "./reading.mjs";
 import * as identity from "./identity.mjs";
+import * as payment from "./payment.mjs";
 
 const state = { down: process.env.STUB_DOWN === "1" };
-const modules = [chart, reading, identity];
+const modules = [chart, reading, identity, payment];
 /** module NAME -> ["METHOD /path", ...] */
 const calls = new Map(modules.map((m) => [m.NAME, []]));
 
@@ -68,3 +69,4 @@ function serve(port, mod) {
 serve(Number(process.env.CHART_PORT ?? 18082), chart);
 serve(Number(process.env.READING_PORT ?? 18083), reading);
 serve(Number(process.env.IDENTITY_PORT ?? 18084), identity);
+serve(Number(process.env.PAYMENT_PORT ?? 18085), payment);

@@ -25,6 +25,36 @@ export function reset() {
   lastMagicToken = null;
 }
 
+const findAccount = (accountId) => [...accounts.values()].find((a) => a.account_id === accountId);
+
+const PASS_DAYS = { PASS_MONTH: ["MONTH", 30, 2], PASS_YEAR: ["YEAR", 365, null] };
+
+/** payment-svc's PaymentSucceeded, applied in process (the payment stub calls it): credits or a pass. */
+export function grant(accountId, productCode) {
+  const acc = findAccount(accountId);
+  if (!acc) return;
+  const now = new Date();
+  const credits = /^CREDIT_(\d+)$/.exec(productCode);
+  if (credits) {
+    const n = Number(credits[1]);
+    acc.credits += n;
+    acc.ledger.push({ delta: n, source: "CREDIT", reason: "purchase", topic: null, created_at: now.toISOString() });
+    return;
+  }
+  const [kind, days, questions] = PASS_DAYS[productCode] ?? [];
+  if (kind) acc.pass = { kind, ends_at: new Date(now.getTime() + days * 86400_000).toISOString(), questions_left: questions };
+}
+
+/** A refunded credit pack takes its credits back; false when some were already used. */
+export function reverse(accountId, productCode) {
+  const acc = findAccount(accountId);
+  const n = Number(/^CREDIT_(\d+)$/.exec(productCode)?.[1] ?? 0);
+  if (!acc || acc.credits < n) return false;
+  acc.credits -= n;
+  acc.ledger.push({ delta: -n, source: "CREDIT", reason: "reversal", topic: null, created_at: new Date().toISOString() });
+  return true;
+}
+
 const problem = (status, extra = {}) => ({ type: "urn:problem:stub", title: "stub", status, trace_id: "", ...extra });
 const newToken = () => randomBytes(32).toString("base64url");
 const subjectId = (who) => (who.kind === "guest" ? who.guest_id : who.account_id);
@@ -62,7 +92,13 @@ function verify(req, res, body, send) {
   let account = accounts.get(link.email);
   const created = !account;
   if (!account) {
-    account = { account_id: randomUUID(), credits: 1 }; // signup bonus
+    // signup bonus
+    account = {
+      account_id: randomUUID(),
+      credits: 1,
+      pass: null,
+      ledger: [{ delta: 1, source: "CREDIT", reason: "signup_bonus", topic: null, created_at: new Date().toISOString() }],
+    };
     accounts.set(link.email, account);
   }
   // The guest bearer at verify, else the guest that asked for the link: its profile follows the user
@@ -173,12 +209,15 @@ export function handle(req, res, body, send) {
         return true;
       }
       const acc = [...accounts.values()].find((a) => a.account_id === who.account_id);
-      send(res, 200, { credits: acc?.credits ?? 0, pass: null, features: [] });
+      send(res, 200, { credits: acc?.credits ?? 0, pass: acc?.pass ?? null, features: [] });
       return true;
     }
-    case "GET /me/ledger":
-      send(res, 403, problem(403), "application/problem+json");
+    case "GET /me/ledger": {
+      const acc = who.kind === "account" ? findAccount(who.account_id) : undefined;
+      if (!acc) send(res, 403, problem(403), "application/problem+json");
+      else send(res, 200, [...acc.ledger].reverse()); // newest first
       return true;
+    }
     default:
       return false;
   }

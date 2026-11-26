@@ -251,6 +251,8 @@ services:
         condition: service_started
       identity-svc:
         condition: service_started
+      payment-svc:
+        condition: service_started
     environment:
       PORT: "3000"
       CHART_SVC_URL: http://chart-svc:8082
@@ -261,6 +263,15 @@ services:
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-local-test-internal-token}
       WEB_ORIGIN: http://localhost:3001
       COOKIE_SECURE: "0"
+      # Admin page ("chưa khớp"): only for the account ids listed here; the token stays server-side.
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-local-test-admin-token}
+      ADMIN_ACCOUNT_IDS: ${ADMIN_ACCOUNT_IDS:-}
+      # Dev-only "giả lập chuyển khoản": posts a SePay webhook with the same secret as payment-svc.
+      # DEPLOY_ENV=prod force-disables it.
+      DEV_PAYMENT_SIMULATOR: "1"
+      DEPLOY_ENV: local
+      SEPAY_WEBHOOK_AUTH: ${SEPAY_WEBHOOK_AUTH:-apikey}
+      SEPAY_WEBHOOK_SECRET: ${SEPAY_WEBHOOK_SECRET:-local-test-sepay-secret}
     ports:
       # Host 3000 is taken by Grafana (lgtm), so web defaults to 3001.
       - "127.0.0.1:${WEB_PORT:-3001}:3000"

@@ -1,7 +1,6 @@
 import "server-only";
-import { createHmac } from "node:crypto";
-import { cfg } from "@/lib/config";
 import { callJson } from "@/lib/http";
+import { sepayAuthHeaders } from "@/lib/sepaySim";
 
 // Types mirror contracts/openapi/payment-svc.yaml. Money is a decimal string ("119000.00").
 export type ProductCode = "CREDIT_1" | "CREDIT_5" | "PASS_MONTH" | "PASS_YEAR";
@@ -122,12 +121,10 @@ export function completeRefundRequest(id: string): Promise<RefundRequest> {
  * Posts a SePay webhook body (dev transfer simulator), authenticated like SePay itself:
  * `Authorization: Apikey <secret>` or `X-SePay-Signature: hex(HMAC-SHA256(raw body))`.
  */
-export function postSepayWebhook(body: object): Promise<WebhookAck> {
-  const c = cfg();
-  const raw = JSON.stringify(body);
-  const headers: Record<string, string> =
-    c.sepayWebhookAuth === "hmac-sha256"
-      ? { "x-sepay-signature": createHmac("sha256", c.sepayWebhookSecret).update(raw).digest("hex") }
-      : { authorization: `Apikey ${c.sepayWebhookSecret}` };
+export function postSepayWebhook(
+  body: object,
+  headers: Record<string, string> = sepayAuthHeaders(JSON.stringify(body)),
+): Promise<WebhookAck> {
+  // callJson sends JSON.stringify(body): the exact string the headers were computed over.
   return callJson<WebhookAck>("payment", "/webhooks/sepay", { method: "POST", body, headers });
 }

@@ -75,6 +75,14 @@ export default async function AccountPage() {
         </div>
         <span className="r">{credits} lượt</span>
       </div>
+      <nav className="account-links" aria-label="Thanh toán">
+        <Link href="/vi/mua" className="tag">
+          Nạp lượt
+        </Link>
+        <Link href="/vi/tai-khoan/giao-dich" className="tag">
+          Giao dịch
+        </Link>
+      </nav>
       <form action={logoutAction} className="logout">
         <button type="submit" className="btn btn-ghost">
           Đăng xuất

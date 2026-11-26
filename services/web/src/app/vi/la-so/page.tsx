@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/identity";
 import { getViewer } from "@/lib/session";
@@ -20,6 +21,8 @@ export default async function ChartPage() {
   const profile = await getProfile(viewer.token);
   if (!profile) redirect("/vi");
   const birth: Birth = { ...profile.birth, calendar: profile.calendar };
+  const pass = viewer.kind === "account" ? viewer.entitlements.pass : null;
+  const hasPass = pass !== null && Date.parse(pass.ends_at) > Date.now();
   const [chart, reading, today] = await Promise.all([
     getChart(birth),
     getBasicReading(birth),
@@ -35,6 +38,11 @@ export default async function ChartPage() {
       <div id="hom-nay" className="anchor">
         <TodayPanel today={today} />
       </div>
+      {!hasPass && (
+        <p className="house-ad">
+          <Link href="/vi/mua">Hỏi sâu hơn mỗi ngày với thẻ năm, hỏi không giới hạn.</Link>
+        </p>
+      )}
       <Dialogue sections={reading.sections} />
     </main>
   );

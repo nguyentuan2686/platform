@@ -211,3 +211,53 @@ a.balance-chip { text-decoration: none; }
 .dialog-actions { display: flex; gap: 10px; }
 .interstitial-text { margin: 0 0 14px; font-size: 14.5px; line-height: 1.65; color: var(--paper); overflow-wrap: anywhere; }
 .interstitial-cancel { margin: 10px 0 0; }
+
+/* F1.5b Task 4: buy, checkout, transactions, renewal banner, admin */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.buy-page h1, .checkout h1, .admin h1 { font-size: 28px; margin: 18px 0 4px; }
+.buy { margin: 16px 0 0; }
+.packs { margin: 0; padding: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.pack { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 14px; border: 1px solid color-mix(in srgb, var(--metal) 35%, transparent); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--bg2) 70%, transparent); cursor: pointer; }
+.pack[data-on="true"] { border-color: var(--metal); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.pack input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.pack:has(input:focus-visible) { outline: 2px solid var(--metal); outline-offset: 2px; }
+.pack-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pack .pl { font-family: var(--plain); font-size: 16px; color: var(--paper); }
+.pack .ps { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.pack .pp { flex: none; font-family: var(--plain); font-size: 15px; color: var(--metal-soft); }
+.buy .consent { margin: 16px 0 14px; }
+.consent-links { flex-basis: 100%; margin: 0 0 0 28px; font-size: 12.5px; }
+.consent-links a { color: var(--metal-soft); }
+.checkout .lead { margin: 0 0 14px; }
+.qr-panel { padding: 16px; color: var(--ink); background: var(--paper); border-radius: var(--radius-lg); text-align: center; }
+.qr-panel h2 { margin: 0 0 12px; font-size: 20px; color: var(--ink); }
+.qr-panel .fine { color: var(--ink-soft); }
+.qr-panel .btn-ghost { margin: 12px 0 0; color: var(--ink); border-color: var(--ink-soft); }
+.qr { display: block; width: min(240px, 100%); height: auto; margin: 0 auto 12px; background: #fff; }
+.qr-fields { margin: 0; text-align: left; }
+.qr-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--ink-soft) 25%, transparent); font-size: 13.5px; }
+.qr-row dt { flex: none; color: var(--ink-soft); }
+.qr-row dd { margin: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.copy-button { flex: none; padding: 3px 9px; font-size: 12px; color: var(--ink); border-color: var(--ink-soft); }
+.order-status { margin: 16px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.order-status-text p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--paper); }
+.order-paid { color: var(--metal-soft); font-weight: 600; }
+.pass-banner { width: 100%; max-width: 520px; margin: 0 auto; padding: 8px 20px; font-size: 13px; color: var(--paper); background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.pass-banner a { color: var(--metal-soft); }
+.house-ad { margin: 14px 0 0; font-size: 13.5px; text-align: center; }
+.house-ad a { color: var(--metal-soft); }
+.account-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
+.tx-h { font-size: 20px; margin: 22px 0 8px; }
+.tx-wrap { overflow-x: auto; }
+.tx-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tx-table th, .tx-table td { padding: 8px 4px; text-align: left; vertical-align: top; border-bottom: 1px solid color-mix(in srgb, var(--metal) 18%, transparent); overflow-wrap: anywhere; }
+.tx-table th { color: var(--muted); font-weight: 500; font-family: var(--plain); }
+.tx-table td .link-button { display: block; margin: 4px 0 0; font-size: 12px; text-align: left; }
+.refund-ok { margin: 4px 0 0; font-size: 12px; color: var(--metal-soft); }
+.ledger { margin: 0; padding: 0; list-style: none; }
+.admin-list { margin: 0; padding: 0; list-style: none; }
+.admin-item { padding: 12px 0; border-bottom: 1px solid color-mix(in srgb, var(--metal) 18%, transparent); }
+.admin-item .t, .admin-item .s { margin: 0 0 4px; font-size: 13.5px; overflow-wrap: anywhere; }
+.admin-item .s { color: var(--muted); }
+.admin-form { margin: 8px 0 0; }
+.admin-ok { margin: 6px 0 0; font-size: 12.5px; color: var(--metal-soft); }
