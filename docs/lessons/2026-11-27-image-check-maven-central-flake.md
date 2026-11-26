@@ -22,3 +22,10 @@ retry settings again.
 
 ## Escalation
 none (first occurrence of this job; the verify-job variant is already at ladder step 3)
+
+## Recurrence (2026-11-27, Task 7, run 45893077574)
+`payment-svc / image-check` failed again with the same 429 `Too Many Requests` from Maven Central on
+`spring-boot-starter-parent:pom:4.2.0`; every other job passed. Handled as an external flake (`gh run rerun --failed`).
+Second occurrence: the CLAUDE.md CI-triage rule already covers it (ladder step 2). Since it recurs inside the docker
+build, the next step is a real fix (longer/exponential retry window in the image build, or a Maven cache shared with
+the verify job), tracked for the plan's final fix wave rather than done inside an unrelated task.
