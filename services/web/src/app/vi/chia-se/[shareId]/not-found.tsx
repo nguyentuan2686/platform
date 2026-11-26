@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Link đã tắt - Tử Vi Đẩu Số", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Link đã tắt", robots: { index: false, follow: false } };
 
 export default function ShareNotFound() {
   return (

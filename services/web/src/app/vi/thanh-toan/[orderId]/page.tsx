@@ -13,7 +13,7 @@ import { getViewer } from "@/lib/session";
 import { UpstreamProblem } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Thanh toán - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Thanh toán", robots: { index: false, follow: false } };
 
 export default async function CheckoutPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId } = await params;

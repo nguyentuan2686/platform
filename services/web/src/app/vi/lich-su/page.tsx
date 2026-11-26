@@ -8,7 +8,7 @@ import { getViewer } from "@/lib/session";
 import { TOPICS } from "@/lib/topics";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Bài đã hỏi - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Bài đã hỏi", robots: { index: false, follow: false } };
 
 export default async function HistoryPage() {
   const viewer = await getViewer();

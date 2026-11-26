@@ -27,15 +27,17 @@ async function shareOr404(params: Props["params"]) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { shareId, share } = await shareOr404(params);
   const year = share.chart.yearCanChi.nameVi;
-  const title = `Lá số tử vi · năm ${year} · Tử Vi Đẩu Số`;
+  // The layout template adds " · Tử Vi Đẩu Số" to the tab title; link previews carry it in full.
+  const title = `Lá số tử vi · năm ${year}`;
+  const shareTitle = `${title} · Tử Vi Đẩu Số`;
   const images = [{ url: cardPath(shareId), width: 1080, height: 1920 }];
   return {
     metadataBase: new URL(cfg().webOrigin),
     title,
     description: share.summary,
     robots: { index: false, follow: false },
-    openGraph: { title, description: share.summary, type: "website", locale: "vi_VN", images },
-    twitter: { card: "summary_large_image", title, description: share.summary, images: [cardPath(shareId)] },
+    openGraph: { title: shareTitle, description: share.summary, type: "website", locale: "vi_VN", images },
+    twitter: { card: "summary_large_image", title: shareTitle, description: share.summary, images: [cardPath(shareId)] },
   };
 }
 

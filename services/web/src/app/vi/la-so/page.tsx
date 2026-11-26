@@ -16,7 +16,7 @@ import TodayPanel from "@/components/TodayPanel";
 
 export const dynamic = "force-dynamic";
 // The owner's chart: personal, never indexed.
-export const metadata: Metadata = { title: "Lá số của con - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Lá số của con", robots: { index: false, follow: false } };
 
 /** The active public link; trouble with identity hides the panel state (shows "create"), never the chart. */
 async function activeShare(token: string): Promise<ShareLink | null> {

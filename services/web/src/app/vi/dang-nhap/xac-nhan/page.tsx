@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 // The URL carries the one-time token: never sent as a Referer, never indexed (next.config also
 // sends the Referrer-Policy header). Nothing is redeemed on GET.
 export const metadata: Metadata = {
-  title: "Xác nhận đăng nhập - Lão Thiên Cơ",
+  title: "Xác nhận đăng nhập",
   referrer: "no-referrer",
   robots: { index: false, follow: false },
 };

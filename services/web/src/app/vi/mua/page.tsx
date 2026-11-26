@@ -7,7 +7,7 @@ import { isProductCode, PRODUCT_ORDER, productCopy } from "@/lib/products";
 import { getViewer } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Nạp lượt - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Nạp lượt", robots: { index: false, follow: false } };
 
 export default async function BuyPage() {
   const viewer = await getViewer();

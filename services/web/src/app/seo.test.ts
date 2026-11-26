@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 import sitemap from "@/app/sitemap";
 import robots from "@/app/robots";
@@ -54,5 +55,32 @@ describe("static sitemap", () => {
   it("is not force-dynamic: the runtime image has no knowledge files", async () => {
     const mod = (await import("@/app/sitemap")) as { dynamic?: string };
     expect(mod.dynamic).toBeUndefined();
+  });
+});
+
+describe("page titles", () => {
+  // The root layout's template ("%s · Tử Vi Đẩu Số") adds the one site suffix to every page title.
+  const SUFFIX = /Lão Thiên Cơ|Tử Vi Đẩu Số/;
+  type PageModule = {
+    metadata?: { title?: unknown };
+    generateMetadata?: (p: { params: Promise<Record<string, string>> }) => Promise<{ title?: unknown }>;
+    generateStaticParams?: () => Record<string, string>[];
+  };
+  const modules = import.meta.glob<PageModule>("./vi/**/{page,not-found}.tsx");
+  const paths = Object.keys(modules);
+
+  it("finds the pages", () => {
+    expect(paths.length).toBeGreaterThanOrEqual(20);
+  });
+
+  it.each(paths)("%s carries no site suffix of its own", async (path) => {
+    const mod = await modules[path]!();
+    const titles: unknown[] = [];
+    if (mod.metadata && "title" in mod.metadata) titles.push(mod.metadata.title);
+    if (mod.generateMetadata && mod.generateStaticParams) {
+      const first = mod.generateStaticParams()[0];
+      if (first) titles.push((await mod.generateMetadata({ params: Promise.resolve(first) })).title);
+    }
+    for (const t of titles) expect(typeof t === "string" ? t : JSON.stringify(t ?? "")).not.toMatch(SUFFIX);
   });
 });

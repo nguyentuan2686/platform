@@ -88,7 +88,8 @@ describe("/vi/chia-se/[shareId]", () => {
 
   it("metadata: title, summary, og:image 1080x1920, noindex", async () => {
     const md = await generateMetadata(params());
-    expect(md.title).toBe("Lá số tử vi · năm Giáp Tuất · Tử Vi Đẩu Số");
+    expect(md.title).toBe("Lá số tử vi · năm Giáp Tuất"); // the layout template adds the one suffix
+    expect(md.openGraph?.title).toBe("Lá số tử vi · năm Giáp Tuất · Tử Vi Đẩu Số");
     expect(md.description).toBe("Mệnh con vững vàng.");
     expect(md.openGraph?.images).toEqual([{ url: `/vi/chia-se/${ID}/the.png`, width: 1080, height: 1920 }]);
     expect(md.robots).toEqual({ index: false, follow: false });

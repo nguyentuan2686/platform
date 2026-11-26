@@ -10,7 +10,7 @@ import { getViewer } from "@/lib/session";
 import { topicLabel } from "@/lib/topics";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Giao dịch - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Giao dịch", robots: { index: false, follow: false } };
 
 export default async function TransactionsPage() {
   const viewer = await getViewer();

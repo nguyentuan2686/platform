@@ -10,7 +10,7 @@ import { getChart } from "@/lib/upstream";
 import { changeCalendar, logoutAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Tài khoản - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Tài khoản", robots: { index: false, follow: false } };
 
 /** giờ and năm can chi from chart-svc; chart trouble hides them only (logged by http.ts). */
 async function summary(p: Profile): Promise<ChartSummary> {

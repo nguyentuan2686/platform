@@ -10,7 +10,7 @@ import { AI_CONSENT_COOKIE } from "@/lib/qaRoute";
 import { getViewer } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Hỏi thầy - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Hỏi thầy", robots: { index: false, follow: false } };
 
 /** A credit, or a pass that is running and still has questions (null = unlimited). */
 function canPayFor(e: Entitlements): boolean {

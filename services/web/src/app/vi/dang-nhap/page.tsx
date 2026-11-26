@@ -7,7 +7,7 @@ import { safeNext } from "@/lib/safeNext";
 import { getViewer } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Đăng nhập - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Đăng nhập", robots: { index: false, follow: false } };
 
 type Search = Promise<{ next?: string | string[]; loi?: string | string[] }>;
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);

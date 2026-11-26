@@ -13,7 +13,7 @@ import { TOPICS } from "@/lib/topics";
 import { UpstreamProblem } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Bài đã hỏi - Lão Thiên Cơ", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Bài đã hỏi", robots: { index: false, follow: false } };
 
 export default async function ReadingPage({ params }: { params: Promise<{ readingId: string }> }) {
   const { readingId } = await params;
