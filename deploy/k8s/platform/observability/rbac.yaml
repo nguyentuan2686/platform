@@ -1,0 +1,7 @@
+# The collector reads pod logs from the node's filesystem and never calls the Kubernetes API,
+# so it gets a dedicated ServiceAccount with no token and no RBAC bindings.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+automountServiceAccountToken: false

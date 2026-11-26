@@ -1,0 +1,3 @@
+# Cluster properties applied on first bootstrap. Redpanda measures consumer lag itself (language-neutral).
+enable_consumer_group_metrics: [group, partition, consumer_lag]
+consumer_group_lag_collection_interval_sec: 10

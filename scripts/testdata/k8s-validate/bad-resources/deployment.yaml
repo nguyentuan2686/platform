@@ -1,0 +1,16 @@
+# Self-test fixture: violates only the 'resources' policy check.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fixture, namespace: apps}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: app
+          image: ghcr.io/example/chart-svc:1.0
+          resources: {requests: {memory: 64Mi, cpu: 10m}, limits: {memory: 128Mi}}
+          livenessProbe: {httpGet: {path: /health/live, port: 8080}}
+          readinessProbe: {httpGet: {path: /health/ready, port: 8080}}

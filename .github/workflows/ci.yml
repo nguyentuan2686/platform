@@ -28,6 +28,7 @@ jobs:
       identity: ${{ steps.filter.outputs.identity }}
       payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
+      k8s: ${{ steps.filter.outputs.k8s }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -78,6 +79,13 @@ jobs:
             web:
               - 'services/web/**'
               - 'knowledge/tuvi/**'
+            k8s:
+              - 'deploy/k8s/**'
+              - 'deploy/local/**'
+              - 'scripts/k8s-*.sh'
+              - 'scripts/e2e-*.sh'
+              - 'scripts/smoke-*.sh'
+              - '.github/workflows/_k8s-e2e.yml'
             root:
               - 'pom.xml'
               - '.github/**'
@@ -170,10 +178,41 @@ jobs:
       dockerfile: services/web/Dockerfile
       publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
+  k8s-manifests:
+    needs: changes
+    if: needs.changes.outputs.k8s == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.7.0
+          # sha256 of kubeconform-linux-amd64.tar.gz, as published in the release CHECKSUMS file
+          KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+        run: |
+          curl -fsSL -o kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+      - name: Validate manifests (self-test, schema, policy)
+        run: |
+          bash scripts/k8s-validate.sh --self-test
+          bash scripts/k8s-validate.sh
+      - name: Trivy config scan
+        # Same SHA pin as the Java workflow (tag-hijack incident Mar 2026).
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: deploy/k8s
+          severity: CRITICAL
+          exit-code: '1'
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled
