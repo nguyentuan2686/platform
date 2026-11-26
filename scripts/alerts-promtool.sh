@@ -37,6 +37,7 @@ else
 fi
 [ -s "$tmp/rules.generated.yaml" ] || { echo "FAIL alerts-promtool: conversion of $RULES produced nothing" >&2; exit 1; }
 cp "${tests[@]}" "$tmp/"
+chmod -R a+rX "$tmp" # the promtool image runs as nobody; mktemp -d is 0700
 
 docker run --rm --entrypoint promtool -v "$mount:/work:ro" -w /work "$PROMETHEUS_IMAGE" check rules rules.generated.yaml
 files=()
