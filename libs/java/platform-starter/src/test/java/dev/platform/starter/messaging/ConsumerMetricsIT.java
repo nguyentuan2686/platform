@@ -32,9 +32,13 @@ import org.testcontainers.redpanda.RedpandaContainer;
 class ConsumerMetricsIT {
 
   static final Duration DEADLINE = Duration.ofSeconds(30);
-  static final String TOPIC = "metrics-it-" + UUID.randomUUID();
-  static final String TOPIC_PROPERTY = "metrics.it.topic";
-  static final String GROUP = "metrics-it-group";
+  // Each test owns a topic and a consumer group, so the cumulative reader never mixes them and
+  // the tests pass in any order.
+  static final String RUN = UUID.randomUUID().toString();
+  static final String OK_TOPIC = "metrics-it-ok-" + RUN;
+  static final String OK_GROUP = "metrics-it-ok-group";
+  static final String BOOM_TOPIC = "metrics-it-boom-" + RUN;
+  static final String BOOM_GROUP = "metrics-it-boom-group";
 
   static final RedpandaContainer REDPANDA =
       new RedpandaContainer("docker.redpanda.com/redpandadata/redpanda:v26.1.1")
@@ -47,7 +51,8 @@ class ConsumerMetricsIT {
   @DynamicPropertySource
   static void props(DynamicPropertyRegistry registry) {
     registry.add("spring.kafka.bootstrap-servers", REDPANDA::getBootstrapServers);
-    registry.add(TOPIC_PROPERTY, () -> TOPIC);
+    registry.add("metrics.it.ok-topic", () -> OK_TOPIC);
+    registry.add("metrics.it.boom-topic", () -> BOOM_TOPIC);
   }
 
   @SpringBootConfiguration
@@ -77,42 +82,44 @@ class ConsumerMetricsIT {
 
   static class Listener {
 
-    @KafkaListener(topics = "${metrics.it.topic}", groupId = GROUP)
-    void onMessage(String payload) {
-      if ("boom".equals(payload)) {
-        throw new IllegalStateException("boom");
-      }
+    @KafkaListener(topics = "${metrics.it.ok-topic}", groupId = OK_GROUP)
+    void onOk(String payload) {}
+
+    @KafkaListener(topics = "${metrics.it.boom-topic}", groupId = BOOM_GROUP)
+    void onBoom(String payload) {
+      throw new IllegalStateException("boom");
     }
   }
 
   @Autowired KafkaTemplate<String, String> kafka;
 
-  long count(String outcome) {
+  long count(String topic, String group, String outcome) {
     return App.READER.collectAllMetrics().stream()
         .filter(m -> m.getName().equals("messaging.process.duration"))
         .flatMap(m -> m.getHistogramData().getPoints().stream())
         .filter(
             p ->
                 outcome.equals(p.getAttributes().get(ConsumerMetricsInterceptor.OUTCOME))
-                    && TOPIC.equals(p.getAttributes().get(ConsumerMetricsInterceptor.TOPIC))
-                    && GROUP.equals(p.getAttributes().get(ConsumerMetricsInterceptor.GROUP)))
+                    && topic.equals(p.getAttributes().get(ConsumerMetricsInterceptor.TOPIC))
+                    && group.equals(p.getAttributes().get(ConsumerMetricsInterceptor.GROUP)))
         .mapToLong(HistogramPointData::getCount)
         .sum();
   }
 
   @Test
   void listener_success_counts_processed() {
-    kafka.send(TOPIC, "ok");
-    Awaitility.await().atMost(DEADLINE).until(() -> count("processed") >= 1);
-    assertThat(count("processed")).isEqualTo(1);
-    assertThat(count("failed")).isZero();
+    kafka.send(OK_TOPIC, "ok");
+    Awaitility.await().atMost(DEADLINE).until(() -> count(OK_TOPIC, OK_GROUP, "processed") >= 1);
+    assertThat(count(OK_TOPIC, OK_GROUP, "processed")).isEqualTo(1);
+    assertThat(count(OK_TOPIC, OK_GROUP, "failed")).isZero();
   }
 
   @Test
   void failing_listener_counts_failed_per_attempt() {
-    kafka.send(TOPIC, "boom");
+    kafka.send(BOOM_TOPIC, "boom");
     // One failure per attempt: the first delivery and its single retry.
-    Awaitility.await().atMost(DEADLINE).until(() -> count("failed") >= 2);
-    assertThat(count("failed")).isEqualTo(2);
+    Awaitility.await().atMost(DEADLINE).until(() -> count(BOOM_TOPIC, BOOM_GROUP, "failed") >= 2);
+    assertThat(count(BOOM_TOPIC, BOOM_GROUP, "failed")).isEqualTo(2);
+    assertThat(count(BOOM_TOPIC, BOOM_GROUP, "processed")).isZero();
   }
 }
