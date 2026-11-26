@@ -1,0 +1,97 @@
+# Rendered by scripts/pg-restore.sh (yq sets the name, namespace and RESTORE_* values). Not part of any Kustomize build.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pg-restore
+  namespace: data
+  labels: {app: pg-restore}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: {app: pg-restore}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+        runAsNonRoot: true
+      initContainers:
+        - name: fetch
+          image: rclone/rclone:1.70.3@sha256:34c729127386abec1c610b2aa024e39b4498dc2b4a72a0798ae21fbdc1b0493b
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              RCLONE_S3_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID"
+              RCLONE_S3_SECRET_ACCESS_KEY="$S3_SECRET_ACCESS_KEY"
+              export RCLONE_S3_ACCESS_KEY_ID RCLONE_S3_SECRET_ACCESS_KEY
+              remote=":s3,provider=Other,endpoint=\"$S3_ENDPOINT\",region=$S3_REGION,env_auth=false:$S3_BUCKET/pg"
+              stamp="$RESTORE_STAMP"
+              if [ "$stamp" = latest ]; then
+                stamp=$(rclone lsf --dirs-only "$remote" | sed 's#/$##' | sort | tail -n 1)
+              fi
+              [ -n "$stamp" ] || { echo "restore: no backups under pg/"; exit 1; }
+              echo "restore: using pg/$stamp/$RESTORE_DB.dump"
+              rclone copyto "$remote/$stamp/$RESTORE_DB.dump" /restore/db.dump
+          env:
+            - {name: HOME, value: /tmp}
+            - {name: RESTORE_DB, value: ""}
+            - {name: RESTORE_STAMP, value: latest}
+          envFrom:
+            - secretRef: {name: ops-secrets}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            runAsUser: 65532
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: restore, mountPath: /restore}
+            - {name: tmp, mountPath: /tmp}
+      containers:
+        - name: restore
+          image: postgres:17-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              if [ "$RESTORE_OVERWRITE" = 1 ]; then
+                echo "restore: overwriting $RESTORE_TARGET from the dump"
+                pg_restore --clean --if-exists --no-owner --role="$RESTORE_OWNER" -d "$RESTORE_TARGET" /restore/db.dump
+              else
+                dropdb --if-exists "$RESTORE_TARGET"
+                createdb -O "$RESTORE_OWNER" "$RESTORE_TARGET"
+                pg_restore --no-owner --role="$RESTORE_OWNER" -d "$RESTORE_TARGET" /restore/db.dump
+              fi
+              echo "restore: restored $RESTORE_DB into $RESTORE_TARGET"
+          env:
+            - {name: PGHOST, value: postgres.data.svc.cluster.local}
+            - {name: PGUSER, value: postgres}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: postgres-secrets, key: POSTGRES_PASSWORD}}
+            - {name: RESTORE_DB, value: ""}
+            - {name: RESTORE_TARGET, value: ""}
+            - {name: RESTORE_OWNER, value: ""}
+            - {name: RESTORE_OVERWRITE, value: "0"}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            runAsUser: 70
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - {name: restore, mountPath: /restore, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: restore
+          emptyDir: {sizeLimit: 2Gi}
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}

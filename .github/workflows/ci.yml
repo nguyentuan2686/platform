@@ -93,6 +93,7 @@ jobs:
               - 'deploy/argocd/**'
               - 'deploy/k8s/overlays/prod/**' # secrets.tsv and domain.yaml feed the script tests
               - 'deploy/k8s/platform/grafana/alerting/**' # rules.yaml feeds the promtool alert tests
+              - 'deploy/k8s/platform/ops/**' # the backup/heartbeat scripts are under test
               - '.github/**'
             infra:
               - 'infra/**'
@@ -260,7 +261,7 @@ jobs:
           sudo install -m 0755 actionlint /usr/local/bin/actionlint
       - name: shellcheck
         run: |
-          mapfile -t files < <(git ls-files 'scripts/**/*.sh' 'scripts/*.sh' 'infra/**/*.sh' scripts/public-url)
+          mapfile -t files < <(git ls-files 'scripts/**/*.sh' 'scripts/*.sh' 'infra/**/*.sh' 'deploy/k8s/platform/ops/*.sh' scripts/public-url)
           shellcheck --severity=warning "${files[@]}"
       - name: actionlint
         run: actionlint

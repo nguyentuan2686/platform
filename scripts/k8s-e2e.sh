@@ -22,7 +22,7 @@ fi
 
 # --- 2. wait for data, observability, then apps
 # (rollout status takes one resource per call)
-for r in statefulset/postgres statefulset/redpanda deploy/mailpit; do kubectl -n data rollout status "$r" --timeout=300s; done
+for r in statefulset/postgres statefulset/redpanda deploy/mailpit deploy/minio; do kubectl -n data rollout status "$r" --timeout=300s; done
 for r in deploy/lgtm ds/otel-collector; do kubectl -n observability rollout status "$r" --timeout=300s; done
 kubectl -n apps wait --for=condition=Available deploy --all --timeout=600s
 
@@ -102,4 +102,8 @@ restarts=$(kubectl -n apps get pods -o jsonpath='{range .items[*]}{.metadata.nam
 echo "$restarts"
 if grep -Eq '=[1-9][0-9]*( |$)' <<<"$restarts"; then fail "app-restarts-0: $(grep -E '=[1-9]' <<<"$restarts" | paste -sd';' -)"; fi
 echo "OK app-restarts-0"
+
+# --- 6. ops CronJobs: backup to MinIO, restore into scratch dbs, heartbeat. Runs last: it scales the apps to 0.
+bash scripts/e2e-backup.sh || fail e2e-backup
+echo "OK e2e-backup"
 echo "k8s-e2e: ok"

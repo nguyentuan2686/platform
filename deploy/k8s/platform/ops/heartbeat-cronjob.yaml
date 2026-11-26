@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: heartbeat
+  labels: {app: heartbeat}
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels: {app: heartbeat}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile: {type: RuntimeDefault}
+            runAsNonRoot: true
+          containers:
+            - name: heartbeat
+              image: curlimages/curl:8.14.1@sha256:9a1ed35addb45476afa911696297f8e115993df459278ed036182dd2cd22b67b
+              command: [/bin/sh, /scripts/heartbeat.sh]
+              envFrom:
+                - secretRef: {name: ops-secrets, optional: true}
+              resources:
+                requests: {cpu: 10m, memory: 16Mi}
+                limits: {memory: 16Mi}
+              securityContext:
+                runAsUser: 65532
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+          volumes:
+            - name: scripts
+              configMap: {name: ops-scripts, defaultMode: 0555}

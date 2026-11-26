@@ -20,3 +20,21 @@ patches:
       apiVersion: v1
       kind: Namespace
       metadata: {name: observability}
+  # pg-backup: BACKUP_REQUIRED=0 until ops-secrets (S3_*) is sealed, so the job skips instead of failing.
+  - patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata: {name: pg-backup, namespace: data}
+      spec:
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                initContainers:
+                  - name: dump
+                    env:
+                      - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1
+                containers:
+                  - name: upload
+                    env:
+                      - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1
