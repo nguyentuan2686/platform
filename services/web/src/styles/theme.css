@@ -319,3 +319,11 @@ a.balance-chip { text-decoration: none; }
 .public-chart .public-meta { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
 .public-chart .house-ad { margin: 18px 0 0; }
 .public-chart .house-ad a.btn { display: flex; text-decoration: none; }
+
+.knowledge .knowledge-voice { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+.knowledge .knowledge-list { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0 0; padding: 0; list-style: none; }
+.knowledge .knowledge-list a { color: var(--metal-soft); }
+.knowledge .house-ad { margin: 18px 0 0; }
+.knowledge .house-ad a.btn { display: flex; text-decoration: none; }
+.home-knowledge { margin: 18px 0 0; text-align: center; font-size: 13.5px; }
+.home-knowledge a { color: var(--metal-soft); }

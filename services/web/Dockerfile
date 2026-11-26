@@ -2,6 +2,12 @@
 FROM node:22-alpine AS build
 WORKDIR /src
 ENV NEXT_TELEMETRY_DISABLED=1
+# SEO knowledge pages are generated at build time from the approved corpus.
+COPY knowledge/tuvi /knowledge/tuvi
+ENV KNOWLEDGE_DIR=/knowledge/tuvi
+# Canonical URLs of the static pages are baked at build time: pass the public origin (empty = localhost default).
+ARG WEB_ORIGIN=
+ENV WEB_ORIGIN=${WEB_ORIGIN}
 COPY services/web/package.json services/web/package-lock.json ./
 RUN npm ci
 COPY services/web/ ./

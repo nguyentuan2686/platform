@@ -39,6 +39,9 @@ export default async function ViHome() {
         </p>
       )}
       <BirthForm />
+      <p className="home-knowledge">
+        <Link href="/vi/kien-thuc">Kiến thức tử vi</Link>
+      </p>
     </main>
   );
 }
