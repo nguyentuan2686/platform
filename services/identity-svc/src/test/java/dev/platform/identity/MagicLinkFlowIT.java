@@ -221,4 +221,35 @@ class MagicLinkFlowIT {
       jdbc.update("delete from magic_link where email like 'cap-fill-%'");
     }
   }
+
+  @Test
+  void one_client_ip_gets_at_most_twenty_links_a_day_and_only_its_hash_is_stored()
+      throws Exception {
+    int before = MAILS.size();
+    for (int i = 0; i < 22; i++) {
+      var request =
+          HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/auth/magic-links"))
+              .header("Content-Type", "application/json")
+              .header("X-Client-Ip", "203.0.113.99")
+              .POST(
+                  HttpRequest.BodyPublishers.ofString(
+                      "{\"email\":\"client-cap-" + i + "@example.com\",\"lang\":\"vi\"}"))
+              .build();
+      assertThat(
+              HttpClient.newHttpClient()
+                  .send(request, HttpResponse.BodyHandlers.ofString())
+                  .statusCode())
+          .isEqualTo(202);
+    }
+
+    assertThat(MAILS).hasSize(before + 20);
+    assertThat(
+            jdbc.queryForList(
+                "select distinct client_key from magic_link where email like 'client-cap-%'",
+                String.class))
+        .singleElement()
+        .asString()
+        .matches("[0-9a-f]{64}")
+        .doesNotContain("203.0.113.99");
+  }
 }

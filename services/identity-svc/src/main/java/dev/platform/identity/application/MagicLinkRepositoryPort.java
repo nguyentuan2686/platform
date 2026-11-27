@@ -1,5 +1,6 @@
 package dev.platform.identity.application;
 
+import dev.platform.identity.domain.ClientKey;
 import dev.platform.identity.domain.Email;
 import java.time.Instant;
 import java.util.List;
@@ -14,6 +15,9 @@ public interface MagicLinkRepositoryPort {
 
   /** Creation times of links sent to the email after {@code since}. */
   List<Instant> requestTimesSince(Email email, Instant since);
+
+  /** Number of links requested by the client after {@code since} (the per-client cap). */
+  long countForClientSince(ClientKey client, Instant since);
 
   /** Number of links sent to any address after {@code since} (the global daily cap). */
   long countSince(Instant since);

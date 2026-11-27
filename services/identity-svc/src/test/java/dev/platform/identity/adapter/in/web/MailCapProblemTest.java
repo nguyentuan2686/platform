@@ -69,7 +69,7 @@ class MailCapProblemTest {
   @Test
   void cap_reached_is_429_problem_and_counted() throws Exception {
     long before = capCounter();
-    doThrow(new MailCapReachedException()).when(magicLinks).request(any(), any(), any());
+    doThrow(new MailCapReachedException()).when(magicLinks).request(any(), any(), any(), any());
 
     mvc.perform(
             post("/auth/magic-links")

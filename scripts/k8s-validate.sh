@@ -167,7 +167,7 @@ JQ_SECRETSMANIFEST="$JQ_DEFS"'
       elif ($r[$n].keys | index($ref.key)) == null then "POLICY: secrets-manifest \($o | id): container \($c.name): secretKeyRef \($n) key \($ref.key) is not in its secrets.tsv row"
       else empty end )'
 
-# prod-domain: Ingress hosts (rules and tls), the host of WEB_ORIGIN / WEB_BASE_URL, the domain of MAIL_FROM and the
+# prod-domain: Ingress hosts (rules and tls), IngressRoute Host(`...`) matchers, the host of WEB_ORIGIN / WEB_BASE_URL, the domain of MAIL_FROM and the
 # cloudflared --http-host-header value all equal $d (APP_DOMAIN). With $strict (the real overlay), the Ingress,
 # WEB_ORIGIN, WEB_BASE_URL and MAIL_FROM must exist, so a renamed field cannot silently escape the replacement.
 JQ_PRODDOMAIN="$JQ_DEFS"'
@@ -176,6 +176,12 @@ def hostof: (split("/") | .[2] // "");
   | ( (if $o.kind == "Ingress" then
         (($o.spec.rules // [])[] | {what: "Ingress", where: ($o | id), field: "rules[].host", got: (.host // "")}),
         (($o.spec.tls // [])[] | (.hosts // [])[] | {what: "Ingress", where: ($o | id), field: "tls[].hosts[]", got: .})
+      else empty end),
+      (if $o.kind == "IngressRoute" then
+        (($o.spec.routes // [])[] | (.match // "") as $m
+         | if ($m | contains("||")) then {what: "IngressRoute", where: ($o | id), field: "routes[].match", got: "(an || alternative matches other hosts)"}
+           elif ($m | test("Host\\(`[^`]*`\\)")) then ($m | [scan("Host\\(`([^`]*)`\\)")[0]][] | {what: "IngressRoute", where: ($o | id), field: "routes[].match Host", got: .})
+           else {what: "IngressRoute", where: ($o | id), field: "routes[].match Host", got: "(no Host matcher)"} end)
       else empty end),
       (if ($o.kind | IN("Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob","ReplicaSet")) then
         (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
@@ -218,10 +224,11 @@ JQ_PRODPROTECTED="$JQ_DEFS"'
 # prod-ingress: the public surface is an allowlist. Every Ingress is class traefik with no defaultBackend; every path is
 # web:3000 (Prefix) or exactly payment-svc:8085 Exact /webhooks/sepay (payment-svc also serves /webhooks/paypal, /admin/*,
 # /orders*). Every Ingress carries a rateLimit Middleware of this build keyed on Cf-Connecting-IP (behind cloudflared an
-# IP criterion would bucket every client together), and the payment-svc route a buffering body cap <= 64 KiB.
+# IP criterion would bucket every client together), and the payment-svc route a buffering body cap <= 64 KiB. IngressRoutes:
+# web:3000 only, each route rate limited the same way; no IngressRouteTCP/UDP, LoadBalancer, NodePort or externalIPs.
 JQ_PRODINGRESS="$JQ_DEFS"'
-(map(select(type == "object" and .kind == "Middleware")) | map({key: "\(ns)-\(.metadata.name)@kubernetescrd", value: (.spec // {})}) | from_entries) as $mw
-| .[] | select(type == "object" and .kind == "Ingress") as $o
+. as $all | (map(select(type == "object" and .kind == "Middleware")) | map({key: "\(ns)-\(.metadata.name)@kubernetescrd", value: (.spec // {})}) | from_entries) as $mw
+| ( $all[] | select(type == "object" and .kind == "Ingress") as $o
 | ((($o.metadata.annotations // {})["traefik.ingress.kubernetes.io/router.middlewares"] // "") | split(",") | map(gsub("\\s"; "")) | map(select(length > 0))) as $refs
 | [$refs[] | $mw[.] | select(. != null)] as $specs
 | [($o.spec.rules // [])[] | (.http.paths // [])[] | {path: (.path // ""), type: (.pathType // ""), svc: (.backend.service.name // ""), port: (.backend.service.port.number // .backend.service.port.name // "")}] as $paths
@@ -237,7 +244,27 @@ JQ_PRODINGRESS="$JQ_DEFS"'
     (if ([$paths[] | select(.svc == "payment-svc")] | length) > 0
         and ([$specs[] | select((.buffering.maxRequestBodyBytes // 0) > 0 and .buffering.maxRequestBodyBytes <= 65536)] | length) == 0
        then "POLICY: prod-ingress \($o | id): the payment-svc route needs a buffering Middleware with 0 < maxRequestBodyBytes <= 65536" else empty end)
-  )'
+  )),
+  # Traefik IngressRoute (header/method matches a plain Ingress cannot express): web:3000 only, each route behind a
+  # Cf-Connecting-IP rateLimit Middleware of this build (same namespace unless stated). TCP/UDP routes and Services
+  # reachable from outside the cluster (LoadBalancer, NodePort, externalIPs) are never part of the public surface.
+  ( $all[] | select(type == "object" and .kind == "IngressRoute") as $o
+    | ($o.spec.routes // []) as $routes
+    | (if ($routes | length) == 0 then "POLICY: prod-ingress \($o | id): no routes" else empty end),
+      ($routes | to_entries[] | .key as $i | .value as $r
+       | ([($r.middlewares // [])[] | "\(.namespace // ($o | ns))-\(.name)@kubernetescrd"]) as $refs
+       | ( (if ($r.kind // "") != "Rule" then "POLICY: prod-ingress \($o | id): route \($i) kind must be Rule" else empty end),
+           (if (($r.services // []) | length) == 0 then "POLICY: prod-ingress \($o | id): route \($i) has no services" else empty end),
+           (($r.services // [])[] | select(((.name // "") == "web" and (.port // "") == 3000 and ((.kind // "Service") == "Service")) | not)
+            | "POLICY: prod-ingress \($o | id): route \($i) service \(.name // ""):\(.port // "") is not allowed (only web:3000)"),
+           ($refs[] | select($mw[.] == null) | "POLICY: prod-ingress \($o | id): route \($i) middleware \(.) is not a Middleware of this build"),
+           (if ([$refs[] | $mw[.] | select(. != null and .rateLimit != null and (.rateLimit.sourceCriterion.requestHeaderName // "") == "Cf-Connecting-IP")] | length) == 0
+              then "POLICY: prod-ingress \($o | id): route \($i) needs a rateLimit Middleware with sourceCriterion.requestHeaderName Cf-Connecting-IP" else empty end) ) ) ),
+  ( $all[] | select(type == "object") as $o
+    | if ($o.kind | IN("IngressRouteTCP", "IngressRouteUDP")) then "POLICY: prod-ingress \($o | id): TCP/UDP routes are not allowed"
+      elif $o.kind == "Service" and (($o.spec.type // "ClusterIP") | IN("LoadBalancer", "NodePort")) then "POLICY: prod-ingress \($o | id): type \($o.spec.type) is not allowed (ClusterIP only; the public entry is cloudflared)"
+      elif $o.kind == "Service" and (($o.spec.externalIPs // []) | length) > 0 then "POLICY: prod-ingress \($o | id): externalIPs are not allowed"
+      else empty end )'
 
 # prod-backup: a sealed ops-secrets (ns data) <=> every BACKUP_REQUIRED of the pg-backup CronJob is "1". Sealed but 0:
 # a broken S3 config would skip silently with real data at stake; 1 without the secret: every nightly backup fails.
@@ -380,10 +407,10 @@ check_dashboards() {
 
 
 # alerts: Grafana alert rules as code. $1 = dir holding alerting/rules.yaml and metric-names.txt. rules.yaml parses, its
-# uids are exactly the six of the spec (§10) plus backup-skipped and mail-cap-reached (final review I8, I1), every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
+# uids are exactly the six of the spec (§10) plus backup-skipped, mail-cap-reached and mail-client-cap-hits, every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
 # identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[` and `_bytes` names).
 # Fails closed: missing files or parse errors fail.
-ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high mail-cap-reached pod-restart-loop"
+ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high mail-cap-reached mail-client-cap-hits pod-restart-loop"
 check_alerts() {
   local dir="$1" f="$1/alerting/rules.yaml" rc=0 res m names json uids
   echo "== $dir (alerts)"

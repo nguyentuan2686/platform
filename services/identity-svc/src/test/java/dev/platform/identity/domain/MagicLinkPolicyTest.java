@@ -53,6 +53,13 @@ class MagicLinkPolicyTest {
   }
 
   @Test
+  void client_cap_is_twenty_per_rolling_day() {
+    assertThat(MagicLinkPolicy.CLIENT_DAILY_MAX).isEqualTo(20);
+    assertThat(MagicLinkPolicy.underClientCap(19)).isTrue();
+    assertThat(MagicLinkPolicy.underClientCap(20)).isFalse();
+  }
+
+  @Test
   void daily_cap_must_be_positive() {
     assertThatThrownBy(() -> MagicLinkPolicy.requireValidDailyCap(0))
         .isInstanceOf(IllegalArgumentException.class);
