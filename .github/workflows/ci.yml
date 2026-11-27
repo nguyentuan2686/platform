@@ -101,6 +101,9 @@ jobs:
               - 'templates/**'
               - 'scripts/new-service.sh'
               - 'scripts/test/new-service.test.sh'
+              - 'libs/**' # the templates build on platform-starter / platform-core
+              - 'Cargo.toml'
+              - 'Cargo.lock'
             k8s:
               - 'deploy/k8s/**'
               - 'deploy/argocd/**'
