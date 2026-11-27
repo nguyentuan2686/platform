@@ -1,0 +1,18 @@
+  __SERVICE__:
+    profiles: ["app"]
+    build:
+      context: ../..
+      dockerfile: services/__SERVICE__/Dockerfile
+    image: __SERVICE__:local
+    depends_on:
+      lgtm:
+        condition: service_started
+    environment:
+      PORT: "__PORT__"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://lgtm:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar -XX:MaxRAMPercentage=60"
+    ports:
+      - "127.0.0.1:${__ENV___PORT:-__PORT__}:__PORT__"
+    mem_limit: 512m
+

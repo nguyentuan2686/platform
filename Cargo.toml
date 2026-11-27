@@ -1,6 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["libs/rust/platform-core", "services/notify-svc", "services/chart-svc"]
+members = [
+  "libs/rust/platform-core",
+  "services/notify-svc",
+  "services/chart-svc",
+  # new-service: cargo-members (scripts/new-service.sh inserts above this line)
+]
 
 [workspace.package]
 edition = "2021"

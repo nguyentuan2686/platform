@@ -56,3 +56,4 @@ updates:
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
+  # new-service: dependabot (scripts/new-service.sh inserts above this line)

@@ -99,6 +99,8 @@ jobs:
           build-args: WEB_ORIGIN=http://localhost:3001
           cache-from: type=gha,scope=web-amd64
 
+      # new-service: e2e-builds (scripts/new-service.sh inserts image builds above this line)
+
       - name: Install kind and kubectl (pinned, sha256 verified)
         run: |
           curl -fsSL -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
@@ -116,7 +118,7 @@ jobs:
 
       - name: Load images into kind
         run: |
-          for svc in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web; do
+          for svc in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web; do # new-service: e2e-load
             kind load docker-image "${svc}:e2e"
           done
 

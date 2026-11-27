@@ -126,7 +126,7 @@ jobs:
     env:
       SHA: ${{ needs.gate.outputs.sha }}
       KUSTOMIZATION: deploy/k8s/overlays/prod/apps/kustomization.yaml
-      SERVICES: order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web
+      SERVICES: order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web # new-service: cd-services
     steps:
       - name: CD GitHub App token (contents write on this repo only)
         id: app

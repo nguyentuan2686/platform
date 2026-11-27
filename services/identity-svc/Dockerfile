@@ -12,6 +12,7 @@ COPY services/order-svc/pom.xml services/order-svc/
 COPY services/reading-tuvi/pom.xml services/reading-tuvi/
 COPY services/identity-svc/pom.xml services/identity-svc/
 COPY services/payment-svc/pom.xml services/payment-svc/
+# new-service: java-poms (scripts/new-service.sh adds a COPY line per reactor module above this line)
 RUN mvn -q -B -pl services/identity-svc -am package -DskipTests -Dspring-boot.repackage.skip=true \
  && rm -rf libs/java/platform-starter/target services/*/target
 COPY . .

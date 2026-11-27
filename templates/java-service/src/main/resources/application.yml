@@ -1,0 +1,9 @@
+server:
+  port: ${PORT:__PORT__}
+
+spring:
+  application:
+    name: __SERVICE__
+
+# Health probes (/health/live, /health/ready), JSON logs and Problem Details come from platform-starter.
+# OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.

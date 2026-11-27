@@ -1,0 +1,9 @@
+            __CRATE__:
+              - 'services/__SERVICE__/**'
+              - 'libs/rust/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'deny.toml'
+              - '.cargo/**'
+              - 'contracts/openapi/__SERVICE__.yaml'

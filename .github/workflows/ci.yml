@@ -39,6 +39,7 @@ jobs:
       identity: ${{ steps.filter.outputs.identity }}
       payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
+      # new-service: ci-outputs (scripts/new-service.sh inserts above this line)
       k8s: ${{ steps.filter.outputs.k8s }}
       ops: ${{ steps.filter.outputs.ops }}
       infra: ${{ steps.filter.outputs.infra }}
@@ -94,6 +95,7 @@ jobs:
               - 'services/web/**'
               - 'knowledge/tuvi/**'
               - 'deploy/k8s/overlays/prod/domain/**' # the build-time WEB_ORIGIN (scripts/web-origin.sh)
+            # new-service: ci-filters (scripts/new-service.sh inserts above this line)
             k8s:
               - 'deploy/k8s/**'
               - 'deploy/argocd/**'
@@ -214,6 +216,7 @@ jobs:
       build-args: WEB_ORIGIN=${{ needs.changes.outputs.web_origin }}
       publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
+  # new-service: ci-jobs (scripts/new-service.sh inserts service jobs above this line)
   k8s-manifests:
     needs: changes
     if: needs.changes.outputs.k8s == 'true' || needs.changes.outputs.root == 'true'
@@ -309,10 +312,23 @@ jobs:
       contents: read
     uses: ./.github/workflows/_bootstrap.yml
 
-  # Single required status check. New services only need to be added to `needs`.
+  # Single required status check. New services only need to be added to `needs` (scripts/new-service.sh does it).
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e, ops-scripts, bootstrap]
+    needs:
+      - changes
+      - order-svc
+      - notify-svc
+      - chart-svc
+      - reading-tuvi
+      - identity-svc
+      - payment-svc
+      - web
+      # new-service: ci-gate-needs (scripts/new-service.sh inserts above this line)
+      - k8s-manifests
+      - k8s-e2e
+      - ops-scripts
+      - bootstrap
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

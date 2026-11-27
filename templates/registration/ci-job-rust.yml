@@ -1,0 +1,13 @@
+  __SERVICE__:
+    needs: changes
+    if: needs.changes.outputs.__CRATE__ == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_rust-service.yml
+    with:
+      package: __SERVICE__
+      image: __SERVICE__
+      dockerfile: services/__SERVICE__/Dockerfile
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+
