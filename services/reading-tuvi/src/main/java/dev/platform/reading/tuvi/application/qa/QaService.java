@@ -33,6 +33,7 @@ import dev.platform.reading.tuvi.domain.qa.QuestionGuard;
 import dev.platform.reading.tuvi.domain.qa.QuestionNormalizer;
 import dev.platform.reading.tuvi.domain.qa.RefusalReason;
 import dev.platform.reading.tuvi.domain.qa.Sentinel;
+import dev.platform.reading.tuvi.domain.qa.TimingIntent;
 import dev.platform.reading.tuvi.domain.qa.Turn;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -146,13 +147,14 @@ public class QaService {
     Birth birth =
         identity.profile(cmd.bearer()).orElseThrow(() -> new QaConflictException("no_profile"));
     ChartResult chart = charts.chart(birth);
-    Optional<FlowLayer> yearly = yearly(cmd.topic(), birth);
+    Timing timing = timing(cmd.topic(), birth, sanitized);
 
     Instant now = clock.instant();
     UUID id = cmd.readingId();
     PromptKind promptKind = cmd.kind() == QaKind.PAID ? PromptKind.PAID : PromptKind.FREE;
-    Built built = build(chart, yearly, cmd.topic(), sanitized, List.of(), promptKind);
-    String cacheKey = cacheKey(chart.chartHash(), cmd.topic(), cmd.kind(), sanitized);
+    Built built = build(chart, timing, cmd.topic(), sanitized, List.of(), promptKind);
+    String cacheKey =
+        cacheKey(chart.chartHash(), cmd.topic(), cmd.kind(), sanitized, timing.currentYear());
     QaReading reading =
         QaReading.create(
             id,
@@ -325,7 +327,7 @@ public class QaService {
     Birth birth =
         identity.profile(cmd.bearer()).orElseThrow(() -> new QaConflictException("no_profile"));
     ChartResult chart = charts.chart(birth);
-    Optional<FlowLayer> yearly = yearly(reading.topic(), birth);
+    Timing timing = timing(reading.topic(), birth, sanitized);
 
     Instant now = clock.instant();
     UUID id = reading.id();
@@ -350,7 +352,7 @@ public class QaService {
           }
         }
         Built built =
-            build(chart, yearly, reading.topic(), sanitized, history, PromptKind.FOLLOW_UP);
+            build(chart, timing, reading.topic(), sanitized, history, PromptKind.FOLLOW_UP);
         LOG.info("qa follow-up accepted reading_id={} seq={}", id, reserved.seq());
         yield new Prepared.Job(
             id,
@@ -742,14 +744,19 @@ public class QaService {
   /** Context, snippets (first hit per chain, at most 12 and 3,500 chars) and the prompt. */
   private Built build(
       ChartResult chart,
-      Optional<FlowLayer> yearly,
+      Timing timing,
       QaTopic topic,
       String sanitized,
       List<Turn> history,
       PromptKind kind) {
     QaContext ctx =
         QaContextBuilder.build(
-            chart.chart(), yearly, topic, QuestionNormalizer.normalize(sanitized));
+            chart.chart(),
+            timing.yearly(),
+            topic,
+            QuestionNormalizer.normalize(sanitized),
+            timing.intent(),
+            timing.currentYear());
     List<String> snippets = new ArrayList<>();
     List<String> keys = new ArrayList<>();
     int chars = 0;
@@ -779,12 +786,23 @@ public class QaService {
     return new Built(prompt, List.copyOf(keys));
   }
 
-  private Optional<FlowLayer> yearly(QaTopic topic, Birth birth) {
-    if (topic != QaTopic.VanNam) {
-      return Optional.empty();
-    }
+  /** Timing intent of a question and the yearly flow layer it needs (at most one daily call). */
+  private record Timing(TimingIntent intent, int currentYear, Optional<FlowLayer> yearly) {}
+
+  /**
+   * A named year (any topic) reads that year's flow layer (1 July always lies in its lunar year);
+   * VanNam without one reads today's; anything else needs no daily call.
+   */
+  private Timing timing(QaTopic topic, Birth birth, String sanitized) {
     LocalDate today = clock.instant().atZone(VN).toLocalDate();
-    return Optional.of(charts.daily(birth, today).facts().yearly());
+    TimingIntent intent = TimingIntent.detect(sanitized, today.getYear());
+    Optional<LocalDate> date =
+        intent
+            .targetYear()
+            .map(y -> y == today.getYear() ? today : LocalDate.of(y, 7, 1))
+            .or(() -> topic == QaTopic.VanNam ? Optional.of(today) : Optional.empty());
+    Optional<FlowLayer> yearly = date.map(d -> charts.daily(birth, d).facts().yearly());
+    return new Timing(intent, today.getYear(), yearly);
   }
 
   private LlmRequest request(Prepared.Job job) {
@@ -828,7 +846,9 @@ public class QaService {
         : PiiScrubber.scrub(QuestionNormalizer.clean(question));
   }
 
-  private String cacheKey(String chartHash, QaTopic topic, QaKind kind, String sanitized) {
+  /** {@code year}: the Vietnam year, since timing answers and relative years depend on it. */
+  private String cacheKey(
+      String chartHash, QaTopic topic, QaKind kind, String sanitized, int year) {
     String material =
         String.join(
             "|",
@@ -838,6 +858,7 @@ public class QaService {
             LANG,
             Long.toString(knowledge.version()),
             Integer.toString(PromptBuilder.PROMPT_VERSION),
+            Integer.toString(year),
             QuestionNormalizer.normalize(sanitized));
     try {
       return HexFormat.of()

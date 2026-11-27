@@ -76,7 +76,8 @@ class TodayScorerTest {
             chart.thanPalace(),
             chart.tuan(),
             List.of("Wu", "Hai"),
-            chart.palaces());
+            chart.palaces(),
+            chart.lunarBirthYear());
     var day =
         new DailyFacts(
             layer("Menh"),
@@ -98,12 +99,19 @@ class TodayScorerTest {
                             p.nameVi(),
                             p.branch(),
                             p.isBody(),
+                            p.decade(),
                             List.of(),
                             List.of(new StarPlacement("ThaiAm", "Thái Âm", null, null)),
                             p.tuan(),
                             p.triet())
                         : p)
             .toList();
-    return new Chart(chart.cucNameVi(), chart.thanPalace(), chart.tuan(), chart.triet(), palaces);
+    return new Chart(
+        chart.cucNameVi(),
+        chart.thanPalace(),
+        chart.tuan(),
+        chart.triet(),
+        palaces,
+        chart.lunarBirthYear());
   }
 }

@@ -94,6 +94,55 @@ class QaContextBuilderTest {
   }
 
   @Test
+  void a_named_year_labels_the_yearly_fact_for_any_topic() {
+    FlowLayer y = ChartFixture.layer("QuanLoc");
+    TimingIntent in2027 = new TimingIntent(false, Optional.of(2027));
+    QaContext ctx =
+        QaContextBuilder.build(chart, Optional.of(y), QaTopic.SuNghiep, "x", in2027, 2026);
+    assertThat(ctx.yearlyFact()).contains("Năm 2027 lưu niên ở cung Quan Lộc");
+    assertThat(ctx.timing()).isEmpty();
+
+    TimingIntent thisYear = new TimingIntent(false, Optional.of(2026));
+    assertThat(
+            QaContextBuilder.build(chart, Optional.of(y), QaTopic.TaiLoc, "x", thisYear, 2026)
+                .yearlyFact())
+        .contains("Năm nay lưu niên ở cung Quan Lộc");
+  }
+
+  @Test
+  void van_nam_with_a_named_year_grounds_on_that_years_palace() {
+    QaContext ctx =
+        QaContextBuilder.build(
+            chart,
+            Optional.of(ChartFixture.layer("TaiBach")),
+            QaTopic.VanNam,
+            "x",
+            new TimingIntent(false, Optional.of(2028)),
+            2026);
+    assertThat(ctx.facts())
+        .extracting(PalaceFact::palaceNameVi)
+        .containsExactly("Mệnh", "Tài Bạch");
+  }
+
+  @Test
+  void timing_intent_adds_the_thoi_van_lines_of_the_topic_palaces() {
+    QaContext ctx =
+        QaContextBuilder.build(
+            chart,
+            Optional.empty(),
+            QaTopic.TinhDuyen,
+            "khi nào",
+            new TimingIntent(true, Optional.empty()),
+            2026);
+    assertThat(ctx.timing())
+        .isEqualTo(TimingLines.lines(chart, List.of("Menh", "PhuThe"), 2026))
+        .hasSize(3);
+    assertThat(ctx.yearlyFact()).isEmpty();
+    assertThat(QaContextBuilder.build(chart, Optional.empty(), QaTopic.TinhDuyen, "x").timing())
+        .isEmpty();
+  }
+
+  @Test
   void tuan_and_triet_flags_follow_the_chart() {
     QaContext ctx = QaContextBuilder.build(chart, Optional.empty(), QaTopic.GiaDao, "x");
     for (PalaceFact f : ctx.facts()) {

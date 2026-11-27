@@ -36,6 +36,7 @@ public class QaFrames {
           case GAMBLING -> "qa_refuse_gambling";
           case DEATH -> "qa_refuse_death";
           case SELF_HARM -> "qa_refuse_selfharm";
+          case RITUAL -> "qa_refuse_ritual";
           case INSUFFICIENT -> "qa_insufficient";
           case INJECTION, OFF_TOPIC -> "qa_refuse_offtopic";
         });

@@ -122,6 +122,7 @@ final class QaFakes {
     String hash = "hash-A";
     boolean down;
     int dailyCalls;
+    final List<LocalDate> dailyDates = new ArrayList<>();
 
     @Override
     public ChartResult chart(Birth birth) {
@@ -134,6 +135,7 @@ final class QaFakes {
     @Override
     public DailyResult daily(Birth birth, LocalDate date) {
       dailyCalls++;
+      dailyDates.add(date);
       FlowLayer layer = new FlowLayer("QuanLoc", "Zi", "Jia", List.of());
       return new DailyResult(new DailyFacts(layer, layer, layer), "1/1", "Giáp Tý");
     }
@@ -150,7 +152,8 @@ final class QaFakes {
       frames.put("qa_refunded", "ĐÃ-TRẢ");
       frames.put("qa_insufficient", "CHƯA-ĐỦ");
       frames.put("qa_refuse_offtopic", "NGOÀI-LỀ");
-      for (String r : List.of("medical", "legal", "finance", "gambling", "death", "selfharm")) {
+      for (String r :
+          List.of("medical", "legal", "finance", "gambling", "death", "selfharm", "ritual")) {
         frames.put("qa_refuse_" + r, "TỪ-CHỐI-" + r);
       }
     }

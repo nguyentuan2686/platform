@@ -32,7 +32,8 @@ class FakeOutputAnswerFilterTest {
           FakeLlmProviderTest.REQ,
           request("CHỦ ĐỀ: tình duyên\nCÂU HỎI: sao?"),
           request("CÂU HỎI: sao?"),
-          request("CHỦ ĐỀ: vận năm\nTƯ LIỆU:\n- Lưu niên ở Mệnh.\nCÂU HỎI: năm nay?"));
+          request("CHỦ ĐỀ: vận năm\nTƯ LIỆU:\n- Lưu niên ở Mệnh.\nCÂU HỎI: năm nay?"),
+          request(FakeLlmProviderTest.TIMING_USER));
 
   @Test
   void fake_ok_output_passes() {

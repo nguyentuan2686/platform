@@ -142,6 +142,7 @@ class KnowledgeQualityTest {
             "qa_refuse_gambling",
             "qa_refuse_death",
             "qa_refuse_selfharm",
+            "qa_refuse_ritual",
             "qa_refuse_offtopic",
             "qa_insufficient",
             "qa_queued",
