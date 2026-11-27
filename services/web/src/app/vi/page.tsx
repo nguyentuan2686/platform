@@ -1,9 +1,21 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { BirthForm } from "@/components/BirthForm";
+import { JsonLd } from "@/components/JsonLd";
 import { Sage } from "@/components/Sage";
 import { degradeOrThrow } from "@/lib/degrade";
 import { getProfile } from "@/lib/identity";
+import { cfg } from "@/lib/config";
+import { pageMeta, siteLd } from "@/lib/seo";
 import { getViewer } from "@/lib/session";
+
+export const metadata: Metadata = pageMeta({
+  origin: cfg().webOrigin,
+  path: "/vi",
+  title: "Lập lá số tử vi miễn phí, luận giải theo sách cổ",
+  description:
+    "Nhập ngày giờ sinh để lập lá số tử vi 12 cung theo âm lịch Việt, đọc luận giải miễn phí dựa trên kinh sách cổ cùng Lão Thiên Cơ.",
+});
 
 /** True when the viewer already saved a chart. Identity trouble hides the link (logged); a bug rethrows. */
 async function hasProfile(): Promise<boolean> {
@@ -21,6 +33,9 @@ export default async function ViHome() {
   const saved = await hasProfile();
   return (
     <main className="home">
+      {siteLd(cfg().webOrigin).map((d, i) => (
+        <JsonLd key={i} data={d} />
+      ))}
       <section className="tv-hero">
         <span className="vert" aria-hidden="true">
           紫微斗數
