@@ -9,6 +9,6 @@ describe("SiteFooter", () => {
     render(<SiteFooter />);
     expect(screen.getByText(/tham khảo văn hóa và giải trí/)).toBeTruthy();
     const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
-    expect(hrefs).toEqual(["/vi/kien-thuc", "/vi/chinh-sach-rieng-tu", "/vi/dieu-khoan", "/vi/hoan-tien"]);
+    expect(hrefs).toEqual(["/vi/kien-thuc", "/vi/tu-vi-2027", "/vi/chinh-sach-rieng-tu", "/vi/dieu-khoan", "/vi/hoan-tien"]);
   });
 });

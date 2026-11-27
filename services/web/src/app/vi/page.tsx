@@ -54,6 +54,11 @@ export default async function ViHome() {
         </p>
       )}
       <BirthForm />
+      <p className="home-year">
+        <Link href="/vi/tu-vi-2027" className="btn btn-ghost">
+          Tử vi 2027 cho 12 con giáp
+        </Link>
+      </p>
       <p className="home-knowledge">
         <Link href="/vi/kien-thuc">Kiến thức tử vi</Link>
       </p>
