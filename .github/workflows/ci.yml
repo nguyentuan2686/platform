@@ -104,6 +104,10 @@ jobs:
               - 'libs/**' # the templates build on platform-starter / platform-core
               - 'Cargo.toml'
               - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.mvn/**'
+              - 'services/*/Dockerfile' # template Dockerfiles copy their pins (checked by scripts/test/new-service.test.sh)
+              - 'scripts/k8s-validate.sh' # policies the rendered k8s bases must pass
             k8s:
               - 'deploy/k8s/**'
               - 'deploy/argocd/**'
@@ -118,6 +122,14 @@ jobs:
               - 'deploy/k8s/platform/grafana/alerting/**' # rules.yaml feeds the promtool alert tests
               - 'deploy/k8s/platform/ops/**' # the backup/heartbeat scripts are under test
               - '.github/**'
+              # new-service markers and pins, under test in scripts/test/new-service.test.sh:
+              - 'templates/**'
+              - 'deploy/local/docker-compose.yml'
+              - 'deploy/k8s/overlays/e2e/kustomization.yaml'
+              - 'services/*/Dockerfile'
+              - 'rust-toolchain.toml'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
             infra:
               - 'infra/**'
               - 'deploy/argocd/**'
@@ -226,9 +238,11 @@ jobs:
 
   # new-service: ci-jobs (scripts/new-service.sh inserts service jobs above this line)
   # Scaffolding (templates/ + scripts/new-service.sh): renders a Java and a Rust demo service into this checkout only
-  # (never committed) and runs the real gates on them: mvn verify (Spotless, ArchUnit, JaCoCo), cargo fmt/clippy/test
-  # with --locked (proves the generated Cargo.lock entry), both images, compose config and k8s-validate with the new
-  # bases in the e2e and prod overlays.
+  # (never committed), also on the prod path (--prod, no pull check), and runs the real gates on them: mvn verify
+  # (Spotless, ArchUnit, JaCoCo), cargo fmt/clippy/test with --locked (proves the generated Cargo.lock entry) and
+  # cargo deny, both images, compose config and k8s-validate with the new bases in the e2e and prod overlays.
+  # The Java demo is `zz-java`: its package sorts after every dev.platform.* package, the case where import order bit.
+  # Names zz-java / demo-rust and ports 8998 / 8999 are reserved for this job (NEW_SERVICE_CI_SCAFFOLD=1).
   scaffold:
     needs: changes
     if: needs.changes.outputs.scaffold == 'true' || needs.changes.outputs.root == 'true'
@@ -238,10 +252,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Render demo-java and demo-rust (this checkout only)
+      - name: Render zz-java and demo-rust, incl. the prod path (this checkout only)
+        env:
+          NEW_SERVICE_CI_SCAFFOLD: '1'
         run: |
-          bash scripts/new-service.sh --lang java --name demo-java --port 8998
+          bash scripts/new-service.sh --lang java --name zz-java --port 8998
           bash scripts/new-service.sh --lang rust --name demo-rust --port 8999
+          bash scripts/new-service.sh --prod zz-java --skip-pull-check
+          bash scripts/new-service.sh --prod demo-rust --skip-pull-check
           git status --short
       - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
@@ -249,7 +267,7 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Java gates (Spotless, tests, ArchUnit, JaCoCo)
-        run: mvn -B -pl services/demo-java -am verify
+        run: mvn -B -pl services/zz-java -am verify
       - name: Install system packages (rdkafka cmake-build)
         run: |
           sudo apt-get update
@@ -262,14 +280,19 @@ jobs:
           cargo fmt --all --check
           cargo clippy -p demo-rust --all-targets --locked -- -D warnings
           cargo test -p demo-rust --locked
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-deny@0.22.0
+      - name: Dependency policy with the new member (cargo deny)
+        run: cargo deny check
       - name: Local compose file parses with both services
         run: docker compose -f deploy/local/docker-compose.yml --profile app config --quiet
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build demo-java image (amd64, no push)
+      - name: Build zz-java image (amd64, no push)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          file: services/demo-java/Dockerfile
+          file: services/zz-java/Dockerfile
           platforms: linux/amd64
           push: false
       - name: Build demo-rust image (amd64, no push)
