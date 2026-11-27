@@ -1,0 +1,7 @@
+# Component that only contributes the APP_DOMAIN source (domain.yaml). It is a directory of its own because kustomize's
+# default load restrictor forbids a slice from loading a file above its root (../domain.yaml), and Argo CD builds every
+# slice on its own. The replacements live in each slice, so they run after that slice's patches.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - domain.yaml

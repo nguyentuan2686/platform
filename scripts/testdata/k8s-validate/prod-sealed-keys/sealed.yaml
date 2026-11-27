@@ -1,0 +1,8 @@
+# Self-test fixture: violates only the 'prod-sealed' policy check (web-secrets without ADMIN_API_TOKEN, plus a stray key).
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata: {name: web-secrets, namespace: apps}
+spec:
+  encryptedData: {INTERNAL_API_TOKEN: AgBfixture, SEPAY_WEBHOOK_SECRET: AgBfixture}
+  template:
+    metadata: {name: web-secrets, namespace: apps}

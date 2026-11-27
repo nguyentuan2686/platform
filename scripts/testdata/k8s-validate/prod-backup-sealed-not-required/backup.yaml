@@ -1,0 +1,29 @@
+# Self-test fixture: violates only the 'prod-backup' policy check (ops-secrets sealed, but one container still BACKUP_REQUIRED=0).
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata: {name: ops-secrets, namespace: data}
+spec:
+  encryptedData: {S3_ENDPOINT: AgBfixture, S3_BUCKET: AgBfixture, S3_REGION: AgBfixture, S3_ACCESS_KEY_ID: AgBfixture, S3_SECRET_ACCESS_KEY: AgBfixture, HEALTHCHECKS_URL: AgBfixture, HEALTHCHECKS_BACKUP_URL: AgBfixture}
+  template:
+    metadata: {name: ops-secrets, namespace: data}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: pg-backup, namespace: data}
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - name: dump
+              image: postgres:17-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
+              env: [{name: BACKUP_REQUIRED, value: "1"}]
+              resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 32Mi}}
+          containers:
+            - name: upload
+              image: rclone/rclone:1.70.3@sha256:34c729127386abec1c610b2aa024e39b4498dc2b4a72a0798ae21fbdc1b0493b
+              env: [{name: BACKUP_REQUIRED, value: "0"}]
+              resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 32Mi}}

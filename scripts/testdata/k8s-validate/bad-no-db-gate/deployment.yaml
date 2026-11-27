@@ -1,0 +1,17 @@
+# Self-test fixture: violates only the 'db-gate' policy check (DB_ secret, no wait-for-postgres init).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fixture, namespace: apps}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001}
+      containers:
+        - name: app
+          image: fixture:e2e
+          envFrom: [{secretRef: {name: order-svc-secrets}}]
+          resources: {requests: {memory: 64Mi, cpu: 10m}, limits: {memory: 64Mi}}
+          livenessProbe: {httpGet: {path: /health/live, port: 8080}}
+          readinessProbe: {httpGet: {path: /health/ready, port: 8080}}

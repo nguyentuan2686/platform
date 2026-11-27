@@ -1,0 +1,20 @@
+# Blocks the app container until Postgres accepts TCP connections, so a DB pod shows Init:0/1 instead of
+# crash-looping while Postgres starts. No deadline on purpose: it waits for as long as Postgres is down.
+- op: add
+  path: /spec/template/spec/initContainers
+  value:
+    - name: wait-for-postgres
+      image: postgres:17-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73 # keep in sync with deploy/k8s/platform/postgres/statefulset.yaml
+      command:
+        - sh
+        - -c
+        - until pg_isready -h postgres.data.svc.cluster.local -p 5432 -t 2; do sleep 2; done
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {memory: 16Mi}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        allowPrivilegeEscalation: false
+        capabilities: {drop: [ALL]}
+        readOnlyRootFilesystem: true

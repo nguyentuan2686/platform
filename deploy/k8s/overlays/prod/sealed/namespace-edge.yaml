@@ -1,0 +1,9 @@
+# Never deleted or pruned by Argo CD (see deploy/k8s/platform/namespaces/namespaces.yaml).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: edge
+  labels:
+    app.kubernetes.io/part-of: platform
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false

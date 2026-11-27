@@ -1,0 +1,40 @@
+# Prod platform slice (Argo CD app `prod-platform`, wave 0): Postgres, Redpanda, observability. The namespaces belong
+# to ../sealed (wave -1), so they are deleted here: two Argo apps must not own the same object.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../platform
+patches:
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata: {name: apps}
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata: {name: data}
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata: {name: observability}
+  # pg-backup: BACKUP_REQUIRED=0 until ops-secrets (S3_*) is sealed, so the job skips instead of failing.
+  - patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata: {name: pg-backup, namespace: data}
+      spec:
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                initContainers:
+                  - name: dump
+                    env:
+                      - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1
+                containers:
+                  - name: upload
+                    env:
+                      - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1

@@ -1,0 +1,19 @@
+# App-of-apps root, applied once by infra/bootstrap (which alone may override targetRevision via GITOPS_REVISION).
+# It syncs the child Applications in apps/ in wave order: prod-sealed (-1), prod-platform (0), prod-tunnel and prod-apps (1).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/nguyentuan2686/platform.git
+    targetRevision: main
+    path: deploy/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [ServerSideApply=true]

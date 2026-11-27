@@ -12,6 +12,7 @@ resources:
   - ../../base/payment-svc
   - ../../base/web
   - mailpit.yaml
+  - minio.yaml
 patches:
   - path: patches/order-svc.yaml
   - path: patches/notify-svc.yaml
@@ -21,6 +22,7 @@ patches:
   - path: patches/payment-svc.yaml
   - path: patches/web.yaml
   - path: patches/otel-collector.yaml
+  - path: patches/pg-backup.yaml
   - target: {kind: Deployment, namespace: apps}
     patch: |-
       - {op: add, path: /spec/template/spec/containers/0/imagePullPolicy, value: IfNotPresent}
@@ -42,3 +44,5 @@ secretGenerator:
   - {name: payment-svc-secrets, namespace: apps, envs: [secrets/payment-svc-secrets.env]}
   - {name: web-secrets, namespace: apps, envs: [secrets/web-secrets.env]}
   - {name: postgres-secrets, namespace: data, envs: [secrets/postgres-secrets.env]}
+  - {name: alerting-secrets, namespace: observability, envs: [secrets/alerting-secrets.env]} # optional in prod; here it drives the contact-point e2e check
+  - {name: ops-secrets, namespace: data, envs: [secrets/ops-secrets.env]} # optional in prod; here it points the backup/heartbeat at MinIO

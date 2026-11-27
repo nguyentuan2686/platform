@@ -1,0 +1,2 @@
+{"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"name":"progressing","namespace":"argocd"},
+ "status":{"sync":{"status":"Synced","revision":"1111111111111111111111111111111111111111"},"health":{"status":"Progressing"},"conditions":[]}}

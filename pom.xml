@@ -34,6 +34,7 @@
     <jacoco.version>0.8.16</jacoco.version>
     <json-schema-validator.version>3.0.9</json-schema-validator.version>
     <nimbus-jose-jwt.version>10.10</nimbus-jose-jwt.version>
+    <greenmail.version>2.1.14</greenmail.version>
   </properties>
 
   <dependencyManagement>

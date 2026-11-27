@@ -1,0 +1,8 @@
+OK k3s
+OK firewall
+WARN firewall: public SSH kept until Tailscale is up
+SKIP tailscale: TS_AUTHKEY not set
+OK sealed-secrets
+OK argocd
+OK gitops-root
+bootstrap: 0 changed

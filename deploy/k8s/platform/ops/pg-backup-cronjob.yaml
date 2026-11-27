@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+  labels: {app: pg-backup}
+spec:
+  schedule: "0 3 * * *"
+  timeZone: Asia/Ho_Chi_Minh
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels: {app: pg-backup}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile: {type: RuntimeDefault}
+            runAsNonRoot: true
+          initContainers:
+            - name: dump
+              image: postgres:17-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
+              command: [/bin/sh, /scripts/backup.sh, dump]
+              env:
+                - {name: BACKUP_DATABASES, value: "orders notify reading_tuvi identity payment"}
+                # BACKUP_REQUIRED=1: a missing S3 config fails the job. Prod sets 0 until go-live (overlays/prod/platform).
+                - {name: BACKUP_REQUIRED, value: "0"}
+                - {name: BACKUP_KEEP, value: 14d}
+                - {name: HOME, value: /tmp}
+                - {name: PGHOST, value: postgres.data.svc.cluster.local}
+                - {name: PGUSER, value: postgres}
+                - name: PGPASSWORD
+                  valueFrom: {secretKeyRef: {name: postgres-secrets, key: POSTGRES_PASSWORD}}
+                # Only the two keys the "S3 configured?" check reads; the S3 access keys go to the upload container alone.
+                - name: S3_ENDPOINT
+                  valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_ENDPOINT, optional: true}}
+                - name: S3_BUCKET
+                  valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_BUCKET, optional: true}}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 128Mi}
+              securityContext:
+                runAsUser: 70
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - {name: backup, mountPath: /backup}
+                - {name: tmp, mountPath: /tmp}
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+          containers:
+            - name: upload
+              image: rclone/rclone:1.70.3@sha256:34c729127386abec1c610b2aa024e39b4498dc2b4a72a0798ae21fbdc1b0493b
+              command: [/bin/sh, /scripts/backup.sh, upload]
+              env:
+                - {name: BACKUP_DATABASES, value: "orders notify reading_tuvi identity payment"}
+                # BACKUP_REQUIRED=1: a missing S3 config fails the job. Prod sets 0 until go-live (overlays/prod/platform).
+                - {name: BACKUP_REQUIRED, value: "0"}
+                - {name: BACKUP_KEEP, value: 14d}
+                - {name: HOME, value: /tmp}
+                # A skipped backup (S3 not configured) pushes platform.backup.skipped=1 here (alert backup-skipped).
+                - {name: BACKUP_METRICS_URL, value: "http://otel-collector.observability.svc.cluster.local:4318/v1/metrics"}
+              envFrom:
+                - secretRef: {name: ops-secrets, optional: true}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 128Mi}
+              securityContext:
+                runAsNonRoot: true
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+                runAsUser: 65532
+              volumeMounts:
+                - {name: backup, mountPath: /backup}
+                - {name: tmp, mountPath: /tmp}
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+          volumes:
+            - name: backup
+              emptyDir: {sizeLimit: 2Gi}
+            - name: tmp
+              emptyDir: {sizeLimit: 64Mi}
+            - name: scripts
+              configMap: {name: ops-scripts, defaultMode: 0555}

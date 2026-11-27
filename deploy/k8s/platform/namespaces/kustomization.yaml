@@ -1,0 +1,6 @@
+# A directory of its own so the prod sealed slice (overlays/prod/sealed, Argo wave -1) can own the namespaces: its
+# SealedSecrets need them before prod-platform (wave 0) syncs, and kustomize forbids loading ../namespaces.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespaces.yaml

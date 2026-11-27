@@ -1,0 +1,52 @@
+# Prod apps slice (Argo CD app `prod-apps`): the 7 service bases, the public Ingresses + edge Middlewares and the prod patches.
+# CD bumps the image tags below from `main` to `sha-<commit>`; they live only in this file.
+# The Secrets come from SealedSecrets in ../sealed (inventory: ../secrets.tsv); this slice renders NO Secret objects.
+# web-secrets holds only INTERNAL_API_TOKEN and ADMIN_API_TOKEN (not SEPAY_WEBHOOK_SECRET: only the dev payment
+# simulator uses it, forced off in prod).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/order-svc
+  - ../../../base/notify-svc
+  - ../../../base/chart-svc
+  - ../../../base/reading-tuvi
+  - ../../../base/identity-svc
+  - ../../../base/payment-svc
+  - ../../../base/web
+  - ingress.yaml
+  - middlewares.yaml
+components:
+  - ../domain
+patches:
+  - target: {kind: ConfigMap, name: app-domain}
+    patch: |-
+      - {op: add, path: /metadata/namespace, value: apps} # unique id per slice in the aggregate (local-config, never rendered)
+  - path: patches/reading-tuvi.yaml
+  - path: patches/identity-svc.yaml
+  - path: patches/web.yaml
+replacements:
+  - source: {kind: ConfigMap, name: app-domain, fieldPath: data.APP_DOMAIN}
+    targets:
+      - select: {kind: Ingress, name: web}
+        fieldPaths: [spec.rules.0.host]
+      - select: {kind: Ingress, name: web-strict}
+        fieldPaths: [spec.rules.0.host]
+      - select: {kind: Ingress, name: payment-webhook}
+        fieldPaths: [spec.rules.0.host]
+      - select: {kind: Deployment, name: web}
+        fieldPaths: ["spec.template.spec.containers.[name=web].env.[name=WEB_ORIGIN].value"]
+        options: {delimiter: "/", index: 2}
+      - select: {kind: Deployment, name: identity-svc}
+        fieldPaths: ["spec.template.spec.containers.[name=identity-svc].env.[name=WEB_BASE_URL].value"]
+        options: {delimiter: "/", index: 2}
+      - select: {kind: Deployment, name: identity-svc}
+        fieldPaths: ["spec.template.spec.containers.[name=identity-svc].env.[name=MAIL_FROM].value"]
+        options: {delimiter: "@", index: 1} # no-reply@<APP_DOMAIN>; MAIL_HOST is the SMTP relay, not domain-bound
+images:
+  - {name: ghcr.io/nguyentuan2686/order-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: main}
+  - {name: ghcr.io/nguyentuan2686/web, newTag: main}

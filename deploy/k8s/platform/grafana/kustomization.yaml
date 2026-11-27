@@ -10,3 +10,9 @@ configMapGenerator:
   - name: grafana-dashboard-provider
     files:
       - provisioning/platform-dashboards.yaml
+  - name: grafana-alerting
+    files:
+      - alerting/rules.yaml
+      - alerting/contact-point.tmpl.yaml
+      - alerting/policy.tmpl.yaml
+      - alerting/render.sh

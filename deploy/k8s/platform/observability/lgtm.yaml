@@ -2,6 +2,8 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: lgtm-data
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false # Argo CD never deletes the telemetry volume
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -22,9 +24,27 @@ spec:
     metadata:
       labels: {app: lgtm}
     spec:
+      # Retention (spec §10) and alerting are wired into the stock image without rebuilding it. Option (a), env vars the
+      # image run scripts already honour (*_EXTRA_ARGS), covers all three: Prometheus 15d, Loki 168h (compactor retention),
+      # Tempo 168h (3.x: backend-scheduler + backend-worker block retention). No config files are overridden, so nothing
+      # drifts from the image on a tag bump. Alert rules and the optional Telegram contact point are rendered into an
+      # emptyDir by the init container below.
+      initContainers:
+        - name: alerting-render
+          image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5 # the lgtm image itself: no extra pull
+          command: [sh, /alerting/render.sh]
+          # The Telegram secret is optional (alerting-secrets, ns observability): without it only the rules are provisioned.
+          envFrom:
+            - secretRef: {name: alerting-secrets, optional: true}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 32Mi}
+          volumeMounts:
+            - {name: grafana-alerting, mountPath: /alerting, readOnly: true}
+            - {name: provisioning-alerting, mountPath: /provisioning-alerting}
       containers:
         - name: lgtm
-          image: grafana/otel-lgtm:0.41.1
+          image: grafana/otel-lgtm:0.41.1@sha256:1b852b77d7bcadb7699bfe7c78a51d059dff85168de674728cf7abf4474645e5
           ports:
             - {name: grafana, containerPort: 3000}
             - {name: otlp-grpc, containerPort: 4317}
@@ -35,6 +55,10 @@ spec:
           resources:
             requests: {cpu: 200m, memory: 1024Mi}
             limits: {memory: 1024Mi}
+          env:
+            - {name: PROMETHEUS_EXTRA_ARGS, value: --storage.tsdb.retention.time=15d}
+            - {name: LOKI_EXTRA_ARGS, value: "-store.retention=168h -compactor.retention-enabled=true -compactor.working-directory=/data/loki/retention -compactor.delete-request-store=filesystem"}
+            - {name: TEMPO_EXTRA_ARGS, value: "-backend-scheduler.provider.work.compaction.block-retention=168h -backend-worker.compaction.block-retention=168h"}
           readinessProbe:
             httpGet: {path: /api/health, port: grafana}
             periodSeconds: 10
@@ -55,6 +79,7 @@ spec:
               subPath: platform-dashboards.yaml
               readOnly: true
             - {name: grafana-dashboards, mountPath: /var/lib/grafana/dashboards/platform, readOnly: true}
+            - {name: provisioning-alerting, mountPath: /otel-lgtm/grafana/conf/provisioning/alerting}
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -63,6 +88,10 @@ spec:
           configMap: {name: grafana-dashboard-provider}
         - name: grafana-dashboards
           configMap: {name: grafana-dashboards}
+        - name: grafana-alerting
+          configMap: {name: grafana-alerting}
+        - name: provisioning-alerting
+          emptyDir: {medium: Memory} # the rendered Telegram token never touches node disk
 ---
 apiVersion: v1
 kind: Service

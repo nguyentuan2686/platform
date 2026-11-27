@@ -1,0 +1,22 @@
+# Argo CD must never delete these namespaces (and the PVCs in them): not on an app deletion (finalizer), not when an
+# entry is dropped from Git (prune). scripts/k8s-validate.sh `prod-protected` enforces the annotation in prod.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false

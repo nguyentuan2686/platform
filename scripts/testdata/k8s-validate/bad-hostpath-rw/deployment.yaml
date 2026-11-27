@@ -1,0 +1,17 @@
+# Self-test fixture: the allowed /var/log/pods, but mounted read-write.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: fixture, namespace: observability}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      containers:
+        - name: c
+          image: busybox:1.37
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 32Mi}}
+          volumeMounts: [{name: hostfs, mountPath: /hostfs}]
+      volumes:
+        - name: hostfs
+          hostPath: {path: /var/log/pods, type: Directory}

@@ -12,3 +12,8 @@ spec:
             - {name: COOKIE_SECURE, value: "0"}
             - {name: DEV_PAYMENT_SIMULATOR, value: "1"}
             - {name: DEPLOY_ENV, value: e2e}
+            # The dev payment simulator signs with payment-svc's webhook secret. It is not a web-secrets key: web-secrets
+            # must match its secrets.tsv row (INTERNAL_API_TOKEN, ADMIN_API_TOKEN) in prod and e2e alike.
+            - name: SEPAY_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef: {name: payment-svc-secrets, key: SEPAY_WEBHOOK_SECRET}

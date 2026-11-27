@@ -1,0 +1,22 @@
+# Postgres, Redpanda, observability.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prod-platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false # root never prunes or deletes a slice (k8s-validate argocd)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/nguyentuan2686/platform.git
+    targetRevision: main
+    path: deploy/k8s/overlays/prod/platform
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [ServerSideApply=true]

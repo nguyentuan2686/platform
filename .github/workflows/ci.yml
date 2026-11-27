@@ -4,9 +4,20 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manual run on main: publish_all builds and pushes every service image as sha-<commit> (go-live pins all 7 once;
+  # also the fix when an image is missing). cd.yml then bumps the prod tags for that commit.
+  workflow_dispatch:
+    inputs:
+      publish_all:
+        description: Build and publish every service image (only on main)
+        type: boolean
+        default: false
 
+# PRs: one group per branch, a new push cancels the old run. main (push/dispatch): one group per commit, so a burst
+# of merges never cancels a pending run (GitHub drops all but one pending run per group), and every merge publishes
+# its images for CD.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -29,8 +40,11 @@ jobs:
       payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
       k8s: ${{ steps.filter.outputs.k8s }}
+      ops: ${{ steps.filter.outputs.ops }}
+      infra: ${{ steps.filter.outputs.infra }}
+      web_origin: ${{ steps.origin.outputs.web_origin }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -79,19 +93,42 @@ jobs:
             web:
               - 'services/web/**'
               - 'knowledge/tuvi/**'
+              - 'deploy/k8s/overlays/prod/domain/**' # the build-time WEB_ORIGIN (scripts/web-origin.sh)
             k8s:
               - 'deploy/k8s/**'
+              - 'deploy/argocd/**'
               - 'deploy/local/**'
               - 'scripts/**'
               - '.github/workflows/_k8s-e2e.yml'
+            ops:
+              - 'scripts/**'
+              - 'infra/**'
+              - 'deploy/argocd/**'
+              - 'deploy/k8s/overlays/prod/**' # secrets.tsv and domain.yaml feed the script tests
+              - 'deploy/k8s/platform/grafana/alerting/**' # rules.yaml feeds the promtool alert tests
+              - 'deploy/k8s/platform/ops/**' # the backup/heartbeat scripts are under test
+              - '.github/**'
+            infra:
+              - 'infra/**'
+              - 'deploy/argocd/**'
+              - 'deploy/k8s/overlays/prod/**'
+              - '.github/workflows/_bootstrap.yml'
             root:
+              - '.mvn/**'
               - 'pom.xml'
               - '.github/**'
+      # The web image bakes WEB_ORIGIN at build time (canonical URLs, sitemap); it comes from the same domain.yaml as the
+      # runtime value, empty while APP_DOMAIN is the *.invalid placeholder.
+      - name: Build-time web origin (deploy/k8s/overlays/prod/domain/domain.yaml)
+        id: origin
+        run: |
+          origin="$(bash scripts/web-origin.sh)" # fails the job on a malformed APP_DOMAIN
+          echo "web_origin=$origin" >>"$GITHUB_OUTPUT"
 
   order-svc:
     needs: changes
-    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true'
-    # packages: write is only exercised when publish is true (push to main)
+    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
+    # packages: write is only exercised when publish is true (push or manual dispatch on main)
     permissions:
       contents: read
       packages: write
@@ -99,11 +136,11 @@ jobs:
     with:
       module: services/order-svc
       image: order-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   notify-svc:
     needs: changes
-    if: needs.changes.outputs.notify == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.notify == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -112,11 +149,11 @@ jobs:
       package: notify-svc
       image: notify-svc
       dockerfile: services/notify-svc/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   chart-svc:
     needs: changes
-    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -125,11 +162,11 @@ jobs:
       package: chart-svc
       image: chart-svc
       dockerfile: services/chart-svc/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   reading-tuvi:
     needs: changes
-    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -137,11 +174,11 @@ jobs:
     with:
       module: services/reading-tuvi
       image: reading-tuvi
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   identity-svc:
     needs: changes
-    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -149,11 +186,11 @@ jobs:
     with:
       module: services/identity-svc
       image: identity-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   payment-svc:
     needs: changes
-    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -161,11 +198,11 @@ jobs:
     with:
       module: services/payment-svc
       image: payment-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   web:
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -174,7 +211,8 @@ jobs:
       dir: services/web
       image: web
       dockerfile: services/web/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      build-args: WEB_ORIGIN=${{ needs.changes.outputs.web_origin }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   k8s-manifests:
     needs: changes
@@ -183,7 +221,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install kubeconform
         env:
           KUBECONFORM_VERSION: v0.7.0
@@ -216,10 +254,65 @@ jobs:
       contents: read
     uses: ./.github/workflows/_k8s-e2e.yml
 
+  # Ops scripts: shellcheck + actionlint + action SHA pins + script tests (no network, no cluster).
+  ops-scripts:
+    needs: changes
+    if: needs.changes.outputs.ops == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install shellcheck and actionlint
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          # sha256 of shellcheck-v0.11.0.linux.x86_64.tar.gz, as published with the release asset
+          SHELLCHECK_SHA256: b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+          ACTIONLINT_VERSION: 1.7.12
+          # sha256 of actionlint_1.7.12_linux_amd64.tar.gz, as published in the release checksums file
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -fsSL -o shellcheck.tar.gz "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.gz"
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.gz" | sha256sum -c -
+          tar -xzf shellcheck.tar.gz "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          curl -fsSL -o actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+      - name: shellcheck
+        run: |
+          mapfile -t files < <(git ls-files 'scripts/**/*.sh' 'scripts/*.sh' 'infra/**/*.sh' 'deploy/k8s/platform/ops/*.sh' scripts/public-url)
+          shellcheck --severity=warning "${files[@]}"
+      - name: actionlint
+        run: actionlint
+      - name: Action SHA pins
+        run: bash scripts/check-action-pins.sh
+      - name: Install kubeseal (pinned in infra/bootstrap/versions.env, sha256-verified)
+        run: bash scripts/seal-secrets.sh --install-only
+      - name: Script tests
+        run: |
+          shopt -s nullglob
+          for t in scripts/test/*.test.sh; do
+            echo "== $t"
+            bash "$t"
+          done
+      - name: Alert rule unit tests (promtool, pinned image)
+        run: bash scripts/alerts-promtool.sh
+
+  # Host bootstrap on x86 + ARM runners (k3s, firewall, Sealed Secrets, Argo CD syncing this commit): every push to
+  # main, and PRs that touch infra, Argo CD apps, the prod overlay or workflows.
+  bootstrap:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.root == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_bootstrap.yml
+
   # Single required status check. New services only need to be added to `needs`.
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e]
+    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e, ops-scripts, bootstrap]
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

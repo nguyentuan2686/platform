@@ -28,6 +28,11 @@ use crate::config::Config;
 
 /// Delay before re-creating the consumer after `run_consumer` returned an error.
 const CONSUMER_RESTART_DELAY: Duration = Duration::from_secs(5);
+/// A consumer run that lasted at least this long counts as healthy and resets the restart budget.
+const CONSUMER_HEALTHY_RUN: Duration = Duration::from_secs(60);
+/// Consecutive quick consumer failures (each run shorter than `CONSUMER_HEALTHY_RUN`) after which the service exits
+/// non-zero instead of re-creating the client again, so Kubernetes restarts the pod and the restart is visible.
+const CONSUMER_MAX_QUICK_FAILURES: u32 = 5;
 /// Upper bound for the consumer to stop after shutdown is requested.
 pub const CONSUMER_STOP_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -165,10 +170,18 @@ async fn consume(
     handler: Arc<dyn EventHandler>,
     shutdown: CancellationToken,
 ) -> anyhow::Result<()> {
+    let mut budget = RestartBudget::default();
     loop {
+        let started = std::time::Instant::now();
         match run_consumer(cfg.clone(), pool.clone(), handler.clone(), shutdown.clone()).await {
             Ok(()) if shutdown.is_cancelled() => return Ok(()),
             Ok(()) => anyhow::bail!("kafka consumer stopped without a shutdown request"),
+            Err(e) if budget.exhausted_after(started.elapsed()) => {
+                return Err(e.context(format!(
+                    "kafka consumer failed {CONSUMER_MAX_QUICK_FAILURES} times in a row, each within {}s",
+                    CONSUMER_HEALTHY_RUN.as_secs()
+                )));
+            }
             Err(e) => {
                 error!(
                     error = %format!("{e:#}"),
@@ -185,9 +198,51 @@ async fn consume(
     }
 }
 
+/// Counts consecutive quick consumer failures; a long healthy run starts the count again.
+#[derive(Debug, Default)]
+struct RestartBudget {
+    quick_failures: u32,
+}
+
+impl RestartBudget {
+    /// Records a failed run that lasted `ran_for`; true once the budget is used up.
+    fn exhausted_after(&mut self, ran_for: Duration) -> bool {
+        if ran_for >= CONSUMER_HEALTHY_RUN {
+            self.quick_failures = 0;
+        }
+        self.quick_failures += 1;
+        self.quick_failures >= CONSUMER_MAX_QUICK_FAILURES
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restart_budget_is_exhausted_by_consecutive_quick_failures() {
+        let mut b = RestartBudget::default();
+        for i in 1..CONSUMER_MAX_QUICK_FAILURES {
+            assert!(
+                !b.exhausted_after(Duration::from_secs(1)),
+                "failure {i} still re-creates the consumer"
+            );
+        }
+        assert!(b.exhausted_after(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn restart_budget_resets_after_a_healthy_run() {
+        let mut b = RestartBudget::default();
+        for _ in 1..CONSUMER_MAX_QUICK_FAILURES {
+            assert!(!b.exhausted_after(Duration::from_secs(1)));
+        }
+        assert!(
+            !b.exhausted_after(CONSUMER_HEALTHY_RUN),
+            "a long run starts the count again"
+        );
+        assert!(!b.exhausted_after(Duration::from_secs(1)));
+    }
 
     /// Fake HTTP server: runs until shutdown, like `axum::serve` with graceful shutdown.
     fn server(shutdown: &CancellationToken) -> impl Future<Output = std::io::Result<()>> {

@@ -1,0 +1,60 @@
+# cloudflared quick tunnel: a random https://<name>.trycloudflare.com URL (printed in the log, read by scripts/public-url)
+# forwarding to Traefik with the Host header rewritten to APP_DOMAIN (the tunnel slice replaces args index 7).
+# No account or token. Not for production traffic beyond a preview; switch to cloudflared-named at go-live.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: edge
+  labels:
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/part-of: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudflared
+        app.kubernetes.io/part-of: platform
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.11.2@sha256:55c7e3e8d89d5e8d20b75a82f3602cbf98e06db406e73e282073cfdc5a9a3af6
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            - --url
+            - http://traefik.kube-system.svc.cluster.local:80
+            - --http-host-header
+            - app.example.invalid # replaced from APP_DOMAIN by this component
+          ports:
+            - {name: metrics, containerPort: 2000}
+          resources:
+            requests: {cpu: 10m, memory: 128Mi} # the only public entry: headroom for connection bursts
+            limits: {memory: 128Mi}
+          readinessProbe:
+            httpGet: {path: /ready, port: metrics}
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /ready, port: metrics}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

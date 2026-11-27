@@ -1,0 +1,60 @@
+# S3-compatible target for the pg-backup e2e (scripts/e2e-backup.sh). e2e only; prod uses real object storage.
+# The Bitnami legacy image is the only still-pullable build of upstream MinIO (minio/minio left Docker Hub).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: data
+  labels: {app: minio}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: minio}
+  template:
+    metadata:
+      labels: {app: minio}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+        fsGroup: 1001
+      containers:
+        - name: minio
+          image: bitnamilegacy/minio:2025.7.23-debian-12-r3@sha256:953d489a81cc4de7975f90e07202189c4325da39b0b92470b6a13c7ea99e36cd
+          ports:
+            - {name: s3, containerPort: 9000}
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_ACCESS_KEY_ID}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_SECRET_ACCESS_KEY}}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 256Mi}
+          readinessProbe:
+            httpGet: {path: /minio/health/ready, port: s3}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /minio/health/live, port: s3}
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /bitnami/minio/data}
+      volumes:
+        - name: data
+          emptyDir: {sizeLimit: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: data
+  labels: {app: minio}
+spec:
+  selector: {app: minio}
+  ports:
+    - {name: s3, port: 9000, targetPort: s3}

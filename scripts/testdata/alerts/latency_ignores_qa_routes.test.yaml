@@ -1,0 +1,44 @@
+# p95 of 5 s only on /tuvi/qa/readings (long-running LLM answers) -> no alert; the same on /orders -> alert.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: latency_ignores_qa_routes
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/qa/readings", le="1"}'
+        values: '0+0x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/qa/readings", le="10"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/qa/readings", le="+Inf"}'
+        values: '0+60x30'
+      # fast traffic on a normal route of the same service
+      - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/readings", le="1"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/readings", le="10"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="reading-tuvi", http_route="/tuvi/readings", le="+Inf"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_count{job="reading-tuvi", http_route="/tuvi/readings", http_response_status_code="200"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_count{job="reading-tuvi", http_route="/tuvi/qa/readings", http_response_status_code="200"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: latency-p95-high
+        exp_alerts: []
+  - name: latency_fires_on_normal_route
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="1"}'
+        values: '0+0x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="10"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="+Inf"}'
+        values: '0+60x30'
+      - series: 'http_server_request_duration_seconds_count{job="order-svc", http_route="/orders", http_response_status_code="200"}'
+        values: '0+60x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: latency-p95-high
+        exp_alerts:
+          - exp_labels: {job: order-svc, severity: warning}

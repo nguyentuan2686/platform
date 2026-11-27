@@ -41,7 +41,7 @@ ask() { call POST "$READING/tuvi/qa/readings" "{\"reading_id\":\"${4:-$(uuid)}\"
 has() { printf '%s' "$JSON" | grep -Eq "event: ?$1( |$)"; }
 expect_done() {
   [ "$STATUS" = "200" ] || fail "$1: expected 200, got $STATUS: $JSON"
-  has meta && has done || fail "$1: stream lacks meta/done: $JSON"
+  has meta && has "done" || fail "$1: stream lacks meta/done: $JSON"
 }
 expect_409() {
   [ "$STATUS" = "409" ] || fail "$1: expected 409, got $STATUS: $JSON"

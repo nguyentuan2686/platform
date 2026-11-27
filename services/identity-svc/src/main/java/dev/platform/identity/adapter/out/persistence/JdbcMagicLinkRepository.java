@@ -51,6 +51,14 @@ public class JdbcMagicLinkRepository implements MagicLinkRepositoryPort {
   }
 
   @Override
+  public long countSince(Instant since) {
+    return jdbc.sql("select count(*) from magic_link where created_at > :since")
+        .param("since", Timestamps.toDb(since))
+        .query(Long.class)
+        .single();
+  }
+
+  @Override
   public Optional<ConsumedMagicLink> consume(byte[] tokenSha256, Instant now) {
     return jdbc.sql(
             "update magic_link set used_at = :now"

@@ -41,6 +41,10 @@ class MagicLinkUseCaseTest {
   }
 
   private MagicLinkUseCase useCase(String webBaseUrl) {
+    return useCase(webBaseUrl, 200);
+  }
+
+  private MagicLinkUseCase useCase(String webBaseUrl, int dailyCap) {
     return new MagicLinkUseCase(
         accounts,
         sessions,
@@ -50,7 +54,8 @@ class MagicLinkUseCaseTest {
         grants,
         clock,
         new SecureRandom(),
-        URI.create(webBaseUrl));
+        URI.create(webBaseUrl),
+        dailyCap);
   }
 
   @Test
@@ -245,5 +250,50 @@ class MagicLinkUseCaseTest {
     public Instant instant() {
       return now;
     }
+  }
+
+  @Test
+  void daily_cap_over_all_addresses_refuses_without_sending_or_recording() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", 2);
+    capped.request(new Email("a@example.com"), "vi", Optional.empty());
+    capped.request(new Email("b@example.com"), "vi", Optional.empty());
+
+    assertThatThrownBy(() -> capped.request(new Email("c@example.com"), "vi", Optional.empty()))
+        .isInstanceOf(MailCapReachedException.class);
+
+    assertThat(mailer.sent).hasSize(2);
+    assertThat(links.saved).hasSize(2);
+  }
+
+  @Test
+  void daily_cap_is_a_rolling_day() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", 1);
+    capped.request(new Email("a@example.com"), "vi", Optional.empty());
+    clock.advance(Duration.ofHours(23));
+    assertThatThrownBy(() -> capped.request(new Email("b@example.com"), "vi", Optional.empty()))
+        .isInstanceOf(MailCapReachedException.class);
+
+    clock.advance(Duration.ofHours(1).plusSeconds(1));
+    capped.request(new Email("b@example.com"), "vi", Optional.empty());
+
+    assertThat(mailer.sent).hasSize(2);
+  }
+
+  @Test
+  void per_address_limit_stays_silent_even_at_the_daily_cap() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", 3);
+    for (int i = 0; i < 3; i++) {
+      capped.request(new Email("a@example.com"), "vi", Optional.empty());
+    }
+
+    capped.request(new Email("a@example.com"), "vi", Optional.empty());
+
+    assertThat(mailer.sent).hasSize(3);
+  }
+
+  @Test
+  void daily_cap_below_one_is_rejected_at_startup() {
+    assertThatThrownBy(() -> useCase("http://localhost:3001", 0))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

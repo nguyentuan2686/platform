@@ -26,6 +26,7 @@ public class MagicLinkUseCase {
   private final Clock clock;
   private final RandomGenerator random;
   private final String webBaseUrl;
+  private final int dailyCap;
 
   public MagicLinkUseCase(
       AccountRepositoryPort accounts,
@@ -36,7 +37,8 @@ public class MagicLinkUseCase {
       EntitlementGrantPort grants,
       Clock clock,
       RandomGenerator random,
-      URI webBaseUrl) {
+      URI webBaseUrl,
+      int dailyCap) {
     this.accounts = accounts;
     this.sessions = sessions;
     this.links = links;
@@ -47,11 +49,14 @@ public class MagicLinkUseCase {
     this.random = random;
     String base = webBaseUrl.toString();
     this.webBaseUrl = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+    this.dailyCap = MagicLinkPolicy.requireValidDailyCap(dailyCap);
   }
 
   /**
    * Sends a login link. Silently does nothing when the email is rate limited, so callers cannot
-   * tell the difference (nor whether the email has an account).
+   * tell the difference (nor whether the email has an account). Throws {@link
+   * MailCapReachedException} when the global daily cap is reached (a spam-relay guard that says
+   * nothing about the address); a failing count fails the request, so no mail goes out unchecked.
    */
   @Transactional
   public void request(Email email, String lang, Optional<UUID> guestId) {
@@ -60,6 +65,10 @@ public class MagicLinkUseCase {
     if (!MagicLinkPolicy.allows(
         links.requestTimesSince(email, MagicLinkPolicy.windowStart(now)), now)) {
       return;
+    }
+    if (!MagicLinkPolicy.underDailyCap(
+        links.countSince(MagicLinkPolicy.dailyWindowStart(now)), dailyCap)) {
+      throw new MailCapReachedException();
     }
     SessionToken token = SessionToken.generate(random);
     links.save(
