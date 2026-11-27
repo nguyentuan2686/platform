@@ -269,9 +269,7 @@ jobs:
       - name: Java gates (Spotless, tests, ArchUnit, JaCoCo)
         run: mvn -B -pl services/zz-java -am verify
       - name: Install system packages (rdkafka cmake-build)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake build-essential pkg-config libsasl2-dev
+        run: bash scripts/ci-apt-install.sh cmake build-essential pkg-config libsasl2-dev
       - name: Install Rust toolchain (pinned by rust-toolchain.toml)
         run: rustup toolchain install --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
