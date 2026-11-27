@@ -42,8 +42,17 @@ paths:
       summary: Email a one-time login link (valid 15 minutes, max 3 per email per 15 minutes).
       description: >-
         Answers 202 with the same body, whether the email is known, unknown or rate
-        limited per address (only the global daily cap answers 429). With a guest bearer, the guest
-        is merged into the account at verification.
+        limited per address or per client (only the global daily cap answers 429). With a guest
+        bearer, the guest is merged into the account at verification.
+      parameters:
+        - name: X-Client-Ip
+          in: header
+          required: false
+          description: >-
+            The end user's IP as web saw it (Cf-Connecting-IP). Keys the silent per-client cap (20
+            links per IPv4 address or IPv6 /64 per rolling 24 h); only a keyed hash (HMAC-SHA256) is stored. Missing
+            or not an IP literal: no per-client cap.
+          schema: {type: string, maxLength: 64}
       security:
         - internalToken: []
         - internalToken: []

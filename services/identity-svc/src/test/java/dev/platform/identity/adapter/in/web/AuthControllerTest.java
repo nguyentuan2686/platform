@@ -108,7 +108,8 @@ class AuthControllerTest {
             .getContentAsString();
 
     assertThat(second).isEqualTo(first);
-    verify(magicLinks).request(new Email("known@example.com"), "vi", Optional.empty());
+    verify(magicLinks)
+        .request(new Email("known@example.com"), "vi", Optional.empty(), Optional.empty());
   }
 
   @Test
@@ -123,7 +124,8 @@ class AuthControllerTest {
                 .content("{\"email\":\"a@example.com\",\"lang\":\"vi\"}"))
         .andExpect(status().isAccepted());
 
-    verify(magicLinks).request(new Email("a@example.com"), "vi", Optional.of(guestId));
+    verify(magicLinks)
+        .request(new Email("a@example.com"), "vi", Optional.of(guestId), Optional.empty());
   }
 
   @Test
@@ -137,14 +139,36 @@ class AuthControllerTest {
                 .content("{\"email\":\"a@example.com\",\"lang\":\"vi\"}"))
         .andExpect(status().isAccepted());
 
-    verify(magicLinks).request(new Email("a@example.com"), "vi", Optional.empty());
+    verify(magicLinks)
+        .request(new Email("a@example.com"), "vi", Optional.empty(), Optional.empty());
+  }
+
+  @Test
+  void magic_link_request_passes_x_client_ip_to_the_client_cap() throws Exception {
+    mvc.perform(
+            post("/auth/magic-links")
+                .header("X-Client-Ip", "203.0.113.7")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"a@example.com\",\"lang\":\"vi\"}"))
+        .andExpect(status().isAccepted());
+    mvc.perform(
+            post("/auth/magic-links")
+                .header("X-Client-Ip", "not-an-ip")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"b@example.com\",\"lang\":\"vi\"}"))
+        .andExpect(status().isAccepted());
+
+    verify(magicLinks)
+        .request(new Email("a@example.com"), "vi", Optional.empty(), Optional.of("203.0.113.7"));
+    verify(magicLinks)
+        .request(new Email("b@example.com"), "vi", Optional.empty(), Optional.of("not-an-ip"));
   }
 
   @Test
   void mail_failure_is_503_upstream_unavailable_without_details() throws Exception {
     org.mockito.Mockito.doThrow(new dev.platform.identity.application.MailDeliveryException())
         .when(magicLinks)
-        .request(any(), any(), any());
+        .request(any(), any(), any(), any());
 
     postJson("/auth/magic-links", "{\"email\":\"a@example.com\",\"lang\":\"vi\"}")
         .andExpect(status().isServiceUnavailable())

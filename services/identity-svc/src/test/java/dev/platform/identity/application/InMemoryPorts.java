@@ -1,5 +1,6 @@
 package dev.platform.identity.application;
 
+import dev.platform.identity.domain.ClientKey;
 import dev.platform.identity.domain.Email;
 import dev.platform.identity.domain.ShareId;
 import dev.platform.identity.domain.Subject;
@@ -190,6 +191,13 @@ final class InMemoryPorts {
           .filter(l -> l.email().equals(email) && l.createdAt().isAfter(since))
           .map(PendingMagicLink::createdAt)
           .toList();
+    }
+
+    @Override
+    public long countForClientSince(ClientKey client, Instant since) {
+      return saved.stream()
+          .filter(l -> client.equals(l.client()) && l.createdAt().isAfter(since))
+          .count();
     }
 
     @Override
