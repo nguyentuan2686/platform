@@ -122,6 +122,7 @@ On a branch, together with the sealed files from step 4:
   - in `deploy/k8s/overlays/prod/tunnel/kustomization.yaml`, replace `../../../components/cloudflared-quick` with `../../../components/cloudflared-named` (needs the sealed `cloudflared-secrets`);
   - in `deploy/k8s/overlays/prod/apps/patches/identity-svc.yaml`, set `MAIL_HOST` and `MAIL_PORT` to the SMTP relay (submission port 587 with STARTTLS; `MAIL_SMTP_AUTH` and `MAIL_STARTTLS` stay `"true"`). Verify the sender domain at the provider (SPF and DKIM records in Cloudflare DNS) first;
   - SePay: set the webhook URL to `https://<APP_DOMAIN>/webhooks/sepay` with API-key auth (`SEPAY_WEBHOOK_SECRET`). Only that exact path reaches payment-svc (Ingress `payment-webhook`, pathType Exact, 64 KiB body cap, rate limited); `/webhooks/paypal`, `/admin/*` and every other payment-svc path stay internal.
+  - Receiving account: `SEPAY_BANK_CODE` (SePay/VietQR short name, e.g. `MBBank`), `SEPAY_ACCOUNT_NUMBER`, `SEPAY_ACCOUNT_NAME` live in the sealed `payment-svc-secrets` (an account number can be a phone number, which never goes into Git in plaintext). Empty = SePay orders answer 503.
 
 ```sh
 MSYS_NO_PATHCONV=1 docker run --rm -v "$PWD:/w" -w /w alpine/k8s:1.33.4 bash scripts/k8s-validate.sh deploy/k8s/overlays/prod
