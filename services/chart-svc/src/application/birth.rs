@@ -62,7 +62,7 @@ pub fn normalize(
     cal: CalendarKind,
 ) -> Result<NormalizedBirth, BirthError> {
     let tz = TimeZone::get(zone).map_err(|_| BirthError::UnknownZone)?;
-    let ambiguous = tz.to_ambiguous_zoned(to_civil(local)?);
+    let ambiguous = tz.to_ambiguous_zoned_datetime(to_civil(local)?);
     if matches!(ambiguous.offset(), AmbiguousOffset::Gap { .. }) {
         return Err(BirthError::Nonexistent);
     }
@@ -75,7 +75,7 @@ pub fn normalize(
     } else {
         standard_offset(&tz, instant)
     };
-    let wall = instant.to_zoned(TimeZone::fixed(standard));
+    let wall = instant.to_zoned_datetime(TimeZone::fixed(standard));
     let mut solar_date = from_civil(wall.date())?;
     let hour = u8::try_from(wall.hour()).map_err(|_| BirthError::OutOfRange)?;
     if hour == 23 {
