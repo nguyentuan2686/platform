@@ -359,7 +359,7 @@ dependencies = [
  "async-trait",
  "axum",
  "http-body-util",
- "jiff 0.2.46",
+ "jiff 1.0.2",
  "jsonschema",
  "platform-core",
  "serde",
@@ -1298,7 +1298,6 @@ checksum = "175dc66334db3b9ab9985bf8b61cfed50dc16d20964bb47f9e479adcae984a7f"
 dependencies = [
  "jiff-core 0.1.8",
  "jiff-static 0.2.46",
- "jiff-tzdb 0.1.10",
  "jiff-tzdb-platform 0.1.3",
  "log",
  "portable-atomic",
@@ -1315,6 +1314,7 @@ checksum = "c5e77cbfb9fff4798e283c2d69dff39fc2c45e7da017e5ce95b654e46ea41236"
 dependencies = [
  "jiff-core 1.0.1",
  "jiff-static 1.0.2",
+ "jiff-tzdb 1.0.0",
  "jiff-tzdb-platform 1.0.0",
  "log",
  "portable-atomic",
