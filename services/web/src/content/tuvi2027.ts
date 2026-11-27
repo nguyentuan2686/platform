@@ -35,7 +35,7 @@ export type Zodiac = Readonly<{
 }>;
 
 export const YEAR_INTRO: readonly string[] = [
-  "Năm 2027 là năm Đinh Mùi, bắt đầu từ Tết Nguyên đán ngày 6 tháng 2 dương lịch. Đinh thuộc Hỏa, Mùi thuộc Thổ, nạp âm là Thiên Hà Thủy, nước trên trời, ta xem đó là hình ảnh của sự nuôi dưỡng chậm rãi mà bền.",
+  "Năm 2027 là năm Đinh Mùi, bắt đầu từ Tết Nguyên đán ngày 6 tháng 2 dương lịch. Đinh thuộc Hỏa, Mùi thuộc Thổ, nạp âm là Thiên Hà Thủy, nước trên trời, ta xem đó là hình ảnh của sự nuôi dưỡng chậm rãi mà bền, nhắc con đi từng bước cho chắc.",
   "Theo Tứ Hóa của can Đinh, Thái Âm hóa Lộc, Thiên Đồng hóa Quyền, Thiên Cơ hóa Khoa, Cự Môn hóa Kỵ. Ta đọc đó là một năm hợp với việc chăm chút nhà cửa, tích lũy từ từ và học thêm, còn lời ăn tiếng nói thì con nên giữ cho mềm mỏng.",
   "Những dòng dưới đây chỉ là nét chung theo con giáp, ai cùng tuổi đều đọc như nhau. Năm 2027 đi vào cung nào trong lá số của riêng con thì phải lập lá số mới thấy được.",
 ];

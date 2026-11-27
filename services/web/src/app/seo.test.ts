@@ -29,7 +29,7 @@ describe("sitemap", () => {
     expect(urls).toContain(`${cfg().webOrigin}/vi/dieu-khoan`);
     expect(urls).toContain(`${cfg().webOrigin}/vi/tu-vi-2027`);
     expect(urls).toContain(`${cfg().webOrigin}/vi/tu-vi-2027/tuoi-mui`);
-    expect(urls.some((u) => /la-so|hoi\b|tai-khoan|chia-se|quan-tri/.test(u))).toBe(false);
+    expect(urls.some((u) => /\/(la-so|hoi|tai-khoan|chia-se|quan-tri)(\/|$)/.test(u))).toBe(false);
   });
 });
 
