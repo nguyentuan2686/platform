@@ -40,6 +40,7 @@ jobs:
       payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
       # new-service: ci-outputs (scripts/new-service.sh inserts above this line)
+      scaffold: ${{ steps.filter.outputs.scaffold }}
       k8s: ${{ steps.filter.outputs.k8s }}
       ops: ${{ steps.filter.outputs.ops }}
       infra: ${{ steps.filter.outputs.infra }}
@@ -96,6 +97,10 @@ jobs:
               - 'knowledge/tuvi/**'
               - 'deploy/k8s/overlays/prod/domain/**' # the build-time WEB_ORIGIN (scripts/web-origin.sh)
             # new-service: ci-filters (scripts/new-service.sh inserts above this line)
+            scaffold:
+              - 'templates/**'
+              - 'scripts/new-service.sh'
+              - 'scripts/test/new-service.test.sh'
             k8s:
               - 'deploy/k8s/**'
               - 'deploy/argocd/**'
@@ -217,6 +222,74 @@ jobs:
       publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   # new-service: ci-jobs (scripts/new-service.sh inserts service jobs above this line)
+  # Scaffolding (templates/ + scripts/new-service.sh): renders a Java and a Rust demo service into this checkout only
+  # (never committed) and runs the real gates on them: mvn verify (Spotless, ArchUnit, JaCoCo), cargo fmt/clippy/test
+  # with --locked (proves the generated Cargo.lock entry), both images, compose config and k8s-validate with the new
+  # bases in the e2e and prod overlays.
+  scaffold:
+    needs: changes
+    if: needs.changes.outputs.scaffold == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Render demo-java and demo-rust (this checkout only)
+        run: |
+          bash scripts/new-service.sh --lang java --name demo-java --port 8998
+          bash scripts/new-service.sh --lang rust --name demo-rust --port 8999
+          git status --short
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Java gates (Spotless, tests, ArchUnit, JaCoCo)
+        run: mvn -B -pl services/demo-java -am verify
+      - name: Install system packages (rdkafka cmake-build)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake build-essential pkg-config libsasl2-dev
+      - name: Install Rust toolchain (pinned by rust-toolchain.toml)
+        run: rustup toolchain install --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Rust gates (fmt, clippy, tests; --locked proves the generated Cargo.lock entry)
+        run: |
+          cargo fmt --all --check
+          cargo clippy -p demo-rust --all-targets --locked -- -D warnings
+          cargo test -p demo-rust --locked
+      - name: Local compose file parses with both services
+        run: docker compose -f deploy/local/docker-compose.yml --profile app config --quiet
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build demo-java image (amd64, no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/demo-java/Dockerfile
+          platforms: linux/amd64
+          push: false
+      - name: Build demo-rust image (amd64, no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/demo-rust/Dockerfile
+          platforms: linux/amd64
+          push: false
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.7.0
+          # sha256 of kubeconform-linux-amd64.tar.gz, as published in the release CHECKSUMS file
+          KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+        run: |
+          curl -fsSL -o kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+          rm -f kubeconform.tar.gz kubeconform
+      - name: Kustomize + policy with the new services
+        run: bash scripts/k8s-validate.sh
+
   k8s-manifests:
     needs: changes
     if: needs.changes.outputs.k8s == 'true' || needs.changes.outputs.root == 'true'
@@ -325,6 +398,7 @@ jobs:
       - payment-svc
       - web
       # new-service: ci-gate-needs (scripts/new-service.sh inserts above this line)
+      - scaffold
       - k8s-manifests
       - k8s-e2e
       - ops-scripts
