@@ -595,6 +595,7 @@ components:
             - gambling
             - death
             - self_harm
+            - ritual
             - injection
             - off_topic
             - insufficient

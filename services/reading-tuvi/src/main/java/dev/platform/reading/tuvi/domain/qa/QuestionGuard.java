@@ -36,6 +36,7 @@ public final class QuestionGuard {
 
   static final int MIN_LENGTH = 5;
   static final int MAX_LENGTH = 500;
+  static final int MIN_LETTERS = 3;
 
   private static final Pattern VI_DIACRITIC =
       Pattern.compile("[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]");
@@ -66,6 +67,7 @@ public final class QuestionGuard {
     gambling();
     death();
     injection();
+    ritual();
     List<RefusalReason> order = new ArrayList<>();
     order.add(RefusalReason.SELF_HARM);
     for (RefusalReason r : RefusalReason.values()) {
@@ -153,9 +155,25 @@ public final class QuestionGuard {
             "bệnh viện",
             "ung thư",
             "tiểu đường",
-            "huyết áp"),
+            "huyết áp",
+            "qua khỏi",
+            "khỏi bệnh",
+            // "dễ bị bệnh" is a sức khỏe tử vi question; a named illness or a present one is not
+            "bị bệnh (?:gì|nặng|này|đó|ấy|hiểm nghèo)",
+            "(?:đang|mới|lại) bị bệnh",
+            // "khi nào có con" stays a tử vi question; fertility as a medical outcome does not
+            "(?:mang|có) thai được",
+            "vô sinh",
+            "hiếm muộn"),
         List.of(),
         List.of(
+            "qua khoi",
+            "khoi benh",
+            "bi benh (?:gi|nang|nay|do|ay|hiem ngheo)",
+            "(?:dang|moi|lai) bi benh",
+            "(?:mang|co) thai duoc",
+            "vo sinh",
+            "hiem muon",
             "uong thuoc",
             "dung thuoc",
             "thuoc chua",
@@ -247,10 +265,41 @@ public final class QuestionGuard {
             "casino",
             "đánh bài",
             "con số may mắn",
+            "số đẹp",
             "lottery"),
         List.of(),
         List.of(
-            "lo de", "danh de", "so de", "xo so", "ca do", "ca cuoc", "danh bai", "con so may man"),
+            "lo de",
+            "danh de",
+            "so de",
+            "xo so",
+            "ca do",
+            "ca cuoc",
+            "danh bai",
+            "con so may man",
+            "so dep"),
+        List.of());
+  }
+
+  private static void ritual() {
+    add(
+        RefusalReason.RITUAL,
+        List.of(
+            "giải hạn",
+            // "cúng" only: unaccented "cung" is a palace
+            "cúng",
+            "dâng sao",
+            "bùa",
+            "trấn yểm",
+            "yểm bùa"),
+        List.of(),
+        List.of(
+            "giai han",
+            "cung (?:sao|giai han|dau nam|le)",
+            "dang sao",
+            "bua (?:yeu|ngai|chu|ho menh)",
+            "tran yem",
+            "yem bua"),
         List.of());
   }
 
@@ -291,6 +340,7 @@ public final class QuestionGuard {
             "forget (?:(?:all|your|the|previous|these|prior) )*(?:instructions|rules|prompts?"
                 + "|guidelines)",
             "system prompt",
+            "system instructions",
             "act as",
             "pretend to be",
             "you are now",
@@ -306,8 +356,12 @@ public final class QuestionGuard {
             "nhap vai",
             "gia vo la",
             "ban la mot",
+            "(?:huong dan|chi dan) he thong",
+            "gio ban la",
+            "quen het nhung gi (?:da )?(?:duoc )?(?:dan|day|bao|huong dan|cai dat|lap trinh)",
             "cau hoi:",
-            "tu lieu:");
+            "tu lieu:",
+            "he thong:");
     List<String> accented = new ArrayList<>(english);
     accented.addAll(
         List.of(
@@ -319,8 +373,14 @@ public final class QuestionGuard {
             "nhập vai",
             "giả vờ là",
             "bạn là một",
+            "(?:hướng dẫn|chỉ dẫn) hệ thống",
+            // "bây giờ bạn là ..." too; "giờ bạn làm" is not matched (word boundary)
+            "giờ bạn là",
+            // "quên hết những gì đã qua" is a feeling, not an attack
+            "quên hết những gì (?:đã )?(?:được )?(?:dặn|dạy|bảo|hướng dẫn|cài đặt|lập trình)",
             "câu hỏi:",
-            "tư liệu:"));
+            "tư liệu:",
+            "hệ thống:"));
     List<String> anyFolded = new ArrayList<>(folded);
     anyFolded.addAll(english);
     add(RefusalReason.INJECTION, accented, List.of(), folded, anyFolded);
@@ -350,6 +410,9 @@ public final class QuestionGuard {
     }
     String cleaned = QuestionNormalizer.clean(raw);
     if (cleaned.length() < MIN_LENGTH || cleaned.length() > MAX_LENGTH) {
+      return new Invalid("question");
+    }
+    if (cleaned.codePoints().filter(Character::isLetter).count() < MIN_LETTERS) {
       return new Invalid("question");
     }
     String sanitized = PiiScrubber.scrub(cleaned);

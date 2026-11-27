@@ -81,6 +81,9 @@ class ChartSvcClientTest {
     ChartResult r = client.chart(BIRTH);
 
     assertThat(r.chart().palaces()).hasSize(12);
+    assertThat(r.chart().lunarBirthYear()).isEqualTo(1994);
+    assertThat(r.chart().palace("Menh").decade())
+        .isEqualTo(new dev.platform.reading.tuvi.domain.Palace.Decade(6, 15));
     assertThat(r.chartHash())
         .isEqualTo(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body)))
         .matches("[0-9a-f]{64}");

@@ -24,6 +24,7 @@ public final class ChartFixture {
                 p.get("nameVi").asString(),
                 p.get("branch").asString(),
                 p.get("isBody").asBoolean(),
+                decade(p.get("decade")),
                 stars(p.get("major")),
                 stars(p.get("minor")),
                 p.get("tuan").asBoolean(),
@@ -34,7 +35,8 @@ public final class ChartFixture {
           root.get("thanPalace").asString(),
           strings(root.get("tuan")),
           strings(root.get("triet")),
-          palaces);
+          palaces,
+          root.get("lunar").get("year").asInt());
     } catch (IOException e) {
       throw new IllegalStateException(e);
     }
@@ -42,6 +44,10 @@ public final class ChartFixture {
 
   public static FlowLayer layer(String palaceKey, Mutagen... mutagens) {
     return new FlowLayer(palaceKey, "Zi", "Jia", List.of(mutagens));
+  }
+
+  private static Palace.Decade decade(JsonNode n) {
+    return new Palace.Decade(n.get("from").asInt(), n.get("to").asInt());
   }
 
   private static List<StarPlacement> stars(JsonNode arr) {

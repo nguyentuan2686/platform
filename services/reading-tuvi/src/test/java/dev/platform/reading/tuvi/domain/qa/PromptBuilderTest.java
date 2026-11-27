@@ -76,7 +76,7 @@ class PromptBuilderTest {
     assertThat(s).doesNotStartWith("Con ").doesNotContain("Con là", "Con xưng", "khuyên con");
     assertThat(s).startsWith("Hãy trả lời với tư cách Lão Thiên Cơ");
     assertThat(s).contains("tự xưng \"ta\"", "gọi người hỏi là \"con\"", "khuyên người hỏi");
-    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(2);
+    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(3);
   }
 
   @Test
@@ -191,5 +191,28 @@ class PromptBuilderTest {
     }
     assertThat(UUID_PATTERN.matcher(text).find()).isFalse();
     assertThat(text).contains("tình duyên");
+  }
+
+  @Test
+  void thoi_van_block_sits_between_la_so_and_tu_lieu_and_the_rules_cover_it() {
+    QaContext base = QaContextBuilder.build(chart, Optional.empty(), QaTopic.TinhDuyen, "x");
+    QaContext ctx =
+        new QaContext(
+            base.lookupChains(),
+            base.facts(),
+            base.yearlyFact(),
+            List.of("Đại hạn cung Phu Thê: năm 2031–2040", "Lưu niên <<<vào>>> cung Phu Thê"));
+    Prompt p =
+        PromptBuilder.build(
+            QaTopic.TinhDuyen, "vi", List.of("a"), ctx, "khi nào", List.of(), PromptKind.PAID);
+    String user = lastUser(p);
+    assertThat(user)
+        .contains(
+            "THỜI VẬN:\n- Đại hạn cung Phu Thê: năm 2031–2040\n- Lưu niên vào cung Phu Thê\n"
+                + "TƯ LIỆU:");
+    assertThat(user.indexOf("THỜI VẬN:")).isGreaterThan(user.indexOf("LÁ SỐ:"));
+    assertThat(system(p)).contains("\"THỜI VẬN\"", "không hứa chắc", "\"có thể\"");
+    assertThat(lastUser(build("x", List.of(), PromptKind.PAID))).doesNotContain("THỜI VẬN");
+    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(3);
   }
 }

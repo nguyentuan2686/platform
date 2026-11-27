@@ -21,11 +21,29 @@ public final class QaContextBuilder {
 
   private QaContextBuilder() {}
 
+  /** Without timing intent: the yearly layer counts only for {@link QaTopic#VanNam} (this year). */
   public static QaContext build(
       Chart chart, Optional<FlowLayer> yearly, QaTopic topic, String normalizedQuestion) {
-    Optional<FlowLayer> layer = topic == QaTopic.VanNam ? yearly : Optional.empty();
+    return build(chart, yearly, topic, normalizedQuestion, TimingIntent.NONE, 0);
+  }
+
+  /**
+   * {@code yearly} is the flow layer of the target year when {@code intent} names one, else of the
+   * current year; it is used for {@link QaTopic#VanNam} or a named year. A timing question also
+   * gets the {@code THỜI VẬN} lines, computed from {@code currentYear} (Vietnam).
+   */
+  public static QaContext build(
+      Chart chart,
+      Optional<FlowLayer> yearly,
+      QaTopic topic,
+      String normalizedQuestion,
+      TimingIntent intent,
+      int currentYear) {
+    Optional<FlowLayer> layer =
+        topic == QaTopic.VanNam || intent.targetYear().isPresent() ? yearly : Optional.empty();
+    Optional<FlowLayer> palaceLayer = topic == QaTopic.VanNam ? layer : Optional.empty();
     List<String> keys =
-        TopicPalaces.palaces(topic, normalizedQuestion, layer.map(FlowLayer::palaceKey));
+        TopicPalaces.palaces(topic, normalizedQuestion, palaceLayer.map(FlowLayer::palaceKey));
     List<List<KnowledgeKey>> chains = new ArrayList<>();
     List<PalaceFact> facts = new ArrayList<>();
     for (String key : keys) {
@@ -38,8 +56,14 @@ public final class QaContextBuilder {
               chart.inTuan(p),
               chart.inTriet(p)));
     }
+    String yearLabel =
+        intent.targetYear().filter(y -> y != currentYear).map(y -> "Năm " + y).orElse("Năm nay");
+    List<String> timing = intent.timing() ? TimingLines.lines(chart, keys, currentYear) : List.of();
     return new QaContext(
-        List.copyOf(chains), List.copyOf(facts), layer.map(l -> yearlyFact(chart, l)));
+        List.copyOf(chains),
+        List.copyOf(facts),
+        layer.map(l -> yearlyFact(chart, l, yearLabel)),
+        timing);
   }
 
   /** {@code "<nameVi> (<brightness>[, Hóa <x>])"}; parentheses are dropped when empty. */
@@ -58,8 +82,8 @@ public final class QaContextBuilder {
     return MUTAGEN_VI.getOrDefault(mutagen, mutagen);
   }
 
-  private static String yearlyFact(Chart chart, FlowLayer layer) {
-    String text = "Năm nay lưu niên ở cung " + chart.palace(layer.palaceKey()).nameVi();
+  private static String yearlyFact(Chart chart, FlowLayer layer, String yearLabel) {
+    String text = yearLabel + " lưu niên ở cung " + chart.palace(layer.palaceKey()).nameVi();
     if (layer.mutagens().isEmpty()) {
       return text;
     }

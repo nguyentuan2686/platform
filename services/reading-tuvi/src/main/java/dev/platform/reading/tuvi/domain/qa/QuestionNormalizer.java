@@ -27,6 +27,9 @@ public final class QuestionNormalizer {
   private static final Pattern TRAILING = Pattern.compile("[\\s?.!…]+$");
   private static final Pattern IN_WORD_PUNCT = Pattern.compile("(?<=\\p{L})[-_.·/]+(?=\\p{L})");
   private static final Pattern MARKS = Pattern.compile("\\p{M}+");
+  private static final Pattern VI_DIACRITIC =
+      Pattern.compile("[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]");
+  private static final String BLANK = "·";
 
   private QuestionNormalizer() {}
 
@@ -72,6 +75,21 @@ public final class QuestionNormalizer {
   public static String matchForm(String text) {
     String s = SafetyLexicon.canonicalTones(normalize(text));
     return IN_WORD_PUNCT.matcher(s).replaceAll(" ");
+  }
+
+  /**
+   * {@code match} (a {@link #matchForm}) with every word that carries a Vietnamese diacritic
+   * replaced by a placeholder, so folded phrases match only what was typed without diacritics.
+   */
+  public static String unaccentedWords(String match) {
+    StringBuilder sb = new StringBuilder(match.length());
+    for (String w : match.split(" ")) {
+      if (!sb.isEmpty()) {
+        sb.append(' ');
+      }
+      sb.append(VI_DIACRITIC.matcher(w).find() ? BLANK : w);
+    }
+    return sb.toString();
   }
 
   /** Lowercase text with Vietnamese diacritics removed ({@code đ} becomes {@code d}). */

@@ -23,6 +23,7 @@ public final class ChartMapper {
               p.get("nameVi").asString(),
               p.get("branch").asString(),
               p.get("isBody").asBoolean(),
+              decade(p.get("decade")),
               stars(p.get("major")),
               stars(p.get("minor")),
               p.get("tuan").asBoolean(),
@@ -33,7 +34,8 @@ public final class ChartMapper {
         root.get("thanPalace").asString(),
         strings(root.get("tuan")),
         strings(root.get("triet")),
-        palaces);
+        palaces,
+        root.get("lunar").get("year").asInt());
   }
 
   public static String school(JsonNode root) {
@@ -66,6 +68,10 @@ public final class ChartMapper {
         n.get("branch").asString(),
         n.get("stem").asString(),
         mutagens);
+  }
+
+  private static Palace.Decade decade(JsonNode n) {
+    return new Palace.Decade(n.get("from").asInt(), n.get("to").asInt());
   }
 
   private static List<StarPlacement> stars(JsonNode arr) {

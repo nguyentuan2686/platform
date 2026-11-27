@@ -65,6 +65,7 @@ class ReadingPlanTest {
             "Mệnh",
             "Yin",
             false,
+            new Palace.Decade(6, 15),
             List.of(new StarPlacement("ThienCo", "Thiên Cơ", null, null)),
             List.of(),
             false,
@@ -73,7 +74,13 @@ class ReadingPlanTest {
     List<Palace> palaces =
         base.palaces().stream().map(q -> q.key().equals("Menh") ? p : q).toList();
     Chart chart =
-        new Chart(base.cucNameVi(), base.thanPalace(), base.tuan(), base.triet(), palaces);
+        new Chart(
+            base.cucNameVi(),
+            base.thanPalace(),
+            base.tuan(),
+            base.triet(),
+            palaces,
+            base.lunarBirthYear());
 
     Section menh =
         ReadingPlan.basic(chart).stream().filter(s -> s.id().equals("menh")).findFirst().get();

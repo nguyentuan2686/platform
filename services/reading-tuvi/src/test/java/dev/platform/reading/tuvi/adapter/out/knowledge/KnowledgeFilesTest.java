@@ -44,6 +44,7 @@ class KnowledgeFilesTest {
           "qa_refuse_gambling",
           "qa_refuse_death",
           "qa_refuse_selfharm",
+          "qa_refuse_ritual",
           "qa_refuse_offtopic",
           "qa_insufficient",
           "qa_queued",
@@ -102,7 +103,7 @@ class KnowledgeFilesTest {
     assertThat(keys)
         .containsExactlyInAnyOrderElementsOf(
             FRAME_IDS.stream().map(i -> "tuvi:frame=" + i).toList());
-    assertThat(keys).hasSize(24);
+    assertThat(keys).hasSize(25);
     for (String line : Files.readAllLines(KNOWLEDGE.resolve("frames.vi.jsonl"))) {
       assertThat(JsonMapper.shared().readTree(line).get("status").stringValue())
           .as(line)

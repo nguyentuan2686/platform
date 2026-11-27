@@ -26,7 +26,13 @@ public final class AnswerFilter {
   /** Prompt markers and sentinels; uppercase markers are matched case-sensitively. */
   private static final List<String> LEAK_LITERALS =
       List.of(
-          "TƯ LIỆU", "CÂU HỎI", "<<<", ">>>", Sentinel.NGOAI_PHAM_VI, Sentinel.KHONG_DU_TU_LIEU);
+          "TƯ LIỆU",
+          "CÂU HỎI",
+          "THỜI VẬN",
+          "<<<",
+          ">>>",
+          Sentinel.NGOAI_PHAM_VI,
+          Sentinel.KHONG_DU_TU_LIEU);
 
   private static final List<Pattern> LEAK_WORDS =
       List.of(

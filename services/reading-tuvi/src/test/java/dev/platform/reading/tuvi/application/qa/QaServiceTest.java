@@ -385,6 +385,60 @@ class QaServiceTest {
     assertThat(user).contains("Năm nay lưu niên ở cung");
   }
 
+  private String lastUser() {
+    return provider.requests.getLast().messages().getLast().content();
+  }
+
+  @Test
+  void timing_question_gets_thoi_van_in_calendar_years_without_a_daily_call() {
+    ask("acc", UUID.randomUUID(), QaKind.PAID, "Khi nào tôi gặp được người hợp?");
+
+    String user = lastUser();
+    // fixture: lunar birth year 1994, 2026 is nominal age 33 -> Phúc Đức (26-35)
+    assertThat(user)
+        .contains(
+            "THỜI VẬN:\n- Đại hạn hiện tại (năm 2026): cung Phúc Đức, năm 2019–2028\n"
+                + "- Đại hạn cung Phu Thê: năm 2099–2108\n"
+                + "- Lưu niên vào cung Phu Thê: năm 2029 (Kỷ Dậu)\n"
+                + "TƯ LIỆU:");
+    assertThat(user.indexOf("THỜI VẬN:")).isGreaterThan(user.indexOf("LÁ SỐ:"));
+    assertThat(user).doesNotContain("1994", "08:30", "male", "tuổi");
+    assertThat(charts.dailyCalls).isZero();
+  }
+
+  @Test
+  void a_named_year_reads_that_years_flow_layer_for_any_topic() {
+    run(
+        qa.prepare(
+            new AskCommand(
+                "acc",
+                UUID.randomUUID(),
+                QaKind.PAID,
+                QaTopic.SuNghiep,
+                "Năm 2027 công việc thế nào?",
+                "vi")));
+
+    assertThat(charts.dailyDates).containsExactly(java.time.LocalDate.of(2027, 7, 1));
+    assertThat(lastUser())
+        .contains("- Năm 2027 lưu niên ở cung Quan Lộc")
+        .doesNotContain("THỜI VẬN");
+  }
+
+  @Test
+  void follow_up_uses_its_own_timing_and_year() {
+    UUID id = UUID.randomUUID();
+    paid(id);
+    int before = charts.dailyCalls;
+
+    followUp(id, "Bao giờ tôi lấy vợ?");
+    assertThat(lastUser()).contains("THỜI VẬN:", "Lưu niên vào cung Phu Thê: năm 2029");
+    assertThat(charts.dailyCalls).isEqualTo(before);
+
+    followUp(id, "Vậy sang năm thì sao");
+    assertThat(charts.dailyDates.getLast()).isEqualTo(java.time.LocalDate.of(2027, 7, 1));
+    assertThat(lastUser()).contains("Năm 2027 lưu niên ở cung").doesNotContain("THỜI VẬN");
+  }
+
   // ---- FREE ----
 
   @Test
