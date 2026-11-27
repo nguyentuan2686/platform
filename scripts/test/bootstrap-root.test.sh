@@ -62,6 +62,11 @@ ci_mode_pins_children_and_stops_tunnel_and_apps() {
     [ "$(app "$a" '.metadata.annotations["platform.dev/ci-manual-sync"]')" = true ] || fail "${FUNCNAME[0]}" "$a not marked"
     [ "$(app "$a" '.metadata.annotations["argocd.argoproj.io/sync-wave"]')" = 1 ] || fail "${FUNCNAME[0]}" "$a lost its wave"
   done
+  # CI-sealed test secrets must survive prod-sealed's selfHeal (the Git copies are sealed for the prod key).
+  [ "$(app prod-sealed '.spec.ignoreDifferences[] | select(.kind == "SealedSecret") | .jsonPointers[0]')" = /spec ] \
+    || fail "${FUNCNAME[0]}" "prod-sealed does not ignore SealedSecret spec"
+  [ "$(app prod-sealed '.spec.syncPolicy.syncOptions | join(",")')" = ServerSideApply=true,RespectIgnoreDifferences=true ] \
+    || fail "${FUNCNAME[0]}" "prod-sealed syncOptions $(app prod-sealed '.spec.syncPolicy.syncOptions')"
   echo "ok ${FUNCNAME[0]}"
 }
 
@@ -73,6 +78,7 @@ revision_without_ci_mode_keeps_automated() {
     [ "$(app "$a" .spec.source.targetRevision)" = v9.9.9 ] || fail "${FUNCNAME[0]}" "$a targetRevision"
     [ "$(app "$a" '.spec.syncPolicy.automated.prune')" = true ] || fail "${FUNCNAME[0]}" "$a lost automated sync"
   done
+  [ "$(app prod-sealed '.spec.ignoreDifferences // "none"')" = none ] || fail "${FUNCNAME[0]}" "prod-sealed ignores differences outside CI"
   echo "ok ${FUNCNAME[0]}"
 }
 
