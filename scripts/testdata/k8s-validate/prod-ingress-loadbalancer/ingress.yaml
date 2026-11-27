@@ -1,0 +1,8 @@
+# Self-test fixture: violates only the 'prod-ingress' policy check (a LoadBalancer Service bypasses cloudflared).
+apiVersion: v1
+kind: Service
+metadata: {name: web-public, namespace: apps}
+spec:
+  type: LoadBalancer
+  selector: {app: web}
+  ports: [{port: 80, targetPort: 3000}]

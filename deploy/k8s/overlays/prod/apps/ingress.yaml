@@ -71,3 +71,23 @@ spec:
               service:
                 name: payment-svc
                 port: {number: 8085}
+---
+# Next.js Server Actions: a POST carrying a `Next-Action` header runs that action whatever the URL path, so a login
+# action POSTed to `/` would skip web-strict. Every action POST therefore gets the strict limit too (its own bucket per
+# router). A plain Ingress cannot match headers, hence this Traefik IngressRoute; its explicit priority wins over every
+# Ingress-generated router (those use the rule length). Only web:3000 (scripts/k8s-validate.sh prod-ingress).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: web-actions
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: web
+    app.kubernetes.io/part-of: platform
+spec:
+  routes:
+    - kind: Rule
+      match: Host(`app.example.invalid`) && Method(`POST`) && HeaderRegexp(`Next-Action`, `.+`)
+      priority: 1000
+      middlewares: [{name: ratelimit-strict}]
+      services: [{name: web, port: 3000}]
