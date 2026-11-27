@@ -32,15 +32,70 @@ describe("sitemap", () => {
 });
 
 describe("robots", () => {
-  it("disallows private routes and points at the sitemap", () => {
+  const disallowed = () => {
     const r = robots();
     const rule = Array.isArray(r.rules) ? r.rules[0]! : r.rules;
     expect(rule.allow).toBe("/");
-    const dis = ([] as string[]).concat(rule.disallow ?? []);
-    for (const p of ["/api/", "/vi/la-so", "/vi/hoi", "/vi/lich-su", "/vi/tai-khoan", "/vi/thanh-toan", "/vi/quan-tri", "/vi/dang-nhap", "/vi/chia-se", "/vi/mua"]) {
-      expect(dis).toContain(p);
-    }
-    expect(r.sitemap).toBe(`${cfg().webOrigin}/sitemap.xml`);
+    return ([] as string[]).concat(rule.disallow ?? []);
+  };
+
+  it("disallows only non-page endpoints and points at the sitemap", () => {
+    expect(disallowed().sort()).toEqual(["/api/", "/vi/dang-nhap/google"]);
+    expect(robots().sitemap).toBe(`${cfg().webOrigin}/sitemap.xml`);
+  });
+
+  // Google must crawl a page to see its noindex; a disallowed URL linked from elsewhere (a share
+  // link on Zalo/Facebook) can be indexed without its content.
+  it.each(["/vi/la-so", "/vi/hoi", "/vi/hoi/r1", "/vi/lich-su", "/vi/tai-khoan", "/vi/tai-khoan/giao-dich", "/vi/thanh-toan/o1", "/vi/quan-tri", "/vi/dang-nhap", "/vi/dang-nhap/xac-nhan", "/vi/chia-se/s1", "/vi/mua"])(
+    "does not block the noindex page %s from crawling",
+    (page) => {
+      for (const d of disallowed()) expect(page.startsWith(d)).toBe(false);
+    },
+  );
+});
+
+describe("indexable pages", () => {
+  type Meta = {
+    robots?: { index?: boolean };
+    description?: string;
+    alternates?: { canonical?: string; languages?: Record<string, string> };
+    openGraph?: { url?: string; locale?: string };
+  };
+  const o = cfg().webOrigin;
+  const cases: [string, () => Promise<Meta>][] = [
+    ["/vi", async () => (await import("@/app/vi/page")).metadata as Meta],
+    ["/vi/kien-thuc", async () => (await import("@/app/vi/kien-thuc/page")).metadata as Meta],
+    ["/vi/dieu-khoan", async () => (await import("@/app/vi/dieu-khoan/page")).metadata as Meta],
+    ["/vi/chinh-sach-rieng-tu", async () => (await import("@/app/vi/chinh-sach-rieng-tu/page")).metadata as Meta],
+    ["/vi/hoan-tien", async () => (await import("@/app/vi/hoan-tien/page")).metadata as Meta],
+    [
+      "/vi/kien-thuc/cung/menh",
+      async () =>
+        (await (await import("@/app/vi/kien-thuc/cung/[slug]/page")).generateMetadata({
+          params: Promise.resolve({ slug: "menh" }),
+        })) as Meta,
+    ],
+    [
+      "/vi/kien-thuc/sao/thien-co",
+      async () =>
+        (await (await import("@/app/vi/kien-thuc/sao/[slug]/page")).generateMetadata({
+          params: Promise.resolve({ slug: "thien-co" }),
+        })) as Meta,
+    ],
+  ];
+
+  it.each(cases)("%s: indexable, self-canonical, vi hreflang, description <= 160 chars", async (path, load) => {
+    const m = await load();
+    expect(m.robots?.index).toBe(true);
+    expect(m.alternates?.canonical).toBe(`${o}${path}`);
+    expect(m.alternates?.languages).toEqual({ vi: `${o}${path}`, "x-default": `${o}${path}` });
+    expect(m.openGraph).toMatchObject({ url: `${o}${path}`, locale: "vi_VN" });
+    expect(m.description?.length).toBeGreaterThan(40);
+    expect(m.description!.length).toBeLessThanOrEqual(160);
+  });
+
+  it("every sitemap URL is one of the indexable pages' canonicals or a knowledge page", () => {
+    for (const { url } of sitemap()) expect(url).toMatch(new RegExp(`^${o}/vi(/kien-thuc(/(cung|sao)/[a-z-]+)?|/dieu-khoan|/chinh-sach-rieng-tu|/hoan-tien)?$`));
   });
 });
 

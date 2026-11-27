@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { cfg } from "@/lib/config";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
+  origin: cfg().webOrigin,
+  path: "/vi/hoan-tien",
   title: "Chính sách hoàn tiền",
   description: "Khi nào lượt hỏi được hoàn và cách yêu cầu hoàn tiền.",
-  robots: { index: true, follow: true },
-};
+});
 
 export default function RefundPage() {
   return (
