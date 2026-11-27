@@ -87,6 +87,13 @@ render_root() {
                 echo "            - {op: remove, path: /spec/syncPolicy/automated}"
                 echo "            - {op: add, path: /metadata/annotations/platform.dev~1ci-manual-sync, value: \"true\"}"
               done
+              # CI seals its own test secrets with the runner's throwaway key; the prod SealedSecrets in Git are sealed
+              # for the prod key and never decrypt there. prod-sealed keeps whatever SealedSecret spec is live, so a
+              # selfHeal does not put the undecryptable Git copies back over the CI ones.
+              echo "        - target: {group: argoproj.io, kind: Application, name: prod-sealed}"
+              echo "          patch: |-"
+              echo "            - {op: add, path: /spec/ignoreDifferences, value: [{group: bitnami.com, kind: SealedSecret, jsonPointers: [/spec]}]}"
+              echo "            - {op: replace, path: /spec/syncPolicy/syncOptions, value: [ServerSideApply=true, RespectIgnoreDifferences=true]}"
             fi
           fi
           ;;
