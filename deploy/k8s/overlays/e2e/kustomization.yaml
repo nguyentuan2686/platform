@@ -11,6 +11,7 @@ resources:
   - ../../base/identity-svc
   - ../../base/payment-svc
   - ../../base/web
+  # new-service: e2e-resources (scripts/new-service.sh inserts above this line)
   - mailpit.yaml
   - minio.yaml
 patches:
@@ -34,6 +35,7 @@ images:
   - {name: ghcr.io/nguyentuan2686/identity-svc, newName: identity-svc, newTag: e2e}
   - {name: ghcr.io/nguyentuan2686/payment-svc, newName: payment-svc, newTag: e2e}
   - {name: ghcr.io/nguyentuan2686/web, newName: web, newTag: e2e}
+  # new-service: e2e-images (scripts/new-service.sh inserts above this line)
 generatorOptions:
   disableNameSuffixHash: true
 secretGenerator:

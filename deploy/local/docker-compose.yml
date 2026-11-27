@@ -287,5 +287,7 @@ services:
       - "127.0.0.1:${WEB_PORT:-3001}:3000"
     mem_limit: 256m
 
+  # new-service: compose (scripts/new-service.sh inserts services above this line)
+
 volumes:
   pgdata:

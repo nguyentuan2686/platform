@@ -23,6 +23,7 @@
     <module>services/reading-tuvi</module>
     <module>services/identity-svc</module>
     <module>services/payment-svc</module>
+    <!-- new-service: maven-modules (scripts/new-service.sh inserts above this line) -->
   </modules>
 
   <properties>

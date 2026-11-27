@@ -1,0 +1,4 @@
+            __CRATE__:
+              - 'services/__SERVICE__/**'
+              - 'contracts/openapi/__SERVICE__.yaml'
+              - 'libs/java/**'

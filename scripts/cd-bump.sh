@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CD: bump prod image tags in a kustomization `images:` list to sha-<commit>, never backwards.
 # Usage: scripts/cd-bump.sh --file <kustomization> --sha <40-hex> [--repo <git dir>] <svc>...
-#   <svc> is one of: order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web.
+#   <svc> is one of SERVICES below (scripts/new-service.sh registers new ones).
 # Per service, against the current newTag:
 #   main, or sha-<X> with X an ancestor of <sha>  -> newTag: sha-<sha>, prints "BUMP <svc> <old> -> sha-<short>"
 #   sha-<sha>                                     -> prints "SAME <svc>"
@@ -11,7 +11,7 @@
 # Edits with `yq -i` (comments and order preserved). Run scripts/test/cd-bump.test.sh after changing this file.
 set -euo pipefail
 
-SERVICES=(order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web)
+SERVICES=(order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web) # new-service: cd-bump-services
 IMAGE_PREFIX=ghcr.io/nguyentuan2686
 
 usage() {

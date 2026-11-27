@@ -13,6 +13,7 @@ resources:
   - ../../../base/identity-svc
   - ../../../base/payment-svc
   - ../../../base/web
+  # new-service: prod-resources (scripts/new-service.sh inserts above this line)
   - ingress.yaml
   - middlewares.yaml
 components:
@@ -53,3 +54,4 @@ images:
   - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: main}
   - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: main}
   - {name: ghcr.io/nguyentuan2686/web, newTag: main}
+  # new-service: prod-images (scripts/new-service.sh inserts above this line; CD bumps these tags)

@@ -1,0 +1,10 @@
+      - name: Build __SERVICE__
+        uses: __BUILD_PUSH_ACTION__
+        with:
+          context: .
+          file: services/__SERVICE__/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: __SERVICE__:e2e
+          cache-from: type=gha,scope=__SERVICE__-amd64
