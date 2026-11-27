@@ -16,4 +16,4 @@ A transient refusal from the Microsoft apt repository that GitHub's ubuntu-24.04
 It is the same class as a Maven Central 429. Read the log; an apt "Failed to fetch ... 403/5xx" on a third-party source means rerun.
 
 ## Escalation
-none (first occurrence for apt). If it recurs: drop `/etc/apt/sources.list.d/microsoft-prod.list` before `apt-get update` in `.github/workflows/_rust-service.yml` (we need nothing from it), i.e. make it a hard fix.
+hard check. It recurred the same day in the `scaffold` job of PR #34 (run 45971660093). Every workflow now installs apt packages via `scripts/ci-apt-install.sh`, which drops the packages.microsoft.com sources before `apt-get update` and retries the update once. `scripts/test/ci-apt-install.test.sh` (CI job `ops-scripts`) fails on any bare `apt-get update` in `.github/workflows`.

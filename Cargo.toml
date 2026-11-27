@@ -25,7 +25,7 @@ serde_json = { version = "1.0.154", features = ["preserve_order"] }
 tokio = { version = "1.54.1", features = ["time", "rt-multi-thread", "macros"] }
 axum = { version = "0.8.4", default-features = false, features = ["http1", "json", "query", "tokio", "matched-path", "original-uri"] }
 tower = { version = "0.5.2", features = ["util"] }
-tower-http = { version = "0.6.6", default-features = false, features = ["trace"] }
+tower-http = { version = "0.7.1", default-features = false, features = ["trace"] }
 async-trait = "0.1.89"
 thiserror = "2.0.12"
 opentelemetry-http = "0.33.0"

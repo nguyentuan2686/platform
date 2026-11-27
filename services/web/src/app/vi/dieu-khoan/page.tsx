@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { cfg } from "@/lib/config";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
+  origin: cfg().webOrigin,
+  path: "/vi/dieu-khoan",
   title: "Điều khoản sử dụng",
   description: "Điều khoản sử dụng dịch vụ xem lá số tử vi và hỏi đáp.",
-  robots: { index: true, follow: true },
-};
+});
 
 export default function TermsPage() {
   return (

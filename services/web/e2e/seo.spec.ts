@@ -22,7 +22,10 @@ test("sitemap and robots", async ({ request }) => {
   expect(sm).toContain("/vi/kien-thuc/cung/menh");
   expect(sm).not.toContain("/vi/la-so");
   const robots = await (await request.get("/robots.txt")).text();
-  expect(robots).toContain("Disallow: /vi/la-so");
+  expect(robots).toContain("Disallow: /api/");
+  // noindex pages stay crawlable so Google sees their noindex
+  expect(robots).not.toContain("Disallow: /vi/la-so");
+  expect(robots).not.toContain("Disallow: /vi/chia-se");
   expect(robots).toContain("Sitemap:");
 });
 
@@ -34,4 +37,27 @@ test("legal page title carries the site suffix exactly once", async ({ page }) =
 test("sitemap lists the 31 public URLs", async ({ request }) => {
   const sm = await (await request.get("/sitemap.xml")).text();
   expect((sm.match(/<loc>/g) ?? []).length).toBe(31);
+});
+
+test("knowledge page ships hreflang, Open Graph and BreadcrumbList + Article JSON-LD in the HTML", async ({ page, request }) => {
+  const html = await (await request.get("/vi/kien-thuc/cung/menh")).text();
+  expect(html).toContain('property="og:locale" content="vi_VN"');
+  await page.goto("/vi/kien-thuc/cung/menh");
+  await expect(page.locator('link[rel="alternate"][hreflang="vi"]')).toHaveAttribute("href", /\/vi\/kien-thuc\/cung\/menh$/);
+  const blocks = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((m) => JSON.parse(m[1]!));
+  expect(blocks.map((b) => b["@type"])).toEqual(["BreadcrumbList", "Article"]);
+});
+
+test("home page carries a canonical and WebSite JSON-LD", async ({ page }) => {
+  await page.goto("/vi");
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/vi$/);
+  const types = await page.locator('script[type="application/ld+json"]').allTextContents();
+  expect(types.map((t) => JSON.parse(t)["@type"])).toEqual(["Organization", "WebSite"]);
+});
+
+test("unknown page is a Vietnamese 404 with links back", async ({ page }) => {
+  const res = await page.goto("/vi/khong-ton-tai");
+  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ta không tìm thấy trang này.");
+  await expect(page.getByRole("link", { name: "Đọc kiến thức tử vi" })).toHaveAttribute("href", "/vi/kien-thuc");
 });
