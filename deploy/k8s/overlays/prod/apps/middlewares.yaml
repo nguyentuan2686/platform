@@ -29,6 +29,19 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
+  name: ratelimit-actions
+  namespace: apps
+spec:
+  rateLimit: # every Next.js Server Action POST (chart form, login, buy, share...): 60 per minute per client IP, bursts
+    # of 30. Looser than login: the home-page chart form is one, and the mail itself is capped per client in identity-svc.
+    average: 60
+    burst: 30
+    period: 1m
+    sourceCriterion: {requestHeaderName: Cf-Connecting-IP}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
   name: ratelimit-webhook
   namespace: apps
 spec:

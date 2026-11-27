@@ -179,7 +179,8 @@ def hostof: (split("/") | .[2] // "");
       else empty end),
       (if $o.kind == "IngressRoute" then
         (($o.spec.routes // [])[] | (.match // "") as $m
-         | if ($m | test("Host\\(`[^`]*`\\)")) then ($m | [scan("Host\\(`([^`]*)`\\)")[0]][] | {what: "IngressRoute", where: ($o | id), field: "routes[].match Host", got: .})
+         | if ($m | contains("||")) then {what: "IngressRoute", where: ($o | id), field: "routes[].match", got: "(an || alternative matches other hosts)"}
+           elif ($m | test("Host\\(`[^`]*`\\)")) then ($m | [scan("Host\\(`([^`]*)`\\)")[0]][] | {what: "IngressRoute", where: ($o | id), field: "routes[].match Host", got: .})
            else {what: "IngressRoute", where: ($o | id), field: "routes[].match Host", got: "(no Host matcher)"} end)
       else empty end),
       (if ($o.kind | IN("Pod","Deployment","StatefulSet","DaemonSet","Job","CronJob","ReplicaSet")) then
@@ -406,10 +407,10 @@ check_dashboards() {
 
 
 # alerts: Grafana alert rules as code. $1 = dir holding alerting/rules.yaml and metric-names.txt. rules.yaml parses, its
-# uids are exactly the six of the spec (§10) plus backup-skipped and mail-cap-reached (final review I8, I1), every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
+# uids are exactly the six of the spec (§10) plus backup-skipped, mail-cap-reached and mail-client-cap-hits, every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
 # identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[` and `_bytes` names).
 # Fails closed: missing files or parse errors fail.
-ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high mail-cap-reached pod-restart-loop"
+ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high mail-cap-reached mail-client-cap-hits pod-restart-loop"
 check_alerts() {
   local dir="$1" f="$1/alerting/rules.yaml" rc=0 res m names json uids
   echo "== $dir (alerts)"

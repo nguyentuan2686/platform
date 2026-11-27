@@ -257,3 +257,34 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: gt, params: [0]}
+      - uid: mail-client-cap-hits
+        title: Magic-link requests dropped by the per-client cap
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "identity-svc dropped more than 10 login mails in 1h at the per-client cap (an attack, or real users behind one shared IP)"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#mail-client-cap-hits
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'sum by (job) (increase(identity_magic_link_client_cap_reached_total[1h])) > 10'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}

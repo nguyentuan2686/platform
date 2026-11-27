@@ -1,13 +1,18 @@
 package dev.platform.identity.adapter.in.web;
 
 import dev.platform.identity.application.GuestUseCase;
+import dev.platform.identity.application.MagicLinkOutcome;
 import dev.platform.identity.application.MagicLinkUseCase;
 import dev.platform.identity.application.SessionUseCase;
 import dev.platform.identity.domain.Email;
+import dev.platform.starter.telemetry.PlatformMeter;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.validation.Valid;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,10 +29,24 @@ public class AuthController {
   private final MagicLinkUseCase magicLinks;
   private final SessionUseCase sessions;
 
-  public AuthController(GuestUseCase guests, MagicLinkUseCase magicLinks, SessionUseCase sessions) {
+  private final LongCounter clientCapCounter;
+
+  public AuthController(
+      GuestUseCase guests,
+      MagicLinkUseCase magicLinks,
+      SessionUseCase sessions,
+      ObjectProvider<OpenTelemetry> otel) {
     this.guests = guests;
     this.magicLinks = magicLinks;
     this.sessions = sessions;
+    // Counter identity.magic_link.client_cap_reached (alert mail-client-cap-hits), no client label:
+    // the requests dropped by the per-client cap, which the caller cannot see. Recorded at 0 first.
+    this.clientCapCounter =
+        PlatformMeter.of(otel)
+            .counterBuilder("identity.magic_link.client_cap_reached")
+            .setDescription("Magic-link requests dropped by the per-client daily cap")
+            .build();
+    this.clientCapCounter.add(0);
   }
 
   @PostMapping("/guests")
@@ -46,11 +65,15 @@ public class AuthController {
       @Valid @RequestBody MagicLinkRequest request,
       @RequestHeader(value = "Authorization", required = false) String authorization,
       @RequestHeader(value = CLIENT_IP_HEADER, required = false) String clientIp) {
-    magicLinks.request(
-        new Email(request.email()),
-        request.langOrDefault(),
-        guestOf(authorization),
-        Optional.ofNullable(clientIp));
+    MagicLinkOutcome outcome =
+        magicLinks.request(
+            new Email(request.email()),
+            request.langOrDefault(),
+            guestOf(authorization),
+            Optional.ofNullable(clientIp));
+    if (outcome == MagicLinkOutcome.CLIENT_LIMITED) {
+      clientCapCounter.add(1);
+    }
     return ResponseEntity.accepted().body(Map.of("status", "sent_if_allowed"));
   }
 

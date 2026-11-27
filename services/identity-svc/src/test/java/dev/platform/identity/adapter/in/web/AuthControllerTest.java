@@ -144,6 +144,16 @@ class AuthControllerTest {
   }
 
   @Test
+  void a_request_dropped_by_the_client_cap_looks_like_any_other() throws Exception {
+    when(magicLinks.request(any(), any(), any(), any()))
+        .thenReturn(dev.platform.identity.application.MagicLinkOutcome.CLIENT_LIMITED);
+
+    postJson("/auth/magic-links", "{\"email\":\"a@example.com\",\"lang\":\"vi\"}")
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.status").value("sent_if_allowed"));
+  }
+
+  @Test
   void magic_link_request_passes_x_client_ip_to_the_client_cap() throws Exception {
     mvc.perform(
             post("/auth/magic-links")

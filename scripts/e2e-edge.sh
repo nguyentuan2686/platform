@@ -9,7 +9,7 @@
 #   body-cap         a 100 KiB POST /webhooks/sepay gets 413 before payment-svc
 #   rate-limit       a burst on /webhooks/sepay from one client IP gets 429; another client IP still passes
 #   strict-limit     a burst on /vi/dang-nhap gets 429 within 25 requests; / for that IP still passes
-#   action-limit     a burst of Server Action POSTs (header Next-Action) to / gets 429 within 25; a plain POST / passes
+#   action-limit     a burst of Server Action POSTs (header Next-Action) to / gets 429 within 40; a plain POST / passes
 # The 401 of payment-svc for a webhook without the key is checked against the real service in the kind job
 # (scripts/k8s-e2e.sh, webhook-auth). Prints `OK <check>` / `FAIL <check>: <reason>`; the first failure exits 1.
 set -euo pipefail
@@ -118,14 +118,14 @@ done
 [ "$(req 192.0.2.6 GET /)" = "200 stub-web" ] || fail strict-limit "/ was limited by the login limit"
 echo "OK strict-limit ($n429 of 25 limited)"
 
-# web-actions: a Server Action POST runs whatever the path, so POSTs with Next-Action to / share the strict limit.
+# web-actions: a Server Action POST runs whatever the path, so POSTs with Next-Action to / get ratelimit-actions (burst 30).
 n429=0
-for _ in $(seq 1 25); do
+for _ in $(seq 1 40); do
   [ "$(req 192.0.2.7 POST / -H 'Next-Action: 0123abcd' | cut -d' ' -f1)" != 429 ] || n429=$((n429 + 1))
 done
-[ "$n429" -gt 0 ] || fail action-limit "25 Server Action POSTs from one client IP got no 429"
+[ "$n429" -gt 0 ] || fail action-limit "40 Server Action POSTs from one client IP got no 429"
 [ "$(req 192.0.2.7 POST /)" = "200 stub-web" ] || fail action-limit "a POST / without Next-Action was limited by the action limit"
-echo "OK action-limit ($n429 of 25 limited)"
+echo "OK action-limit ($n429 of 40 limited)"
 
 kubectl -n apps delete deploy/stub-web deploy/stub-payment-svc svc/web svc/payment-svc --wait=false >/dev/null
 kubectl delete -f "$tmp/edge.yaml" --wait=false >/dev/null

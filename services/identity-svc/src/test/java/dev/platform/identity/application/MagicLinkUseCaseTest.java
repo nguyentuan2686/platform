@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 class MagicLinkUseCaseTest {
 
   static final Instant T0 = Instant.parse("2026-11-25T15:00:00Z");
-  // Test keyer: any injective 64-hex function of the normalized address will do.
+  // Test keyer: distinct 64-hex keys for the short addresses used here (hex of the bytes, padded).
   static final ClientKeyerPort KEYER =
       a ->
           new ClientKey(
@@ -104,7 +104,8 @@ class MagicLinkUseCaseTest {
       clock.advance(Duration.ofMinutes(1));
     }
 
-    useCase.request(email, "vi", Optional.empty());
+    assertThat(useCase.request(email, "vi", Optional.empty()))
+        .isEqualTo(MagicLinkOutcome.ADDRESS_LIMITED);
 
     assertThat(mailer.sent).hasSize(3);
     clock.advance(Duration.ofMinutes(14));
@@ -316,11 +317,13 @@ class MagicLinkUseCaseTest {
       useCase.request(new Email("u" + i + "@example.com"), "vi", Optional.empty(), client);
     }
     clock.advance(Duration.ofHours(23));
-    useCase.request(new Email("late@example.com"), "vi", Optional.empty(), client);
+    assertThat(useCase.request(new Email("late@example.com"), "vi", Optional.empty(), client))
+        .isEqualTo(MagicLinkOutcome.CLIENT_LIMITED);
     assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX);
 
     clock.advance(Duration.ofHours(1).plusSeconds(1));
-    useCase.request(new Email("late@example.com"), "vi", Optional.empty(), client);
+    assertThat(useCase.request(new Email("late@example.com"), "vi", Optional.empty(), client))
+        .isEqualTo(MagicLinkOutcome.SENT);
     assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX + 1);
   }
 
