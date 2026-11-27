@@ -1,0 +1,217 @@
+name: bootstrap
+
+# infra/bootstrap on a fresh Ubuntu 24.04 runner, x86 and ARM (spec §16.3): run it twice (the second run must change
+# nothing), verify the host, restore the throwaway CI sealing key, seal the e2e test secrets with the fetched cert, and
+# wait until Argo CD has synced this commit (GITOPS_CI_MODE=1: prod-tunnel and prod-apps render but stay unsynced, so
+# no prod image is pulled and no public tunnel is opened). Never run locally (weak dev machine).
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+      ARCH_NAME: ${{ matrix.runner == 'ubuntu-24.04-arm' && 'arm64' || 'amd64' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Generate throwaway CI sealing keys (an older one in a keys backup, the active one as a key dir)
+        run: |
+          # Generated per run, never committed (no private key in Git, even a test one). A fresh cert also matters:
+          # the controller rotates at start a key whose cert NotBefore is older than its 30-day renew period, so a
+          # committed cert would stop being the active one a month later. bootstrap restores it like a migrated key.
+          # The OLDER key goes into a JSON backup in the format of go-live step 3 (SEALED_SECRETS_KEYS_FILE): a host
+          # move must restore every key, because renewal never re-encrypts existing seals (step old-key-unseals).
+          old_dir="$RUNNER_TEMP/sealing-key-old"
+          mkdir -p "$old_dir" && chmod 700 "$old_dir"
+          openssl req -x509 -newkey rsa:4096 -noenc -keyout "$old_dir/tls.key" -out "$old_dir/tls.crt" -days 30 \
+            -subj "/O=sealed-secret/CN=local-test-sealed-secret-old" 2>/dev/null
+          b64() { base64 -w0 <"$1"; }
+          ( umask 077
+            printf '{"apiVersion":"v1","kind":"List","items":[{"apiVersion":"v1","kind":"Secret","type":"kubernetes.io/tls",%s,%s}]}\n' \
+              '"metadata":{"name":"sealed-secrets-keyciold","namespace":"kube-system","uid":"x","resourceVersion":"1"}' \
+              "\"data\":{\"tls.crt\":\"$(b64 "$old_dir/tls.crt")\",\"tls.key\":\"$(b64 "$old_dir/tls.key")\"}" \
+              >"$RUNNER_TEMP/sealing-keys.json" )
+          sleep 2 # the active key is the one with the newest NotBefore (second resolution)
+          key_dir="$RUNNER_TEMP/sealing-key"
+          mkdir -p "$key_dir" && chmod 700 "$key_dir"
+          openssl req -x509 -newkey rsa:4096 -noenc -keyout "$key_dir/tls.key" -out "$key_dir/tls.crt" -days 30 \
+            -subj "/O=sealed-secret/CN=local-test-sealed-secret" 2>/dev/null
+          { echo "SEALING_KEY_DIR=$key_dir"; echo "SEALING_KEY_OLD_DIR=$old_dir"; echo "SEALING_KEYS_FILE=$RUNNER_TEMP/sealing-keys.json"; } >>"$GITHUB_ENV"
+
+      - name: Bootstrap (run 1)
+        run: |
+          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" SEALED_SECRETS_KEYS_FILE="$SEALING_KEYS_FILE" \
+            infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run1.log"
+
+      - name: firewall-before-k3s
+        run: |
+          # ufw must be up before k3s exists, so 6443/10250 are never reachable from outside, even on the first run.
+          steps=$(grep -E '^(CHANGED|OK|SKIP) ' "$RUNNER_TEMP/run1.log" | cut -d' ' -f2 | tr -d ':')
+          first="${steps%%$'\n'*}"
+          [ "$first" = firewall ] || { echo "FAIL firewall-before-k3s: first step was [$first]"; exit 1; }
+          grep -qx 'CHANGED firewall: ufw rules' "$RUNNER_TEMP/run1.log" || { echo "FAIL firewall-before-k3s: firewall did not enable ufw on the fresh runner"; exit 1; }
+          echo "OK firewall-before-k3s"
+
+      - name: Bootstrap (run 2, must change nothing)
+        run: |
+          sudo GITOPS_REVISION="$REVISION" GITOPS_CI_MODE=1 SEALED_SECRETS_KEY_DIR="$SEALING_KEY_DIR" SEALED_SECRETS_KEYS_FILE="$SEALING_KEYS_FILE" \
+            infra/bootstrap/bootstrap.sh | tee "$RUNNER_TEMP/run2.log"
+
+      - name: verify.sh
+        run: sudo infra/bootstrap/verify.sh --expect-unchanged "$RUNNER_TEMP/run2.log"
+
+      - name: kubectl for the runner user
+        run: |
+          # A kubeconfig of the runner user's own (not ~/.kube: root-run tools may have created that root-owned).
+          mkdir -p "$RUNNER_TEMP/bin"
+          sudo install -m 600 -o "$(id -u)" -g "$(id -g)" /etc/rancher/k3s/k3s.yaml "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >>"$GITHUB_ENV"
+          # k3s is a multi-call binary: the client matches the server version.
+          ln -sf /usr/local/bin/k3s "$RUNNER_TEMP/bin/kubectl"
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: Install kubeseal (pinned in versions.env, this arch's sha256)
+        run: bash scripts/seal-secrets.sh --install-only
+
+      - name: sealed-key-restored
+        run: |
+          ks="$HOME/.cache/platform/bin/kubeseal"
+          end=$((SECONDS + 120))
+          until "$ks" --fetch-cert >"$RUNNER_TEMP/fetched.crt" 2>"$RUNNER_TEMP/fetch.err"; do
+            [ "$SECONDS" -lt "$end" ] || { echo "FAIL sealed-key-restored: kubeseal --fetch-cert: $(cat "$RUNNER_TEMP/fetch.err")"; exit 1; }
+            sleep 3
+          done
+          fp() { openssl x509 -in "$1" -noout -fingerprint -sha256; }
+          if [ "$(fp "$RUNNER_TEMP/fetched.crt")" != "$(fp "$SEALING_KEY_DIR/tls.crt")" ]; then
+            echo "FAIL sealed-key-restored: fetched $(fp "$RUNNER_TEMP/fetched.crt"), restored $(fp "$SEALING_KEY_DIR/tls.crt")"
+            exit 1
+          fi
+          echo "OK sealed-key-restored"
+
+      - name: Seal the e2e test secrets with the fetched cert and apply them
+        run: |
+          # seal-secrets.sh only reads untracked, gitignored inputs, so the tracked e2e test values are copied into the
+          # gitignored secrets.local of this throwaway checkout; --allow-test-values admits their local-test- values.
+          # Only the 7 required rows are sealed here, so alerting/ops/cloudflared-secrets stay absent (the e2e overlay's
+          # alerting-secrets.env feeds the kind job's contact-point check, not this bootstrap).
+          in=deploy/k8s/overlays/prod/secrets.local
+          mkdir -p "$in"
+          while IFS=$'\t' read -r name _ns req _keys; do
+            case "$name" in '#'* | '') continue ;; esac
+            [ "$req" = required ] || continue
+            cp "deploy/k8s/overlays/e2e/secrets/$name.env" "$in/"
+          done < <(tr -d '\r' <deploy/k8s/overlays/prod/secrets.tsv)
+          bash scripts/seal-secrets.sh --cert "$RUNNER_TEMP/fetched.crt" --in "$in" --out "$RUNNER_TEMP/sealed" --allow-test-values
+          rm -rf "$in"
+          ! grep -rq 'kind: Secret$' "$RUNNER_TEMP/sealed" || { echo "FAIL: a plain Secret in the sealed output"; exit 1; }
+          end=$((SECONDS + 300))
+          until kubectl get namespace apps data >/dev/null 2>&1; do
+            [ "$SECONDS" -lt "$end" ] || { echo "FAIL: namespaces apps/data (prod-sealed) never appeared"; exit 1; }
+            sleep 3
+          done
+          kubectl apply -k "$RUNNER_TEMP/sealed"
+
+      - name: secret-materialised
+        run: |
+          end=$((SECONDS + 180))
+          while :; do
+            missing=()
+            while IFS=$'\t' read -r name ns req keys; do
+              case "$name" in '#'* | '') continue ;; esac
+              [ "$req" = required ] || continue
+              want=$(tr ',' '\n' <<<"$keys" | sed 's/?$//' | sort | paste -sd, -)
+              # Not there yet is a normal state of this loop, not a step failure (bash -e -o pipefail).
+              have=$(kubectl -n "$ns" get secret "$name" -o json 2>/dev/null | jq -r '.data // {} | keys[]' | sort | paste -sd, -) || have=""
+              [ "$have" = "$want" ] || missing+=("$ns/$name [$have] want [$want]")
+            done < <(tr -d '\r' <deploy/k8s/overlays/prod/secrets.tsv)
+            if [ "${#missing[@]}" -eq 0 ]; then
+              got=$(kubectl -n data get secret postgres-secrets -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+              want=$(sed -n 's/^POSTGRES_PASSWORD=//p' deploy/k8s/overlays/e2e/secrets/postgres-secrets.env | tr -d '\r')
+              [ "$got" = "$want" ] || { echo "FAIL secret-materialised: postgres-secrets.POSTGRES_PASSWORD is not the e2e value"; exit 1; }
+              break
+            fi
+            [ "$SECONDS" -lt "$end" ] || { printf 'FAIL secret-materialised: %s\n' "${missing[@]}"; exit 1; }
+            sleep 3
+          done
+          for s in observability/alerting-secrets data/ops-secrets edge/cloudflared-secrets; do
+            if kubectl -n "${s%%/*}" get secret "${s#*/}" >/dev/null 2>&1; then echo "FAIL secret-materialised: optional $s exists"; exit 1; fi
+          done
+          echo "OK secret-materialised"
+
+      - name: old-key-unseals
+        run: |
+          # A SealedSecret made with the OLDER restored key (from the keys backup) must still decrypt.
+          ks="$HOME/.cache/platform/bin/kubeseal"
+          kubectl create secret generic old-key-check -n data --from-literal=CHECK=local-test-old-key \
+            --dry-run=client -o yaml | "$ks" --cert "$SEALING_KEY_OLD_DIR/tls.crt" -o yaml >"$RUNNER_TEMP/old-key-check.yaml"
+          kubectl apply -f "$RUNNER_TEMP/old-key-check.yaml"
+          end=$((SECONDS + 120))
+          until got=$(kubectl -n data get secret old-key-check -o jsonpath='{.data.CHECK}' 2>/dev/null) && [ -n "$got" ]; do
+            [ "$SECONDS" -lt "$end" ] || { echo "FAIL old-key-unseals: $(kubectl -n data describe sealedsecret old-key-check 2>&1 | tail -n 5)"; exit 1; }
+            sleep 3
+          done
+          [ "$(base64 -d <<<"$got")" = local-test-old-key ] || { echo "FAIL old-key-unseals: wrong value"; exit 1; }
+          kubectl -n data delete sealedsecret old-key-check
+          echo "OK old-key-unseals"
+
+      - name: Argo CD synced this commit
+        run: |
+          bash scripts/verify-deploy.sh --app root,prod-sealed,prod-platform --revision "$REVISION" --no-smoke \
+            --expect-outofsync prod-apps,prod-tunnel
+
+      - name: verify-deploy rejects a revision that is not deployed
+        run: |
+          if bash scripts/verify-deploy.sh --app prod-platform --revision 0000000000000000000000000000000000000000 \
+               --deadline-s 20 --no-smoke; then
+            echo "FAIL verify-deploy-negative: accepted a revision Argo CD never synced"; exit 1
+          fi
+          echo "OK verify-deploy-negative"
+
+      - name: Public edge through Traefik (prod Ingresses and rate limits, stub backends)
+        # Final review I1/I2: only /webhooks/sepay (Exact) reaches payment-svc, body cap 413, per-client-IP 429.
+        run: bash scripts/e2e-edge.sh
+
+      - name: Diagnostics
+        if: failure() || cancelled()
+        run: |
+          d="bootstrap-diagnostics"
+          mkdir -p "$d"
+          k() { sudo /usr/local/bin/k3s kubectl "$@"; }
+          cp "$RUNNER_TEMP"/run*.log "$d/" 2>/dev/null || echo "no bootstrap logs" >"$d/no-run-logs.txt"
+          {
+            k get nodes -o wide
+            k get pods -A -o wide
+            k get pvc -A
+          } >"$d/cluster.txt" 2>&1 || echo "cluster state unavailable" >>"$d/cluster.txt"
+          k get applications,appprojects -n argocd -o yaml >"$d/applications.yaml" 2>&1 || true
+          k get events -A --sort-by=.lastTimestamp >"$d/events.txt" 2>&1 || true
+          for ns in argocd data observability kube-system; do
+            for p in $(k -n "$ns" get pods -o name 2>/dev/null); do
+              k -n "$ns" logs "$p" --all-containers --tail=300 >"$d/logs-$ns-${p#pod/}.txt" 2>&1 || true
+            done
+          done
+          { sudo ufw status verbose; sudo ufw show added; sudo ss -ltnp; } 2>&1 | tee "$d/host-network.txt" >/dev/null || true
+          sudo journalctl -u k3s --no-pager -n 500 2>&1 | tee "$d/k3s-journal.txt" >/dev/null || true
+
+      - name: Upload diagnostics
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bootstrap-diagnostics-${{ env.ARCH_NAME }}
+          path: bootstrap-diagnostics
+          retention-days: 7

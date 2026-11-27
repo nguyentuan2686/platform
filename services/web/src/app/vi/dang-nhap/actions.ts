@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { logout, me, requestMagicLink, verifyMagicLink } from "@/lib/identity";
+import { clientIp } from "@/lib/clientIp";
 import { logRefusalOrThrow } from "@/lib/degrade";
 import { completeLogin } from "@/lib/login";
 import {
@@ -52,7 +53,7 @@ export async function requestLogin(_prev: LoginState, fd: FormData): Promise<Log
   let session: string | undefined;
   try {
     const guest = await loginGuest({ create: true });
-    await requestMagicLink(email, guest?.token);
+    await requestMagicLink(email, guest?.token, await clientIp());
     session = guest?.token ?? (await readSessionToken());
   } catch (e) {
     if (e instanceof UpstreamValidation) return { errors: { email: BAD_EMAIL } };

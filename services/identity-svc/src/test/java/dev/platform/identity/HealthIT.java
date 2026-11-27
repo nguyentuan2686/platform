@@ -32,6 +32,9 @@ class HealthIT {
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
     registry.add("platform.internal-token", () -> TOKEN);
+    // This IT runs without a broker: kafkaTopics (covered by KafkaTopicsHealthIndicatorIT) would
+    // keep /health/ready DOWN.
+    registry.add("management.endpoint.health.group.ready.include", () -> "readinessState,db");
   }
 
   @LocalServerPort int port;

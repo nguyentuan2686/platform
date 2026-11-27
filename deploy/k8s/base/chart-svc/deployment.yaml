@@ -28,7 +28,6 @@ spec:
             - {name: http, containerPort: 8082}
           env:
             - {name: PORT, value: "8082"}
-            - {name: RUST_LOG, value: info}
             - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc.cluster.local:4318"}
             - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
             - {name: OTEL_SERVICE_NAME, value: chart-svc}

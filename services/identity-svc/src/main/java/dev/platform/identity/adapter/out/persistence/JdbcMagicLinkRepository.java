@@ -3,6 +3,7 @@ package dev.platform.identity.adapter.out.persistence;
 import dev.platform.identity.application.ConsumedMagicLink;
 import dev.platform.identity.application.MagicLinkRepositoryPort;
 import dev.platform.identity.application.PendingMagicLink;
+import dev.platform.identity.domain.ClientKey;
 import dev.platform.identity.domain.Email;
 import java.time.Instant;
 import java.util.List;
@@ -29,12 +30,15 @@ public class JdbcMagicLinkRepository implements MagicLinkRepositoryPort {
   @Override
   public void save(PendingMagicLink link) {
     jdbc.sql(
-            "insert into magic_link (id, email, token_sha256, guest_id, created_at, expires_at)"
-                + " values (:id, :email, :hash, :guest, :created, :expires)")
+            "insert into magic_link"
+                + " (id, email, token_sha256, guest_id, client_key, created_at, expires_at)"
+                + " values (:id, :email, :hash, :guest, :client, :created, :expires)")
         .param("id", link.id())
         .param("email", link.email().value())
         .param("hash", link.tokenSha256())
         .param("guest", link.guestId(), java.sql.Types.OTHER)
+        .param(
+            "client", link.client() == null ? null : link.client().value(), java.sql.Types.VARCHAR)
         .param("created", Timestamps.toDb(link.createdAt()))
         .param("expires", Timestamps.toDb(link.expiresAt()))
         .update();
@@ -48,6 +52,24 @@ public class JdbcMagicLinkRepository implements MagicLinkRepositoryPort {
         .param("since", Timestamps.toDb(since))
         .query((rs, i) -> Timestamps.read(rs, "created_at"))
         .list();
+  }
+
+  @Override
+  public long countForClientSince(ClientKey client, Instant since) {
+    return jdbc.sql(
+            "select count(*) from magic_link where client_key = :client and created_at > :since")
+        .param("client", client.value())
+        .param("since", Timestamps.toDb(since))
+        .query(Long.class)
+        .single();
+  }
+
+  @Override
+  public long countSince(Instant since) {
+    return jdbc.sql("select count(*) from magic_link where created_at > :since")
+        .param("since", Timestamps.toDb(since))
+        .query(Long.class)
+        .single();
   }
 
   @Override

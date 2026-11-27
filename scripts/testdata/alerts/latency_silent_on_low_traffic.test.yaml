@@ -1,0 +1,20 @@
+# One slow (5 s) request per minute (~0.017 rps) on /orders: p95 is 5 s, but below the 0.05 rps minimum-traffic guard,
+# so no page at go-live traffic. The same latency at 1 rps fires (latency_ignores_qa_routes.test.yaml).
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: latency_silent_on_low_traffic
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="1"}'
+        values: '0+0x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="10"}'
+        values: '0+1x30'
+      - series: 'http_server_request_duration_seconds_bucket{job="order-svc", http_route="/orders", le="+Inf"}'
+        values: '0+1x30'
+      - series: 'http_server_request_duration_seconds_count{job="order-svc", http_route="/orders", http_response_status_code="200"}'
+        values: '0+1x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: latency-p95-high
+        exp_alerts: []

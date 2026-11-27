@@ -1,5 +1,7 @@
 package dev.platform.identity.application;
 
+import dev.platform.identity.domain.ClientAddress;
+import dev.platform.identity.domain.ClientKey;
 import dev.platform.identity.domain.Email;
 import dev.platform.identity.domain.MagicLinkPolicy;
 import dev.platform.identity.domain.SessionToken;
@@ -26,6 +28,8 @@ public class MagicLinkUseCase {
   private final Clock clock;
   private final RandomGenerator random;
   private final String webBaseUrl;
+  private final int dailyCap;
+  private final ClientKeyerPort clientKeyer;
 
   public MagicLinkUseCase(
       AccountRepositoryPort accounts,
@@ -36,7 +40,9 @@ public class MagicLinkUseCase {
       EntitlementGrantPort grants,
       Clock clock,
       RandomGenerator random,
-      URI webBaseUrl) {
+      URI webBaseUrl,
+      int dailyCap,
+      ClientKeyerPort clientKeyer) {
     this.accounts = accounts;
     this.sessions = sessions;
     this.links = links;
@@ -47,19 +53,42 @@ public class MagicLinkUseCase {
     this.random = random;
     String base = webBaseUrl.toString();
     this.webBaseUrl = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+    this.dailyCap = MagicLinkPolicy.requireValidDailyCap(dailyCap);
+    this.clientKeyer = clientKeyer;
+  }
+
+  /** {@link #request(Email, String, Optional, Optional)} for a caller that knows no client IP. */
+  @Transactional // self-invocation skips the proxy, so this entry point opens the transaction
+  // itself
+  public MagicLinkOutcome request(Email email, String lang, Optional<UUID> guestId) {
+    return request(email, lang, guestId, Optional.empty());
   }
 
   /**
-   * Sends a login link. Silently does nothing when the email is rate limited, so callers cannot
-   * tell the difference (nor whether the email has an account).
+   * Sends a login link. Sends nothing when the email or the client (its IP, when known) is rate
+   * limited and says which (callers answer the same either way), so callers cannot tell the
+   * difference (nor whether the email has an account). Throws {@link MailCapReachedException} when
+   * the global daily cap is reached (a spam-relay guard that says nothing about the address); a
+   * failing count fails the request, so no mail goes out unchecked.
    */
   @Transactional
-  public void request(Email email, String lang, Optional<UUID> guestId) {
+  public MagicLinkOutcome request(
+      Email email, String lang, Optional<UUID> guestId, Optional<String> clientIp) {
     Instant now = clock.instant();
+    Optional<ClientKey> client = clientIp.flatMap(ClientAddress::normalize).map(clientKeyer::key);
     links.lock(email);
     if (!MagicLinkPolicy.allows(
         links.requestTimesSince(email, MagicLinkPolicy.windowStart(now)), now)) {
-      return;
+      return MagicLinkOutcome.ADDRESS_LIMITED;
+    }
+    if (client.isPresent()
+        && !MagicLinkPolicy.underClientCap(
+            links.countForClientSince(client.get(), MagicLinkPolicy.dailyWindowStart(now)))) {
+      return MagicLinkOutcome.CLIENT_LIMITED;
+    }
+    if (!MagicLinkPolicy.underDailyCap(
+        links.countSince(MagicLinkPolicy.dailyWindowStart(now)), dailyCap)) {
+      throw new MailCapReachedException();
     }
     SessionToken token = SessionToken.generate(random);
     links.save(
@@ -68,10 +97,12 @@ public class MagicLinkUseCase {
             email,
             token.sha256(),
             guestId.orElse(null),
+            client.orElse(null),
             now,
             MagicLinkPolicy.expiresAt(now)));
     URI link = URI.create(webBaseUrl + "/" + lang + "/dang-nhap/xac-nhan?token=" + token.value());
     mailer.sendMagicLink(email, link, lang);
+    return MagicLinkOutcome.SENT;
   }
 
   /** Redeems a link: finds or creates the account, merges the guest, opens a 30-day session. */

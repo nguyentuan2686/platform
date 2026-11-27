@@ -1,0 +1,5 @@
+2026-11-26T03:00:00Z INF Starting tunnel tunnelID=00000000-0000-0000-0000-000000000000
+2026-11-26T03:00:00Z INF Version 2026.11.2
+2026-11-26T03:00:01Z INF Starting metrics server on [::]:2000/metrics
+2026-11-26T03:00:02Z INF Registered tunnel connection connIndex=0 connection=0a1b2c3d event=0 ip=198.41.200.13 location=sin01 protocol=quic
+2026-11-26T03:00:02Z INF Updated to new configuration config="{\"ingress\":[{\"hostname\":\"app.example.com\",\"service\":\"http://traefik.kube-system.svc.cluster.local:80\"},{\"service\":\"http_status:404\"}]}" version=1

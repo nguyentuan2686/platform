@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-svc
+spec:
+  template:
+    spec:
+      containers:
+        - name: identity-svc
+          env:
+            - {name: WEB_BASE_URL, value: "https://app.example.invalid"}
+            # The SMTP relay (go-live: docs/runbooks/go-live.md §5): a real provider on the submission port. Login with
+            # MAIL_USERNAME/MAIL_PASSWORD from identity-svc-secrets; STARTTLS is required, so credentials never go
+            # over plaintext (no TLS offered = the mail fails, 503). 5 s connect/read/write timeouts (application.yml).
+            - {name: MAIL_HOST, value: smtp.example.invalid}
+            - {name: MAIL_PORT, value: "587"}
+            - {name: MAIL_SMTP_AUTH, value: "true"}
+            - {name: MAIL_STARTTLS, value: "true"}
+            - {name: MAIL_FROM, value: "no-reply@app.example.invalid"}
+            - {name: MAIL_DAILY_CAP, value: "200"} # global magic-link mails per rolling 24 h (429 above; alert mail-cap-reached)

@@ -68,11 +68,13 @@ export function ledger(bearer: string): Promise<LedgerEntry[]> {
   return callJson<LedgerEntry[]>("identity", "/me/ledger", { bearer });
 }
 
-export function requestMagicLink(email: string, guestBearer?: string): Promise<MagicLinkAccepted> {
+/** `clientIp` (lib/clientIp) keys identity-svc's per-client mail cap; sent only when known. */
+export function requestMagicLink(email: string, guestBearer?: string, clientIp?: string): Promise<MagicLinkAccepted> {
   return callJson<MagicLinkAccepted>("identity", "/auth/magic-links", {
     method: "POST",
     bearer: guestBearer,
     body: { email, lang: "vi" },
+    headers: clientIp ? { "x-client-ip": clientIp } : undefined,
   });
 }
 export function verifyMagicLink(token: string, guestBearer?: string): Promise<LoginSession> {

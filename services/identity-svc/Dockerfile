@@ -1,9 +1,22 @@
 # Build context: repo root.  docker build -f services/identity-svc/Dockerfile -t identity-svc:local .
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
+# Dependencies first, as a layer of their own: it changes only with a pom or the Maven config, so the gha layer cache
+# (cache-to mode=max) keeps the downloads between runs (a --mount=type=cache does not persist on hosted runners).
+# Every reactor module pom is needed: Maven reads the whole reactor even with -pl. Sources are absent here, so the
+# empty modules package without repackaging.
+COPY .mvn/ .mvn/
+COPY pom.xml ./
+COPY libs/java/platform-starter/pom.xml libs/java/platform-starter/
+COPY services/order-svc/pom.xml services/order-svc/
+COPY services/reading-tuvi/pom.xml services/reading-tuvi/
+COPY services/identity-svc/pom.xml services/identity-svc/
+COPY services/payment-svc/pom.xml services/payment-svc/
+# new-service: java-poms (scripts/new-service.sh adds a COPY line per reactor module above this line)
+RUN mvn -q -B -pl services/identity-svc -am package -DskipTests -Dspring-boot.repackage.skip=true \
+ && rm -rf libs/java/platform-starter/target services/*/target
 COPY . .
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn -q -B -pl services/identity-svc -am package -DskipTests \
+RUN mvn -q -B -pl services/identity-svc -am package -DskipTests \
  && cp services/identity-svc/target/identity-svc-*.jar /tmp/app.jar \
  && java -Djarmode=tools -jar /tmp/app.jar extract --layers --destination /tmp/extracted
 

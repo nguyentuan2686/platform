@@ -15,8 +15,8 @@ Local test values live in `deploy/local/.env.example`; real values only via Seal
 | `SEPAY_WEBHOOK_AUTH` / `SEPAY_WEBHOOK_SECRET` | test values | **not set on web in prod**: only the dev payment simulator uses them (force-disabled when `DEPLOY_ENV=prod`); the secret lives in payment-svc only |
 | `QA_STREAM_TIMEOUT_MS` | `95000` | `95000` |
 
-## 2. When Plan 4 deploys
-1. Build the image with `--build-arg WEB_ORIGIN=https://<public domain>`; set the same `WEB_ORIGIN` at runtime (the CSRF Origin check compares against it).
+## 2. Prod deploy
+1. Build the image with `--build-arg WEB_ORIGIN=https://<public domain>`; set the same `WEB_ORIGIN` at runtime (the CSRF Origin check compares against it). CI does both from `deploy/k8s/overlays/prod/domain/domain.yaml` (`scripts/web-origin.sh` for the build arg, the prod overlay replacements at runtime).
 2. The prod overlay sets `DEPLOY_ENV=prod`, `COOKIE_SECURE=1`, and no `DEV_PAYMENT_SIMULATOR`.
 3. Google login: add `${WEB_ORIGIN}/vi/dang-nhap/google` to identity-svc `OIDC_REDIRECT_URIS`, set the client id and secret there, then `GOOGLE_LOGIN=1` on web.
 4. Admin: put your account id in `ADMIN_ACCOUNT_IDS`, open `/vi/quan-tri` ("chưa khớp"; see `payments.md`).

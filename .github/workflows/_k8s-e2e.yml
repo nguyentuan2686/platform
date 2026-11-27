@@ -24,11 +24,11 @@ jobs:
       KUBECTL_SHA256: fe80ae4133b44fa2077db4af144e80765eb1b3b2eede55fbff6933c4374d8c6e
       E2E_LOG_DIR: k8s-e2e-diagnostics
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build order-svc
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/order-svc/Dockerfile
@@ -38,7 +38,7 @@ jobs:
           tags: order-svc:e2e
           cache-from: type=gha,scope=order-svc-amd64
       - name: Build notify-svc
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/notify-svc/Dockerfile
@@ -48,7 +48,7 @@ jobs:
           tags: notify-svc:e2e
           cache-from: type=gha,scope=notify-svc-amd64
       - name: Build chart-svc
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/chart-svc/Dockerfile
@@ -58,7 +58,7 @@ jobs:
           tags: chart-svc:e2e
           cache-from: type=gha,scope=chart-svc-amd64
       - name: Build reading-tuvi
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/reading-tuvi/Dockerfile
@@ -68,7 +68,7 @@ jobs:
           tags: reading-tuvi:e2e
           cache-from: type=gha,scope=reading-tuvi-amd64
       - name: Build identity-svc
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/identity-svc/Dockerfile
@@ -78,7 +78,7 @@ jobs:
           tags: identity-svc:e2e
           cache-from: type=gha,scope=identity-svc-amd64
       - name: Build payment-svc
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/payment-svc/Dockerfile
@@ -88,7 +88,7 @@ jobs:
           tags: payment-svc:e2e
           cache-from: type=gha,scope=payment-svc-amd64
       - name: Build web
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: services/web/Dockerfile
@@ -98,6 +98,8 @@ jobs:
           tags: web:e2e
           build-args: WEB_ORIGIN=http://localhost:3001
           cache-from: type=gha,scope=web-amd64
+
+      # new-service: e2e-builds (scripts/new-service.sh inserts image builds above this line)
 
       - name: Install kind and kubectl (pinned, sha256 verified)
         run: |
@@ -116,7 +118,7 @@ jobs:
 
       - name: Load images into kind
         run: |
-          for svc in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web; do
+          for svc in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web; do # new-service: e2e-load
             kind load docker-image "${svc}:e2e"
           done
 
@@ -142,7 +144,7 @@ jobs:
 
       - name: Upload diagnostics
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: k8s-e2e-diagnostics
           path: k8s-e2e-diagnostics/

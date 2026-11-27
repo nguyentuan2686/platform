@@ -1,0 +1,10 @@
+  - package-ecosystem: docker
+    directory: /services/__SERVICE__
+    schedule:
+      interval: weekly
+    # Rust toolchain is pinned in rust-toolchain.toml; bump it deliberately together with the Dockerfile tags.
+    ignore:
+      - dependency-name: rust
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]

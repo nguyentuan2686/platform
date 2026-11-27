@@ -46,6 +46,16 @@ probe_red_consumer() {
   done
 }
 
+# Only platform metrics carry `outcome`; a series without it on this metric came from an agent (double count).
+probe_no_agent_double_count() {
+  local r
+  r=$(prom 'count(messaging_process_duration_seconds_count{outcome=""})') || { printf '%s' "$r"; return 1; }
+  printf '%s' "$r"
+  # empty result (no series) or a value of 0 passes
+  if has "$r" '"result" *: *\[\]'; then return 0; fi
+  has "$r" '"value" *: *\[[^]]*"0"\]'
+}
+
 probe_consumer_lag() {
   local r
   r=$(prom 'redpanda_kafka_consumer_group_lag_max{redpanda_group="notify-svc"}') || { printf '%s' "$r"; return 1; }
@@ -82,6 +92,69 @@ probe_dashboards() {
   done
 }
 
+
+# Alert rules as code (deploy/k8s/platform/grafana/alerting), Grafana basic auth admin:admin (otel-lgtm image default).
+ALERT_UIDS="error-rate-high latency-p95-high pod-restart-loop consumer-lag-rising disk-usage-high deploy-failed backup-skipped mail-cap-reached"
+gget() { get "$1" -u admin:admin; }
+
+probe_alert_rules_loaded() {
+  local r u missing=""
+  r=$(gget "$GRAFANA/api/v1/provisioning/alert-rules") || { printf '%s' "$r"; return 1; }
+  for u in $ALERT_UIDS; do has "$r" "\"uid\" *: *\"$u\"" || missing="$missing $u"; done
+  [ -z "$missing" ] || { printf 'missing uids:%s in %s' "$missing" "$(printf '%s' "$r" | cut -c1-200)"; return 1; }
+  printf 'all %s rules provisioned' "$(wc -w <<<"$ALERT_UIDS" | tr -d ' ')"
+}
+
+# Every rule of group `platform` evaluated without error: health ok, or nodata (e.g. deploy-failed has no Argo CD target in kind).
+probe_alert_rules_healthy() {
+  local r healths n
+  r=$(gget "$GRAFANA/api/prometheus/grafana/api/v1/rules") || { printf '%s' "$r"; return 1; }
+  has "$r" '"name" *: *"platform"' || { printf 'no rule group "platform": %s' "$(printf '%s' "$r" | cut -c1-200)"; return 1; }
+  healths=$(printf '%s' "$r" | grep -Eo '"health" *: *"[a-z]*"' | tr -d ' ' | sort | uniq -c | tr '\n' ' ') || true
+  printf 'health: %s' "$healths"
+  n=$(printf '%s' "$r" | grep -Eo '"health" *: *"(ok|nodata)"' | wc -l | tr -d ' ')
+  [ "$n" -ge "$(wc -w <<<"$ALERT_UIDS")" ] || return 1
+  ! has "$r" '"health" *: *"(error|unknown)"'
+}
+
+probe_contact_point() {
+  local r
+  r=$(gget "$GRAFANA/api/v1/provisioning/contact-points") || { printf '%s' "$r"; return 1; }
+  printf '%s' "$r" | sed 's/"bottoken" *: *"[^"]*"/"bottoken":"<redacted>"/g'
+  has "$r" '"name" *: *"telegram"'
+}
+
+# Spec §10: Prometheus 15d, Loki 168h (shown as 1w), Tempo 168h.
+probe_retention() {
+  local r
+  r=$(get "$PROM/api/v1/status/flags") || { printf '%s' "$r"; return 1; }
+  has "$r" '"storage.tsdb.retention.time" *: *"15d"' || { printf 'prometheus retention: %s' "$(printf '%s' "$r" | grep -Eo '"storage.tsdb.retention[a-z.]*" *: *"[^"]*"' | tr '\n' ' ')"; return 1; }
+  r=$(get "$LOKI/config") || { printf '%s' "$r"; return 1; }
+  has "$r" 'retention_period: *(1w|168h)' || { printf 'loki retention_period not 1w/168h'; return 1; }
+  has "$r" 'retention_enabled: *true' || { printf 'loki compactor retention_enabled not true'; return 1; }
+  r=$(get "$TEMPO/status/config") || { printf '%s' "$r"; return 1; }
+  has "$r" 'block_retention: *(168h0m0s|1w)' || { printf 'tempo block_retention not 168h'; return 1; }
+  printf 'prometheus 15d, loki 1w, tempo 168h'
+}
+
+
+# The alerts are silent on NoData, so prove their inputs exist with the labels the rules use (deploy-failed is exempt: no Argo CD in kind).
+probe_metric_present_restarts() {
+  local r
+  r=$(prom 'count by (k8s_namespace_name, k8s_pod_name) (k8s_container_restarts{k8s_namespace_name="apps"})') || { printf '%s' "$r"; return 1; }
+  printf '%s' "$r" | cut -c1-300
+  has "$r" '"k8s_namespace_name" *: *"apps"' && has "$r" '"k8s_pod_name" *: *"[^"]+"'
+}
+
+probe_metric_present_disk() {
+  local r m
+  for m in k8s_node_filesystem_usage_bytes k8s_node_filesystem_capacity_bytes; do
+    r=$(prom "max by (k8s_node_name) ($m)") || { printf '%s' "$r"; return 1; }
+    printf '%s: %s ' "$m" "$(printf '%s' "$r" | cut -c1-150)"
+    has "$r" '"k8s_node_name" *: *"[^"]+"' || return 1
+  done
+}
+
 # check NAME PROBE -> polls PROBE until it passes or the deadline passes
 check() {
   local name="$1" probe="$2" last deadline=$((SECONDS + DEADLINE_S))
@@ -101,8 +174,15 @@ failed=0
 check trace-cross-service probe_trace_cross_service || failed=1
 check red-http probe_red_http || failed=1
 check red-consumer probe_red_consumer || failed=1
+check no-agent-double-count probe_no_agent_double_count || failed=1
 check consumer-lag probe_consumer_lag || failed=1
 check outbox-lag probe_outbox_lag || failed=1
 check logs-with-trace probe_logs_with_trace || failed=1
 check dashboards probe_dashboards || failed=1
+check alert-rules-loaded probe_alert_rules_loaded || failed=1
+check alert-rules-healthy probe_alert_rules_healthy || failed=1
+check contact-point probe_contact_point || failed=1
+check retention probe_retention || failed=1
+check metric-present-restarts probe_metric_present_restarts || failed=1
+check metric-present-disk probe_metric_present_disk || failed=1
 exit "$failed"

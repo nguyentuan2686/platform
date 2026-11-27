@@ -4,9 +4,20 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manual run on main: publish_all builds and pushes every service image as sha-<commit> (go-live pins all 7 once;
+  # also the fix when an image is missing). cd.yml then bumps the prod tags for that commit.
+  workflow_dispatch:
+    inputs:
+      publish_all:
+        description: Build and publish every service image (only on main)
+        type: boolean
+        default: false
 
+# PRs: one group per branch, a new push cancels the old run. main (push/dispatch): one group per commit, so a burst
+# of merges never cancels a pending run (GitHub drops all but one pending run per group), and every merge publishes
+# its images for CD.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -28,9 +39,14 @@ jobs:
       identity: ${{ steps.filter.outputs.identity }}
       payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
+      # new-service: ci-outputs (scripts/new-service.sh inserts above this line)
+      scaffold: ${{ steps.filter.outputs.scaffold }}
       k8s: ${{ steps.filter.outputs.k8s }}
+      ops: ${{ steps.filter.outputs.ops }}
+      infra: ${{ steps.filter.outputs.infra }}
+      web_origin: ${{ steps.origin.outputs.web_origin }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -79,19 +95,62 @@ jobs:
             web:
               - 'services/web/**'
               - 'knowledge/tuvi/**'
+              - 'deploy/k8s/overlays/prod/domain/**' # the build-time WEB_ORIGIN (scripts/web-origin.sh)
+            # new-service: ci-filters (scripts/new-service.sh inserts above this line)
+            scaffold:
+              - 'templates/**'
+              - 'scripts/new-service.sh'
+              - 'scripts/test/new-service.test.sh'
+              - 'libs/**' # the templates build on platform-starter / platform-core
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.mvn/**'
+              - 'services/*/Dockerfile' # template Dockerfiles copy their pins (checked by scripts/test/new-service.test.sh)
+              - 'scripts/k8s-validate.sh' # policies the rendered k8s bases must pass
             k8s:
               - 'deploy/k8s/**'
+              - 'deploy/argocd/**'
               - 'deploy/local/**'
               - 'scripts/**'
               - '.github/workflows/_k8s-e2e.yml'
+            ops:
+              - 'scripts/**'
+              - 'infra/**'
+              - 'deploy/argocd/**'
+              - 'deploy/k8s/overlays/prod/**' # secrets.tsv and domain.yaml feed the script tests
+              - 'deploy/k8s/platform/grafana/alerting/**' # rules.yaml feeds the promtool alert tests
+              - 'deploy/k8s/platform/ops/**' # the backup/heartbeat scripts are under test
+              - '.github/**'
+              # new-service markers and pins, under test in scripts/test/new-service.test.sh:
+              - 'templates/**'
+              - 'deploy/local/docker-compose.yml'
+              - 'deploy/k8s/overlays/e2e/kustomization.yaml'
+              - 'services/*/Dockerfile'
+              - 'rust-toolchain.toml'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            infra:
+              - 'infra/**'
+              - 'deploy/argocd/**'
+              - 'deploy/k8s/overlays/prod/**'
+              - '.github/workflows/_bootstrap.yml'
             root:
+              - '.mvn/**'
               - 'pom.xml'
               - '.github/**'
+      # The web image bakes WEB_ORIGIN at build time (canonical URLs, sitemap); it comes from the same domain.yaml as the
+      # runtime value, empty while APP_DOMAIN is the *.invalid placeholder.
+      - name: Build-time web origin (deploy/k8s/overlays/prod/domain/domain.yaml)
+        id: origin
+        run: |
+          origin="$(bash scripts/web-origin.sh)" # fails the job on a malformed APP_DOMAIN
+          echo "web_origin=$origin" >>"$GITHUB_OUTPUT"
 
   order-svc:
     needs: changes
-    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true'
-    # packages: write is only exercised when publish is true (push to main)
+    if: needs.changes.outputs.order == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
+    # packages: write is only exercised when publish is true (push or manual dispatch on main)
     permissions:
       contents: read
       packages: write
@@ -99,11 +158,11 @@ jobs:
     with:
       module: services/order-svc
       image: order-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   notify-svc:
     needs: changes
-    if: needs.changes.outputs.notify == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.notify == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -112,11 +171,11 @@ jobs:
       package: notify-svc
       image: notify-svc
       dockerfile: services/notify-svc/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   chart-svc:
     needs: changes
-    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.chart == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -125,11 +184,11 @@ jobs:
       package: chart-svc
       image: chart-svc
       dockerfile: services/chart-svc/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   reading-tuvi:
     needs: changes
-    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.reading == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -137,11 +196,11 @@ jobs:
     with:
       module: services/reading-tuvi
       image: reading-tuvi
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   identity-svc:
     needs: changes
-    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.identity == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -149,11 +208,11 @@ jobs:
     with:
       module: services/identity-svc
       image: identity-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   payment-svc:
     needs: changes
-    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.payment == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -161,11 +220,11 @@ jobs:
     with:
       module: services/payment-svc
       image: payment-svc
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   web:
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
     permissions:
       contents: read
       packages: write
@@ -174,7 +233,88 @@ jobs:
       dir: services/web
       image: web
       dockerfile: services/web/Dockerfile
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      build-args: WEB_ORIGIN=${{ needs.changes.outputs.web_origin }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+
+  # new-service: ci-jobs (scripts/new-service.sh inserts service jobs above this line)
+  # Scaffolding (templates/ + scripts/new-service.sh): renders a Java and a Rust demo service into this checkout only
+  # (never committed), also on the prod path (--prod, no pull check), and runs the real gates on them: mvn verify
+  # (Spotless, ArchUnit, JaCoCo), cargo fmt/clippy/test with --locked (proves the generated Cargo.lock entry) and
+  # cargo deny, both images, compose config and k8s-validate with the new bases in the e2e and prod overlays.
+  # The Java demo is `zz-java`: its package sorts after every dev.platform.* package, the case where import order bit.
+  # Names zz-java / demo-rust and ports 8998 / 8999 are reserved for this job (NEW_SERVICE_CI_SCAFFOLD=1).
+  scaffold:
+    needs: changes
+    if: needs.changes.outputs.scaffold == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Render zz-java and demo-rust, incl. the prod path (this checkout only)
+        env:
+          NEW_SERVICE_CI_SCAFFOLD: '1'
+        run: |
+          bash scripts/new-service.sh --lang java --name zz-java --port 8998
+          bash scripts/new-service.sh --lang rust --name demo-rust --port 8999
+          bash scripts/new-service.sh --prod zz-java --skip-pull-check
+          bash scripts/new-service.sh --prod demo-rust --skip-pull-check
+          git status --short
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Java gates (Spotless, tests, ArchUnit, JaCoCo)
+        run: mvn -B -pl services/zz-java -am verify
+      - name: Install system packages (rdkafka cmake-build)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake build-essential pkg-config libsasl2-dev
+      - name: Install Rust toolchain (pinned by rust-toolchain.toml)
+        run: rustup toolchain install --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Rust gates (fmt, clippy, tests; --locked proves the generated Cargo.lock entry)
+        run: |
+          cargo fmt --all --check
+          cargo clippy -p demo-rust --all-targets --locked -- -D warnings
+          cargo test -p demo-rust --locked
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2.90.8
+        with:
+          tool: cargo-deny@0.22.0
+      - name: Dependency policy with the new member (cargo deny)
+        run: cargo deny check
+      - name: Local compose file parses with both services
+        run: docker compose -f deploy/local/docker-compose.yml --profile app config --quiet
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build zz-java image (amd64, no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/zz-java/Dockerfile
+          platforms: linux/amd64
+          push: false
+      - name: Build demo-rust image (amd64, no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/demo-rust/Dockerfile
+          platforms: linux/amd64
+          push: false
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.7.0
+          # sha256 of kubeconform-linux-amd64.tar.gz, as published in the release CHECKSUMS file
+          KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+        run: |
+          curl -fsSL -o kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  kubeconform.tar.gz" | sha256sum -c -
+          tar -xzf kubeconform.tar.gz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+          rm -f kubeconform.tar.gz kubeconform
+      - name: Kustomize + policy with the new services
+        run: bash scripts/k8s-validate.sh
 
   k8s-manifests:
     needs: changes
@@ -183,7 +323,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install kubeconform
         env:
           KUBECONFORM_VERSION: v0.7.0
@@ -216,10 +356,79 @@ jobs:
       contents: read
     uses: ./.github/workflows/_k8s-e2e.yml
 
-  # Single required status check. New services only need to be added to `needs`.
+  # Ops scripts: shellcheck + actionlint + action SHA pins + script tests (no network, no cluster).
+  ops-scripts:
+    needs: changes
+    if: needs.changes.outputs.ops == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install shellcheck and actionlint
+        env:
+          SHELLCHECK_VERSION: v0.11.0
+          # sha256 of shellcheck-v0.11.0.linux.x86_64.tar.gz, as published with the release asset
+          SHELLCHECK_SHA256: b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+          ACTIONLINT_VERSION: 1.7.12
+          # sha256 of actionlint_1.7.12_linux_amd64.tar.gz, as published in the release checksums file
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -fsSL -o shellcheck.tar.gz "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.gz"
+          echo "${SHELLCHECK_SHA256}  shellcheck.tar.gz" | sha256sum -c -
+          tar -xzf shellcheck.tar.gz "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          curl -fsSL -o actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+      - name: shellcheck
+        run: |
+          mapfile -t files < <(git ls-files 'scripts/**/*.sh' 'scripts/*.sh' 'infra/**/*.sh' 'deploy/k8s/platform/ops/*.sh' scripts/public-url)
+          shellcheck --severity=warning "${files[@]}"
+      - name: actionlint
+        run: actionlint
+      - name: Action SHA pins
+        run: bash scripts/check-action-pins.sh
+      - name: Install kubeseal (pinned in infra/bootstrap/versions.env, sha256-verified)
+        run: bash scripts/seal-secrets.sh --install-only
+      - name: Script tests
+        run: |
+          shopt -s nullglob
+          for t in scripts/test/*.test.sh; do
+            echo "== $t"
+            bash "$t"
+          done
+      - name: Alert rule unit tests (promtool, pinned image)
+        run: bash scripts/alerts-promtool.sh
+
+  # Host bootstrap on x86 + ARM runners (k3s, firewall, Sealed Secrets, Argo CD syncing this commit): every push to
+  # main, and PRs that touch infra, Argo CD apps, the prod overlay or workflows.
+  bootstrap:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.root == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_bootstrap.yml
+
+  # Single required status check. New services only need to be added to `needs` (scripts/new-service.sh does it).
   ci-gate:
     if: always()
-    needs: [changes, order-svc, notify-svc, chart-svc, reading-tuvi, identity-svc, payment-svc, web, k8s-manifests, k8s-e2e]
+    needs:
+      - changes
+      - order-svc
+      - notify-svc
+      - chart-svc
+      - reading-tuvi
+      - identity-svc
+      - payment-svc
+      - web
+      # new-service: ci-gate-needs (scripts/new-service.sh inserts above this line)
+      - scaffold
+      - k8s-manifests
+      - k8s-e2e
+      - ops-scripts
+      - bootstrap
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

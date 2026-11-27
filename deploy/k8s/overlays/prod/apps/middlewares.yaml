@@ -1,0 +1,61 @@
+# Edge limits (Traefik Middlewares, attached by the Ingresses in ingress.yaml). Behind cloudflared every request comes
+# from the cloudflared pod IP, so the limits are keyed on Cf-Connecting-IP: Cloudflare's edge always sets it to the
+# client IP (overriding any value the client sends), and only cloudflared reaches Traefik (nothing listens publicly).
+# Checked by scripts/k8s-validate.sh (prod-ingress). Tune in docs/runbooks/go-live.md ("Edge limits").
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-site
+  namespace: apps
+spec:
+  rateLimit: # every page and asset: 20 req/s per client IP, bursts of 40
+    average: 20
+    burst: 40
+    period: 1s
+    sourceCriterion: {requestHeaderName: Cf-Connecting-IP}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-strict
+  namespace: apps
+spec:
+  rateLimit: # login (magic-link mail, Google) and Q&A (LLM quota): 20 per minute per client IP
+    average: 20
+    burst: 20
+    period: 1m
+    sourceCriterion: {requestHeaderName: Cf-Connecting-IP}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-actions
+  namespace: apps
+spec:
+  rateLimit: # every Next.js Server Action POST (chart form, login, buy, share...): 60 per minute per client IP, bursts
+    # of 30. Looser than login: the home-page chart form is one, and the mail itself is capped per client in identity-svc.
+    average: 60
+    burst: 30
+    period: 1m
+    sourceCriterion: {requestHeaderName: Cf-Connecting-IP}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ratelimit-webhook
+  namespace: apps
+spec:
+  rateLimit: # SePay webhook: 60 per minute per sender IP
+    average: 60
+    burst: 30
+    period: 1m
+    sourceCriterion: {requestHeaderName: Cf-Connecting-IP}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: body-64k
+  namespace: apps
+spec:
+  buffering: # a SePay notification is about 1 KiB; larger bodies get 413 before payment-svc
+    maxRequestBodyBytes: 65536

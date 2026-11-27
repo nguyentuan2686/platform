@@ -1,0 +1,8 @@
+# Self-test fixture: violates only the 'prod-sealed' policy check (a SealedSecret that is not a secrets.tsv row).
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata: {name: mystery-secrets, namespace: apps}
+spec:
+  encryptedData: {TOKEN: AgBfixture}
+  template:
+    metadata: {name: mystery-secrets, namespace: apps}

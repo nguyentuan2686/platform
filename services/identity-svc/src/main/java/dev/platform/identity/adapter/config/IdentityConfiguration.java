@@ -1,6 +1,7 @@
 package dev.platform.identity.adapter.config;
 
 import dev.platform.identity.adapter.out.crypto.AesGcmBirthCipherAdapter;
+import dev.platform.identity.adapter.out.crypto.HmacClientKeyer;
 import dev.platform.identity.adapter.out.mail.SmtpMailerAdapter;
 import dev.platform.identity.adapter.out.oidc.DisabledOidcAdapter;
 import dev.platform.identity.adapter.out.oidc.NimbusOidcAdapter;
@@ -225,8 +226,20 @@ class IdentityConfiguration {
       EntitlementGrantPort grants,
       Clock clock,
       SecureRandom random,
-      @Value("${identity.web-base-url}") String webBaseUrl) {
+      @Value("${identity.web-base-url}") String webBaseUrl,
+      @Value("${identity.mail.daily-cap}") int dailyCap,
+      @Value("${identity.profile.enc-key:}") String encKey) {
     return new MagicLinkUseCase(
-        accounts, sessions, links, mailer, merges, grants, clock, random, URI.create(webBaseUrl));
+        accounts,
+        sessions,
+        links,
+        mailer,
+        merges,
+        grants,
+        clock,
+        random,
+        URI.create(webBaseUrl),
+        dailyCap,
+        new HmacClientKeyer(encKey));
   }
 }

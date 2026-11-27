@@ -1,0 +1,13 @@
+# One request, a 500, in 5 minutes: 100 % errors but below 0.01 rps, so no alert (idle-service guard).
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: error_rate_silent_on_idle_service
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{job="order-svc", http_route="/orders", http_response_status_code="500"}'
+        values: '0 0 0 1+0x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: error-rate-high
+        exp_alerts: []

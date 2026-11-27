@@ -1,0 +1,13 @@
+  - package-ecosystem: docker
+    directory: /services/__SERVICE__
+    schedule:
+      interval: weekly
+    # Java 21 LTS is a platform constraint: JDK/JRE major upgrades go through an ADR, not Dependabot.
+    ignore:
+      - dependency-name: eclipse-temurin
+        update-types: [version-update:semver-major]
+      # build-stage image: its tag encodes the JDK in a suffix Dependabot cannot version-compare; bump manually
+      - dependency-name: maven
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]

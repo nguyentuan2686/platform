@@ -1,0 +1,26 @@
+# identity-svc drops magic links at the per-client cap: more than 10 in an hour -> alert; a few -> no alert.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: mail_client_cap_hits_fires_above_10_an_hour
+    interval: 1m
+    input_series:
+      - series: 'identity_magic_link_client_cap_reached_total{job="identity-svc"}'
+        values: '0x10 0+1x20 30x30'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: mail-client-cap-hits
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: mail-client-cap-hits
+        exp_alerts:
+          - exp_labels: {job: identity-svc, severity: warning}
+  - name: mail_client_cap_silent_on_a_few_drops
+    interval: 1m
+    input_series:
+      - series: 'identity_magic_link_client_cap_reached_total{job="identity-svc"}'
+        values: '0x10 1 2 3 4 5 5x60'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: mail-client-cap-hits
+        exp_alerts: []

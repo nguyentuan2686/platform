@@ -1,6 +1,7 @@
 package dev.platform.identity.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -40,5 +41,28 @@ class MagicLinkPolicyTest {
   @Test
   void expiry_is_ttl_after_now() {
     assertThat(MagicLinkPolicy.expiresAt(T0)).isEqualTo(T0.plus(Duration.ofMinutes(15)));
+  }
+
+  @Test
+  void daily_cap_counts_every_address_over_a_rolling_day() {
+    assertThat(MagicLinkPolicy.DAILY_WINDOW).isEqualTo(Duration.ofHours(24));
+    assertThat(MagicLinkPolicy.dailyWindowStart(T0)).isEqualTo(T0.minus(Duration.ofHours(24)));
+    assertThat(MagicLinkPolicy.underDailyCap(199, 200)).isTrue();
+    assertThat(MagicLinkPolicy.underDailyCap(200, 200)).isFalse();
+    assertThat(MagicLinkPolicy.underDailyCap(201, 200)).isFalse();
+  }
+
+  @Test
+  void client_cap_is_twenty_per_rolling_day() {
+    assertThat(MagicLinkPolicy.CLIENT_DAILY_MAX).isEqualTo(20);
+    assertThat(MagicLinkPolicy.underClientCap(19)).isTrue();
+    assertThat(MagicLinkPolicy.underClientCap(20)).isFalse();
+  }
+
+  @Test
+  void daily_cap_must_be_positive() {
+    assertThatThrownBy(() -> MagicLinkPolicy.requireValidDailyCap(0))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(MagicLinkPolicy.requireValidDailyCap(1)).isEqualTo(1);
   }
 }

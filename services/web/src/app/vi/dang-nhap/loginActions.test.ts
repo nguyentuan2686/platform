@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   setPendingLogin: vi.fn(),
   takePendingLogin: vi.fn(),
   requestMagicLink: vi.fn(),
+  clientIp: vi.fn(),
   verifyMagicLink: vi.fn(),
   me: vi.fn(),
   logout: vi.fn(),
@@ -37,12 +38,13 @@ vi.mock("@/lib/loginCookies", () => ({
   takePendingLogin: () => m.takePendingLogin(),
 }));
 vi.mock("@/lib/identity", () => ({
-  requestMagicLink: (e: string, b?: string) => m.requestMagicLink(e, b),
+  requestMagicLink: (e: string, b?: string, ip?: string) => m.requestMagicLink(e, b, ip),
   verifyMagicLink: (t: string, b?: string) => m.verifyMagicLink(t, b),
   me: (b: string) => m.me(b),
   logout: (b: string) => m.logout(b),
 }));
 vi.mock("@/lib/qa", () => ({ mergeGuest: (g: string, a: string) => m.mergeGuest(g, a) }));
+vi.mock("@/lib/clientIp", () => ({ clientIp: () => m.clientIp() }));
 
 import { acceptPendingLogin, cancelPendingLogin, confirmLogin, requestLogin } from "@/app/vi/dang-nhap/actions";
 import { UpstreamError, UpstreamProblem, UpstreamValidation } from "@/lib/http";
@@ -65,6 +67,7 @@ beforeEach(() => {
   m.loginGuest.mockResolvedValue({ guestId: "guest-1", token: "guest-token" });
   m.readSessionToken.mockResolvedValue("guest-token");
   m.requestMagicLink.mockResolvedValue({ status: "sent_if_allowed" });
+  m.clientIp.mockResolvedValue("203.0.113.7");
   m.verifyMagicLink.mockResolvedValue(LOGIN);
   m.mergeGuest.mockResolvedValue({ moved: 2 });
   m.takeNext.mockResolvedValue("/vi/la-so");
@@ -83,7 +86,7 @@ describe("requestLogin", () => {
     async (email) => {
       expect(await requestLogin(null, fd({ email, next: "/vi/tai-khoan" }))).toEqual({ sent: true });
       expect(m.loginGuest).toHaveBeenCalledWith({ create: true });
-      expect(m.requestMagicLink).toHaveBeenCalledWith(email, "guest-token");
+      expect(m.requestMagicLink).toHaveBeenCalledWith(email, "guest-token", "203.0.113.7");
       expect(m.rememberNext).toHaveBeenCalledWith("/vi/tai-khoan");
     },
   );
@@ -97,7 +100,7 @@ describe("requestLogin", () => {
     m.loginGuest.mockResolvedValue(null);
     m.readSessionToken.mockResolvedValue("account-token");
     expect(await requestLogin(null, fd({ email: "an@example.com" }))).toEqual({ sent: true });
-    expect(m.requestMagicLink).toHaveBeenCalledWith("an@example.com", undefined);
+    expect(m.requestMagicLink).toHaveBeenCalledWith("an@example.com", undefined, "203.0.113.7");
     expect(m.rememberNext).toHaveBeenCalledWith(null);
     expect(m.bindLoginToSession).toHaveBeenCalledWith("account-token");
   });

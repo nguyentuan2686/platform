@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  template:
+    spec:
+      containers:
+        - name: web
+          env:
+            # The web image bakes WEB_ORIGIN at build time too: ci.yml passes the build arg from the same domain.yaml
+            # (scripts/web-origin.sh), so a domain change republishes web and CD bumps it.
+            - {name: WEB_ORIGIN, value: "https://app.example.invalid"}
+            - {name: DEPLOY_ENV, value: prod}

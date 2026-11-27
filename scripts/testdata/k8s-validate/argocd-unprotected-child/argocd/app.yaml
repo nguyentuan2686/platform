@@ -1,0 +1,14 @@
+# Self-test fixture: violates only the 'argocd' policy check (a child Application root may prune or delete, which would
+# cascade-delete its whole prod slice through the resources finalizer).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: {name: fixture, namespace: argocd}
+spec:
+  project: prod
+  source:
+    repoURL: https://github.com/nguyentuan2686/platform.git
+    targetRevision: main
+    path: deploy/k8s/overlays/prod/apps
+  destination: {server: https://kubernetes.default.svc}
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}

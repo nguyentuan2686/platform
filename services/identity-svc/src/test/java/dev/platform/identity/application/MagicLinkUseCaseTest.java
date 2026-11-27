@@ -3,7 +3,10 @@ package dev.platform.identity.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.platform.identity.domain.ClientAddress;
+import dev.platform.identity.domain.ClientKey;
 import dev.platform.identity.domain.Email;
+import dev.platform.identity.domain.MagicLinkPolicy;
 import dev.platform.identity.domain.Subject;
 import java.net.URI;
 import java.security.SecureRandom;
@@ -20,6 +23,11 @@ import org.junit.jupiter.api.Test;
 class MagicLinkUseCaseTest {
 
   static final Instant T0 = Instant.parse("2026-11-25T15:00:00Z");
+  // Test keyer: distinct 64-hex keys for the short addresses used here (hex of the bytes, padded).
+  static final ClientKeyerPort KEYER =
+      a ->
+          new ClientKey(
+              String.format("%064x", new java.math.BigInteger(1, a.getBytes())).substring(0, 64));
 
   InMemoryPorts.Accounts accounts = new InMemoryPorts.Accounts();
   InMemoryPorts.Sessions sessions = new InMemoryPorts.Sessions();
@@ -41,6 +49,10 @@ class MagicLinkUseCaseTest {
   }
 
   private MagicLinkUseCase useCase(String webBaseUrl) {
+    return useCase(webBaseUrl, 200);
+  }
+
+  private MagicLinkUseCase useCase(String webBaseUrl, int dailyCap) {
     return new MagicLinkUseCase(
         accounts,
         sessions,
@@ -50,7 +62,9 @@ class MagicLinkUseCaseTest {
         grants,
         clock,
         new SecureRandom(),
-        URI.create(webBaseUrl));
+        URI.create(webBaseUrl),
+        dailyCap,
+        KEYER);
   }
 
   @Test
@@ -90,7 +104,8 @@ class MagicLinkUseCaseTest {
       clock.advance(Duration.ofMinutes(1));
     }
 
-    useCase.request(email, "vi", Optional.empty());
+    assertThat(useCase.request(email, "vi", Optional.empty()))
+        .isEqualTo(MagicLinkOutcome.ADDRESS_LIMITED);
 
     assertThat(mailer.sent).hasSize(3);
     clock.advance(Duration.ofMinutes(14));
@@ -245,5 +260,101 @@ class MagicLinkUseCaseTest {
     public Instant instant() {
       return now;
     }
+  }
+
+  @Test
+  void daily_cap_over_all_addresses_refuses_without_sending_or_recording() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", 2);
+    capped.request(new Email("a@example.com"), "vi", Optional.empty());
+    capped.request(new Email("b@example.com"), "vi", Optional.empty());
+
+    assertThatThrownBy(() -> capped.request(new Email("c@example.com"), "vi", Optional.empty()))
+        .isInstanceOf(MailCapReachedException.class);
+
+    assertThat(mailer.sent).hasSize(2);
+    assertThat(links.saved).hasSize(2);
+  }
+
+  @Test
+  void daily_cap_is_a_rolling_day() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", 1);
+    capped.request(new Email("a@example.com"), "vi", Optional.empty());
+    clock.advance(Duration.ofHours(23));
+    assertThatThrownBy(() -> capped.request(new Email("b@example.com"), "vi", Optional.empty()))
+        .isInstanceOf(MailCapReachedException.class);
+
+    clock.advance(Duration.ofHours(1).plusSeconds(1));
+    capped.request(new Email("b@example.com"), "vi", Optional.empty());
+
+    assertThat(mailer.sent).hasSize(2);
+  }
+
+  @Test
+  void one_client_gets_at_most_twenty_links_a_day_silently_and_others_still_get_theirs() {
+    Optional<String> attacker = Optional.of("203.0.113.7");
+    for (int i = 0; i < 25; i++) {
+      useCase.request(new Email("victim" + i + "@example.com"), "vi", Optional.empty(), attacker);
+    }
+    assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX);
+    assertThat(links.saved).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX);
+    assertThat(links.saved)
+        .allSatisfy(
+            l ->
+                assertThat(l.client())
+                    .isEqualTo(KEYER.key(ClientAddress.normalize("203.0.113.7").orElseThrow())));
+
+    useCase.request(
+        new Email("someone@example.com"), "vi", Optional.empty(), Optional.of("198.51.100.1"));
+    useCase.request(
+        new Email("nobody-known@example.com"), "vi", Optional.empty(), Optional.empty());
+    assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX + 2);
+  }
+
+  @Test
+  void client_limit_is_a_rolling_day() {
+    Optional<String> client = Optional.of("203.0.113.7");
+    for (int i = 0; i < MagicLinkPolicy.CLIENT_DAILY_MAX; i++) {
+      useCase.request(new Email("u" + i + "@example.com"), "vi", Optional.empty(), client);
+    }
+    clock.advance(Duration.ofHours(23));
+    assertThat(useCase.request(new Email("late@example.com"), "vi", Optional.empty(), client))
+        .isEqualTo(MagicLinkOutcome.CLIENT_LIMITED);
+    assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX);
+
+    clock.advance(Duration.ofHours(1).plusSeconds(1));
+    assertThat(useCase.request(new Email("late@example.com"), "vi", Optional.empty(), client))
+        .isEqualTo(MagicLinkOutcome.SENT);
+    assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX + 1);
+  }
+
+  @Test
+  void a_capped_client_is_silent_even_when_the_global_cap_is_reached() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", MagicLinkPolicy.CLIENT_DAILY_MAX);
+    Optional<String> client = Optional.of("203.0.113.7");
+    for (int i = 0; i < MagicLinkPolicy.CLIENT_DAILY_MAX; i++) {
+      capped.request(new Email("u" + i + "@example.com"), "vi", Optional.empty(), client);
+    }
+
+    capped.request(new Email("more@example.com"), "vi", Optional.empty(), client);
+
+    assertThat(mailer.sent).hasSize(MagicLinkPolicy.CLIENT_DAILY_MAX);
+  }
+
+  @Test
+  void per_address_limit_stays_silent_even_at_the_daily_cap() {
+    MagicLinkUseCase capped = useCase("http://localhost:3001", 3);
+    for (int i = 0; i < 3; i++) {
+      capped.request(new Email("a@example.com"), "vi", Optional.empty());
+    }
+
+    capped.request(new Email("a@example.com"), "vi", Optional.empty());
+
+    assertThat(mailer.sent).hasSize(3);
+  }
+
+  @Test
+  void daily_cap_below_one_is_rejected_at_startup() {
+    assertThatThrownBy(() -> useCase("http://localhost:3001", 0))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

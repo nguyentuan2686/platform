@@ -95,6 +95,9 @@ describe("identity client", () => {
     expect(last().headers.has("authorization")).toBe(false);
     await id.requestMagicLink("a@test.invalid", "guest-b");
     expect(last().headers.get("authorization")).toBe("Bearer guest-b");
+    expect(last().headers.has("x-client-ip")).toBe(false);
+    await id.requestMagicLink("a@test.invalid", undefined, "203.0.113.7");
+    expect(last().headers.get("x-client-ip")).toBe("203.0.113.7");
 
     next = () => json(200, { session_token: "s", account_id: "a", expires_at: "2027-01-01T00:00:00Z", created: true });
     expect((await id.verifyMagicLink("tok", "guest-b")).account_id).toBe("a");

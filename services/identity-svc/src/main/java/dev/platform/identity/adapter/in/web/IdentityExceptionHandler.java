@@ -5,6 +5,7 @@ import dev.platform.identity.application.ConsumptionNotFoundException;
 import dev.platform.identity.application.CreditConflictException;
 import dev.platform.identity.application.ForbiddenException;
 import dev.platform.identity.application.InvalidRedirectUriException;
+import dev.platform.identity.application.MailCapReachedException;
 import dev.platform.identity.application.MailDeliveryException;
 import dev.platform.identity.application.NoProfileException;
 import dev.platform.identity.application.OidcUnavailableException;
@@ -12,10 +13,16 @@ import dev.platform.identity.application.ProfileNotFoundException;
 import dev.platform.identity.application.UnauthenticatedException;
 import dev.platform.identity.domain.ProfileLockedException;
 import dev.platform.identity.domain.ProfileValidationException;
+import dev.platform.starter.telemetry.PlatformMeter;
 import dev.platform.starter.web.PlatformProblemHandler;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -37,10 +44,36 @@ public class IdentityExceptionHandler {
 
   static final URI UNAUTHENTICATED = URI.create("urn:problem:unauthenticated");
 
-  private final PlatformProblemHandler platform;
+  private static final Logger log = LoggerFactory.getLogger(IdentityExceptionHandler.class);
 
-  IdentityExceptionHandler(PlatformProblemHandler platform) {
+  private final PlatformProblemHandler platform;
+  private final LongCounter mailCapCounter;
+
+  IdentityExceptionHandler(PlatformProblemHandler platform, ObjectProvider<OpenTelemetry> otel) {
     this.platform = platform;
+    // Counter identity.magic_link.daily_cap_reached (alert mail-cap-reached). Recorded once at 0 so
+    // the first refusal is an increase Prometheus can see, not a new series.
+    this.mailCapCounter =
+        PlatformMeter.of(otel)
+            .counterBuilder("identity.magic_link.daily_cap_reached")
+            .setDescription("Magic-link requests refused by the global daily mail cap")
+            .build();
+    this.mailCapCounter.add(0);
+  }
+
+  /** The global daily mail cap: an open refusal (it reveals nothing about the address). */
+  @ExceptionHandler(MailCapReachedException.class)
+  ResponseEntity<Object> mailCapReached(MailCapReachedException ex, WebRequest request)
+      throws Exception {
+    mailCapCounter.add(1);
+    log.warn("magic link refused: daily mail cap reached");
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(
+            HttpStatus.TOO_MANY_REQUESTS, "Too many login mails today, try again later");
+    detail.setType(URI.create("urn:problem:rate-limited"));
+    detail.setProperty("reason", "mail_daily_cap");
+    return platform.handleException(
+        new ErrorResponseException(HttpStatus.TOO_MANY_REQUESTS, detail, null), request);
   }
 
   @ExceptionHandler(UnauthenticatedException.class)

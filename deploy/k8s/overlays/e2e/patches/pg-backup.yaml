@@ -1,0 +1,19 @@
+# e2e: S3 is configured, so a missing config must fail the backup instead of skipping it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pg-backup
+  namespace: data
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          initContainers:
+            - name: dump
+              env:
+                - {name: BACKUP_REQUIRED, value: "1"}
+          containers:
+            - name: upload
+              env:
+                - {name: BACKUP_REQUIRED, value: "1"}

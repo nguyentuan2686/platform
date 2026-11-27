@@ -1,0 +1,12 @@
+# Rendered by render.sh only when TELEGRAM_BOT_TOKEN is set (@NAME@ = env NAME). Never committed with a real value.
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: telegram
+    receivers:
+      - uid: telegram
+        type: telegram
+        disableResolveMessage: false
+        settings:
+          bottoken: "@TELEGRAM_BOT_TOKEN@"
+          chatid: "@TELEGRAM_CHAT_ID@"

@@ -30,7 +30,6 @@ spec:
             - {name: PORT, value: "8081"}
             - {name: KAFKA_BOOTSTRAP_SERVERS, value: "redpanda.data.svc.cluster.local:9092"}
             - {name: KAFKA_GROUP_ID, value: notify-svc}
-            - {name: RUST_LOG, value: info}
             - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability.svc.cluster.local:4318"}
             - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
             - {name: OTEL_SERVICE_NAME, value: notify-svc}

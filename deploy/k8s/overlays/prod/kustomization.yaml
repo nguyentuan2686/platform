@@ -1,35 +1,14 @@
-# PLACEHOLDER prod overlay. Plan 4 (Argo CD, Sealed Secrets, cloudflared) turns it into the real thing:
-#   - sets the real public domain (APP_DOMAIN) in ingress.yaml and the patches below (today: app.example.invalid);
-#   - CD bumps the image tags from `main` to `sha-<commit>`;
-#   - supplies these Secrets as SealedSecrets (this overlay deliberately renders NO Secret objects):
-#       order-svc-secrets    DB_USER, DB_PASSWORD
-#       notify-svc-secrets   DB_URL
-#       reading-tuvi-secrets DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, QA_ENC_KEY, GROQ_API_KEY, GEMINI_API_KEY
-#       identity-svc-secrets DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, PROFILE_ENC_KEY, OIDC_GOOGLE_CLIENT_SECRET
-#       payment-svc-secrets  DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, ADMIN_API_TOKEN, SEPAY_WEBHOOK_SECRET, PAYPAL_FAKE_WEBHOOK_SECRET
-#       web-secrets          INTERNAL_API_TOKEN, ADMIN_API_TOKEN   (NOT SEPAY_WEBHOOK_SECRET: only the dev payment simulator uses it, forced off in prod)
-#       postgres-secrets (ns data) POSTGRES_PASSWORD, ORDERS_DB_PASSWORD, NOTIFY_DB_PASSWORD, READING_DB_PASSWORD, IDENTITY_DB_PASSWORD, PAYMENT_DB_PASSWORD
+# Prod overlay aggregate of the four slices that Argo CD deploys as separate apps (deploy/argocd/apps). Built as a
+# whole by scripts/k8s-validate.sh; Argo never builds this file (two apps must not own the same objects).
+#   sealed/    namespaces + SealedSecrets from scripts/seal-secrets.sh (prod-sealed,   wave -1)
+#   platform/  Postgres, Redpanda, observability                       (prod-platform, wave 0)
+#   tunnel/    cloudflared (ns edge)                                   (prod-tunnel,   wave 1)
+#   apps/      the 7 services, Ingress, image tags bumped by CD        (prod-apps,     wave 1)
+# APP_DOMAIN: domain/domain.yaml (the only place). Secret inventory: secrets.tsv.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ../../platform
-  - ../../base/order-svc
-  - ../../base/notify-svc
-  - ../../base/chart-svc
-  - ../../base/reading-tuvi
-  - ../../base/identity-svc
-  - ../../base/payment-svc
-  - ../../base/web
-  - ingress.yaml
-patches:
-  - path: patches/reading-tuvi.yaml
-  - path: patches/identity-svc.yaml
-  - path: patches/web.yaml
-images:
-  - {name: ghcr.io/nguyentuan2686/order-svc, newTag: main}
-  - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: main}
-  - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: main}
-  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: main}
-  - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: main}
-  - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: main}
-  - {name: ghcr.io/nguyentuan2686/web, newTag: main}
+  - platform
+  - tunnel
+  - apps
+  - sealed

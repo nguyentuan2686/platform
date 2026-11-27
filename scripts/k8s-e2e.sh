@@ -22,7 +22,7 @@ fi
 
 # --- 2. wait for data, observability, then apps
 # (rollout status takes one resource per call)
-for r in statefulset/postgres statefulset/redpanda deploy/mailpit; do kubectl -n data rollout status "$r" --timeout=300s; done
+for r in statefulset/postgres statefulset/redpanda deploy/mailpit deploy/minio; do kubectl -n data rollout status "$r" --timeout=300s; done
 for r in deploy/lgtm ds/otel-collector; do kubectl -n observability rollout status "$r" --timeout=300s; done
 kubectl -n apps wait --for=condition=Available deploy --all --timeout=600s
 
@@ -91,8 +91,26 @@ run() {
 run smoke-flow http://localhost:8080 http://localhost:8081
 run smoke-chart http://localhost:8082
 run smoke-reading http://localhost:8083
-run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://localhost:8025
+run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://localhost:8025 http://localhost:3001
 run smoke-qa http://localhost:8084 http://localhost:8083 http://localhost:8025
 run smoke-web http://localhost:3001
 run e2e-observability http://localhost:9090 http://localhost:3200 http://localhost:3100 http://localhost:3000
+# webhook-auth: payment-svc's own SePay check (the only authentication of the public /webhooks/sepay route) refuses a
+# call without the key. The route itself (Exact path, body cap, rate limit) is checked through Traefik by
+# scripts/e2e-edge.sh in the bootstrap job.
+code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -X POST -H 'Content-Type: application/json' \
+  --data '{"id":1,"transferType":"in","transferAmount":1000}' http://localhost:8085/webhooks/sepay) || code=000
+[ "$code" = 401 ] || fail "webhook-auth: POST /webhooks/sepay without the key got $code, want 401"
+echo "OK webhook-auth"
+
+# --- 5. no app container restarted during the whole run (startup gating: wait-for-postgres init containers,
+# kafkaTopics readiness). RESTARTS > 0 here means a service crash-looped on a dependency it should have waited for.
+restarts=$(kubectl -n apps get pods -o jsonpath='{range .items[*]}{.metadata.name}{range .status.containerStatuses[*]} {.name}={.restartCount}{end}{"\n"}{end}')
+echo "$restarts"
+if grep -Eq '=[1-9][0-9]*( |$)' <<<"$restarts"; then fail "app-restarts-0: $(grep -E '=[1-9]' <<<"$restarts" | paste -sd';' -)"; fi
+echo "OK app-restarts-0"
+
+# --- 6. ops CronJobs: backup to MinIO, restore into scratch dbs, heartbeat. Runs last: it scales the apps to 0.
+bash scripts/e2e-backup.sh || fail e2e-backup
+echo "OK e2e-backup"
 echo "k8s-e2e: ok"

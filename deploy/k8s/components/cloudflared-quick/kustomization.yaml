@@ -1,0 +1,12 @@
+# Needs the app-domain ConfigMap (component ../../overlays/prod/domain) listed BEFORE this component.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - deployment.yaml
+replacements:
+  # Traefik routes on the Host header, so the quick tunnel rewrites it to APP_DOMAIN. args index 7 is the value after
+  # --http-host-header (scripts/k8s-validate.sh `prod-domain` checks it).
+  - source: {kind: ConfigMap, name: app-domain, fieldPath: data.APP_DOMAIN}
+    targets:
+      - select: {kind: Deployment, name: cloudflared, namespace: edge}
+        fieldPaths: ["spec.template.spec.containers.[name=cloudflared].args.7"]

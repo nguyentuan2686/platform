@@ -1,0 +1,16 @@
+# 3 container restarts within 15 minutes fire pod-restart-loop at once (for: 0m); 2 do not.
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: restart_loop_fires_at_3_in_15m
+    interval: 1m
+    input_series:
+      - series: 'k8s_container_restarts{k8s_namespace_name="apps", k8s_pod_name="order-svc-abc", k8s_container_name="order-svc"}'
+        values: '0 1 2 3 3 3 3 3 3 3 3 3'
+      - series: 'k8s_container_restarts{k8s_namespace_name="apps", k8s_pod_name="web-xyz", k8s_container_name="web"}'
+        values: '0 1 2 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pod-restart-loop
+        exp_alerts:
+          - exp_labels: {k8s_namespace_name: apps, k8s_pod_name: order-svc-abc, severity: critical}

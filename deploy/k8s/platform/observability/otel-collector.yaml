@@ -17,6 +17,8 @@ spec:
           args: [--config=/etc/otelcol/config.yaml]
           env:
             - {name: DEPLOY_ENV, value: prod}
+            - name: K8S_NODE_IP
+              valueFrom: {fieldRef: {fieldPath: status.hostIP}}
           ports:
             - {name: otlp-grpc, containerPort: 4317}
             - {name: otlp-http, containerPort: 4318}
@@ -28,8 +30,8 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           resources:
-            requests: {cpu: 50m, memory: 256Mi}
-            limits: {memory: 256Mi}
+            requests: {cpu: 50m, memory: 320Mi}
+            limits: {memory: 320Mi}
           readinessProbe:
             httpGet: {path: /, port: health}
             periodSeconds: 10

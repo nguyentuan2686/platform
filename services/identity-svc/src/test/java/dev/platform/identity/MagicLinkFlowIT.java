@@ -193,4 +193,63 @@ class MagicLinkFlowIT {
                 "select count(*) from magic_link where email = 'race@example.com'", Long.class))
         .isEqualTo(3L);
   }
+
+  @Test
+  void daily_mail_cap_over_all_addresses_answers_429_and_sends_nothing() throws Exception {
+    // 200 links (MAIL_DAILY_CAP default) already sent today to other addresses, straight in the db.
+    jdbc.update(
+        "insert into magic_link (id, email, token_sha256, created_at, expires_at)"
+            + " select gen_random_uuid(), 'cap-fill-' || i || '@example.com',"
+            + " sha256(('cap-fill-' || i)::bytea), now(), now() + interval '15 minutes'"
+            + " from generate_series(1, 200) i");
+    int before = MAILS.size();
+    try {
+      HttpResponse<String> refused =
+          send(
+              "POST", "/auth/magic-links", null, "{\"email\":\"cap@example.com\",\"lang\":\"vi\"}");
+
+      assertThat(refused.statusCode()).isEqualTo(429);
+      assertThat(refused.headers().firstValue("Content-Type")).hasValue("application/problem+json");
+      assertThat(json(refused).path("reason").asString()).isEqualTo("mail_daily_cap");
+      assertThat(refused.body()).doesNotContain("cap@example.com");
+      assertThat(MAILS).hasSize(before);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from magic_link where email = 'cap@example.com'", Long.class))
+          .isZero();
+    } finally {
+      jdbc.update("delete from magic_link where email like 'cap-fill-%'");
+    }
+  }
+
+  @Test
+  void one_client_ip_gets_at_most_twenty_links_a_day_and_only_its_hash_is_stored()
+      throws Exception {
+    int before = MAILS.size();
+    for (int i = 0; i < 22; i++) {
+      var request =
+          HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/auth/magic-links"))
+              .header("Content-Type", "application/json")
+              .header("X-Client-Ip", "203.0.113.99")
+              .POST(
+                  HttpRequest.BodyPublishers.ofString(
+                      "{\"email\":\"client-cap-" + i + "@example.com\",\"lang\":\"vi\"}"))
+              .build();
+      assertThat(
+              HttpClient.newHttpClient()
+                  .send(request, HttpResponse.BodyHandlers.ofString())
+                  .statusCode())
+          .isEqualTo(202);
+    }
+
+    assertThat(MAILS).hasSize(before + 20);
+    assertThat(
+            jdbc.queryForList(
+                "select distinct client_key from magic_link where email like 'client-cap-%'",
+                String.class))
+        .singleElement()
+        .asString()
+        .matches("[0-9a-f]{64}")
+        .doesNotContain("203.0.113.99");
+  }
 }

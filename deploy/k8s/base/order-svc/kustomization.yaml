@@ -4,3 +4,5 @@ namespace: apps
 resources:
   - deployment.yaml
   - service.yaml
+components:
+  - ../components/wait-for-postgres

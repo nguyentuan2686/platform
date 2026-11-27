@@ -1,0 +1,19 @@
+# 1 rps with 10 % 5xx for 10 minutes -> error-rate-high fires for order-svc (health and QA routes excluded).
+rule_files: [rules.generated.yaml]
+evaluation_interval: 1m
+tests:
+  - name: error_rate_fires_at_10_percent
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{job="order-svc", http_route="/orders", http_response_status_code="200"}'
+        values: '0+54x20'
+      - series: 'http_server_request_duration_seconds_count{job="order-svc", http_route="/orders", http_response_status_code="500"}'
+        values: '0+6x20'
+      # a healthy service next to it must stay silent
+      - series: 'http_server_request_duration_seconds_count{job="notify-svc", http_route="/notifications", http_response_status_code="200"}'
+        values: '0+60x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: error-rate-high
+        exp_alerts:
+          - exp_labels: {job: order-svc, severity: critical}
