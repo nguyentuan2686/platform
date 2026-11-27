@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { cfg } from "@/lib/config";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
+  origin: cfg().webOrigin,
+  path: "/vi/chinh-sach-rieng-tu",
   title: "Chính sách riêng tư",
   description: "Dữ liệu chúng tôi thu thập, cách mã hóa, thời gian lưu và quyền xóa của bạn.",
-  robots: { index: true, follow: true },
-};
+});
 
 export default function PrivacyPage() {
   return (
