@@ -8,7 +8,7 @@
 set -euo pipefail
 f="${1:-$(dirname "$0")/../deploy/k8s/overlays/prod/domain/domain.yaml}"
 [ -f "$f" ] || { echo "web-origin: $f not found" >&2; exit 1; }
-domain="$(sed -n 's/^[[:space:]]*APP_DOMAIN:[[:space:]]*"\{0,1\}\([^"[:space:]#]*\)"\{0,1\}.*$/\1/p' "$f" | tr -d '\r' | head -n 1)"
+domain="$(sed -n 's/^[[:space:]]*APP_DOMAIN:[[:space:]]*"\{0,1\}\([^"[:space:]#]*\)"\{0,1\}.*$/\1/p' "$f" | tr -d '\r' | awk 'NR == 1')"
 [[ "$domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo "web-origin: APP_DOMAIN \"$domain\" in $f is missing or not a hostname" >&2; exit 1; }
 case "$domain" in *.invalid) exit 0 ;; esac
 echo "https://$domain"

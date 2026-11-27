@@ -77,7 +77,7 @@ req() {
   shift 3
   code="$(curl -sS -o "$tmp/body" -w '%{http_code}' --max-time 10 -X "$method" -H "Host: $domain" \
     -H "Cf-Connecting-IP: $ip" "$@" "http://127.0.0.1:$PORT$path")" || code=000
-  printf '%s %s\n' "$code" "$(sed -n 's/^Hostname: \(stub-[a-z-]*\)-[a-z0-9]*-[a-z0-9]*\r\{0,1\}$/\1/p' "$tmp/body" | head -n 1 | grep . || echo -)"
+  printf '%s %s\n' "$code" "$(sed -n 's/^Hostname: \(stub-[a-z-]*\)-[a-z0-9]*-[a-z0-9]*\r\{0,1\}$/\1/p' "$tmp/body" | awk 'NR == 1' | grep . || echo -)"
 }
 
 # Traefik picks up new Ingresses within seconds; wait on the routed state, not a sleep.
