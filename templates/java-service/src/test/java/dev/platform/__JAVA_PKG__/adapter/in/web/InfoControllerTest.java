@@ -9,7 +9,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import dev.platform.__JAVA_PKG__.application.GetInfoUseCase;
 import dev.platform.__JAVA_PKG__.domain.ServiceInfo;
-import dev.platform.starter.web.PlatformWebAutoConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -19,7 +18,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(InfoController.class)
-@Import(PlatformWebAutoConfiguration.class)
+// Fully qualified, not imported: an import of dev.platform.starter would sort above or below this
+// service's own dev.platform.<pkg> imports depending on its name, and fail Spotless for some names.
+@Import(dev.platform.starter.web.PlatformWebAutoConfiguration.class)
 class InfoControllerTest {
 
   static final String NAME = "__SERVICE__";

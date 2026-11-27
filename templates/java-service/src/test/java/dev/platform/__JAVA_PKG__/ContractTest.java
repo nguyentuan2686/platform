@@ -7,7 +7,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import dev.platform.__JAVA_PKG__.adapter.in.web.InfoController;
 import dev.platform.__JAVA_PKG__.application.GetInfoUseCase;
 import dev.platform.__JAVA_PKG__.domain.ServiceInfo;
-import dev.platform.starter.web.PlatformWebAutoConfiguration;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
@@ -26,7 +25,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @WebMvcTest(InfoController.class)
-@Import(PlatformWebAutoConfiguration.class)
+// Fully qualified, not imported: an import of dev.platform.starter would sort above or below this
+// service's own dev.platform.<pkg> imports depending on its name, and fail Spotless for some names.
+@Import(dev.platform.starter.web.PlatformWebAutoConfiguration.class)
 class ContractTest {
 
   static final String NAME = "__SERVICE__";
