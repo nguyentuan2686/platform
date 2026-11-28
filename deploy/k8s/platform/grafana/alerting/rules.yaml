@@ -2,6 +2,9 @@
 # its comparison, so it returns a series only while the condition holds; threshold B (A > 0) then fires.
 # scripts/alerts-promtool.sh turns these same expressions into Prometheus rules for the promtool unit tests
 # (scripts/testdata/alerts), so edit the expr here and the tests there together.
+# Annotations are Vietnamese (they are the Telegram text, see contact-point.tmpl.yaml): `summary` says what is wrong,
+# `service` names the service. Write `$labels` with ONE `$`: Grafana does not unescape `$$` in alerting provisioning
+# files, so `{{ $$labels.x }}` reaches the message as raw template text (k8s-validate.sh rejects `$$`).
 apiVersion: 1
 groups:
   - orgId: 1
@@ -18,7 +21,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "5xx ratio above 5% on {{ $$labels.job }}"
+          summary: "Nhiều yêu cầu bị lỗi (hơn 5% trả lỗi 5xx)"
+          service: "{{ $labels.job }}"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#error-rate-high
         data:
           - refId: A
@@ -49,7 +53,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "p95 latency above 1s on {{ $$labels.job }} (at more than 0.05 req/s)"
+          summary: "Phản hồi chậm (5% yêu cầu chậm hơn 1 giây)"
+          service: "{{ $labels.job }}"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#latency-p95-high
         data:
           - refId: A
@@ -80,7 +85,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "{{ $$labels.k8s_pod_name }} restarted 3+ times in 15m"
+          summary: "Khởi động lại liên tục (3 lần trở lên trong 15 phút)"
+          service: '{{ reReplaceAll "-[a-z0-9]{6,10}-[a-z0-9]{5}$" "" $labels.k8s_pod_name }}'
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#pod-restart-loop
         data:
           - refId: A
@@ -111,7 +117,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "consumer group {{ $$labels.redpanda_group }} lag above 100 and growing"
+          summary: "Hàng đợi sự kiện bị dồn (chậm hơn 100 tin và vẫn tăng)"
+          service: "{{ $labels.redpanda_group }}"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#consumer-lag-rising
         data:
           - refId: A
@@ -142,7 +149,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "node {{ $$labels.k8s_node_name }} root disk above 80%"
+          summary: "Ổ đĩa máy chủ đầy hơn 80%"
+          service: "máy chủ {{ $labels.k8s_node_name }}"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#disk-usage-high
         data:
           - refId: A
@@ -173,7 +181,8 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "Argo CD app {{ $$labels.name }} is Degraded or Missing"
+          summary: "Bản deploy bị lỗi (Argo CD báo Degraded hoặc Missing)"
+          service: "{{ $labels.name }}"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#deploy-failed
         data:
           - refId: A
@@ -204,7 +213,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "the daily pg-backup was skipped: S3 (ops-secrets) is not configured, no off-host copy of the data"
+          summary: "Sao lưu database hằng ngày bị bỏ qua: chưa cấu hình nơi lưu (R2), dữ liệu chưa có bản sao ngoài máy chủ"
+          service: "pg-backup"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#backup-skipped
         data:
           - refId: A
@@ -235,7 +245,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "identity-svc refused login mails at the global daily cap (MAIL_DAILY_CAP)"
+          summary: "Hết hạn mức email đăng nhập trong ngày: người dùng không nhận được link đăng nhập"
+          service: "identity-svc"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#mail-cap-reached
         data:
           - refId: A
@@ -266,7 +277,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "identity-svc dropped more than 10 login mails in 1h at the per-client cap (an attack, or real users behind one shared IP)"
+          summary: "Hơn 10 email đăng nhập bị chặn trong 1 giờ (có thể bị tấn công, hoặc nhiều người dùng chung một IP)"
+          service: "identity-svc"
           runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#mail-client-cap-hits
         data:
           - refId: A
