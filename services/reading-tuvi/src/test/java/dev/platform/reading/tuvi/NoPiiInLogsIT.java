@@ -2,10 +2,14 @@ package dev.platform.reading.tuvi;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -64,6 +68,41 @@ class NoPiiInLogsIT extends QaItSupport {
     for (String answer : answers) {
       assertThat(logs).doesNotContain(answer);
     }
+  }
+
+  /** A number check (and a refused third one): no number, no birth year, no IP in the logs. */
+  @Test
+  void number_checks_log_neither_the_number_nor_the_birth_year(CapturedOutput output)
+      throws Exception {
+    jdbc.update("delete from number_check_usage");
+    for (String number : List.of("0912345678", "0987654321", "0911222333")) {
+      var b =
+          HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/tuvi/number-check"))
+              .header("X-Internal-Token", TOKEN)
+              .header("Authorization", "Bearer " + GUEST_BEARER)
+              .header("X-Client-Ip", "203.0.113.77")
+              .header("Content-Type", "application/json")
+              .POST(
+                  HttpRequest.BodyPublishers.ofString(
+                      JSON.createObjectNode()
+                          .put("kind", "sim")
+                          .put("number", number)
+                          .put("birthYear", 1990)
+                          .put("beforeTet", false)
+                          .put("gender", "male")
+                          .toString()))
+              .build();
+      HttpClient.newHttpClient().send(b, HttpResponse.BodyHandlers.ofString());
+    }
+    String logs = output.getAll();
+    assertThat(logs)
+        .doesNotContain("0912345678")
+        .doesNotContain("912345678")
+        .doesNotContain("0987654321")
+        .doesNotContain("203.0.113.77");
+    // a standalone 1990 (hex trace ids may contain the digits by chance)
+    assertThat(Pattern.compile("(?<![0-9A-Za-z])1990(?![0-9A-Za-z])").matcher(logs).find())
+        .isFalse();
   }
 
   static List<String> answers(HttpResponse<String> res) {

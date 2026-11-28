@@ -341,6 +341,94 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /tuvi/number-check:
+    post:
+      operationId: checkNumber
+      summary: Free number check (xem số hợp mệnh) of a SIM, bank account number or licence plate
+      description: >-
+        Scores the number against the birth year's nạp âm and cung phi (six criteria, 0-10) and
+        returns a reading assembled from approved knowledge. No LLM. Counts against a daily quota
+        per session subject (`NUMBER_CHECK_DAILY_PER_SUBJECT`, 2) and per `X-Client-Ip`
+        (`NUMBER_CHECK_DAILY_PER_IP`, 20) per Vietnam day; the same kind and normalized number
+        again the same day is free. Only HMACs of the number and IP are stored, for two days; the
+        number is never logged and never returned. An invalid input costs nothing.
+      security:
+        - internalToken: []
+          sessionBearer: []
+      parameters:
+        - name: X-Client-Ip
+          in: header
+          required: false
+          description: The end user's IP (from Cloudflare). Without it only the per-subject limit applies.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NumberCheckRequest'
+      responses:
+        '200':
+          description: The score, criteria and reading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NumberCheckResult'
+        '400':
+          description: >-
+            `reason` is `invalid_number` (bad kind, vehicle or number) or `invalid_birth` (year
+            outside 1930..current year, or a bad gender); a malformed body is reported on `body`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: >-
+            `reason` is `number_quota`; the problem carries `quota` (a NumberCheckQuota with
+            `remaining` 0).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /tuvi/number-check/quota:
+    get:
+      operationId: getNumberCheckQuota
+      summary: Distinct numbers checked today (Vietnam day) by the caller
+      security:
+        - internalToken: []
+          sessionBearer: []
+      responses:
+        '200':
+          description: The quota.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NumberCheckQuota'
+        '401':
+          description: Missing internal token, missing bearer or unknown session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: identity-svc failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /internal/qa/merge:
     post:
       operationId: mergeGuestQa
@@ -757,6 +845,99 @@ components:
             $ref: '#/components/schemas/TodayArea'
         closing:
           type: string
+    NumberCheckRequest:
+      type: object
+      required: [kind, number, birthYear, gender]
+      properties:
+        kind:
+          type: string
+          enum: [sim, bank, plate]
+        vehicle:
+          type: string
+          enum: [car, motorbike]
+          description: Required when kind is plate.
+        number:
+          type: string
+          maxLength: 64
+          description: >-
+            SIM: 10 digits starting 0 (`+84` accepted; spaces, dots, dashes ignored). bank: 6-19
+            digits. plate: car `30A12345`, motorbike `29B112345` (case, `-` and `.` ignored); only
+            the serial number is scored.
+        birthYear:
+          type: integer
+          minimum: 1930
+        beforeTet:
+          type: boolean
+          description: Born before Tết Nguyên đán of birthYear (lunar year = birthYear - 1).
+        gender:
+          type: string
+          enum: [male, female]
+    NumberCheckQuota:
+      type: object
+      required: [limit, used, remaining]
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+          minimum: 0
+        used:
+          type: integer
+          minimum: 0
+        remaining:
+          type: integer
+          minimum: 0
+    NumberCheckResult:
+      type: object
+      required: [score, band, bandLabel, menh, cungPhi, criteria, reading, quota]
+      additionalProperties: false
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 10
+          multipleOf: 0.5
+        band:
+          type: string
+          enum: [rat_hop, kha_hop, binh_thuong, chua_hop]
+        bandLabel:
+          type: string
+        menh:
+          type: object
+          required: [canChi, napAm, element]
+          additionalProperties: false
+          properties:
+            canChi: {type: string}
+            napAm: {type: string}
+            element: {type: string, enum: [Kim, Mộc, Thủy, Hỏa, Thổ]}
+        cungPhi:
+          type: object
+          required: [name, group]
+          additionalProperties: false
+          properties:
+            name: {type: string}
+            group: {type: string, enum: [Đông tứ mệnh, Tây tứ mệnh]}
+        criteria:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            type: object
+            required: [key, label, detail, points, max]
+            additionalProperties: false
+            properties:
+              key:
+                type: string
+                enum: [element, hexagram, yinyang, cungphi, nut, pairs]
+              label: {type: string}
+              detail: {type: string}
+              points: {type: number, minimum: 0}
+              max: {type: number, minimum: 0}
+        reading:
+          type: array
+          items:
+            type: string
+        quota:
+          $ref: '#/components/schemas/NumberCheckQuota'
     MergeRequest:
       type: object
       required: [guest_id, account_id]
