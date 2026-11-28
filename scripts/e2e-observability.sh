@@ -32,7 +32,7 @@ probe_red_http() {
   local r j
   r=$(prom 'count by (job) (http_server_request_duration_seconds_count)') || { printf '%s' "$r"; return 1; }
   printf '%s' "$r"
-  for j in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc; do
+  for j in order-svc notify-svc chart-svc astro-chart-svc reading-tuvi identity-svc payment-svc; do
     has "$r" "\"job\" *: *\"$j\"" || return 1
   done
 }

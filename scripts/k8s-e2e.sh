@@ -66,6 +66,7 @@ wait_url() {
 pf apps svc/order-svc 8080:8080
 pf apps svc/notify-svc 8081:8081
 pf apps svc/chart-svc 8082:8082
+pf apps svc/astro-chart-svc 8086:8086
 pf apps svc/reading-tuvi 8083:8083
 pf apps svc/identity-svc 8084:8084
 pf apps svc/payment-svc 8085:8085
@@ -73,7 +74,7 @@ pf apps svc/web 3001:3000
 pf data svc/mailpit 8025:8025
 pf observability svc/lgtm 3000:3000 9090:9090 3100:3100 3200:3200
 
-for port in 8080 8081 8082 8083 8084 8085 3001; do wait_url "http://localhost:$port/health/ready"; done
+for port in 8080 8081 8082 8083 8084 8085 8086 3001; do wait_url "http://localhost:$port/health/ready"; done
 wait_url http://localhost:8025/readyz
 wait_url http://localhost:3000/api/health
 wait_url http://localhost:9090/-/ready
@@ -90,6 +91,7 @@ run() {
 }
 run smoke-flow http://localhost:8080 http://localhost:8081
 run smoke-chart http://localhost:8082
+run smoke-astro-chart http://localhost:8086
 run smoke-reading http://localhost:8083
 run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://localhost:8025 http://localhost:3001
 run smoke-qa http://localhost:8084 http://localhost:8083 http://localhost:8025
