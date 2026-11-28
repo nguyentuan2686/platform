@@ -29,3 +29,16 @@ data:
       end
     end
     return hs
+  # Ingress: Argo CD's built-in check stays Progressing until status.loadBalancer.ingress is set. k3s's Traefik is a
+  # ClusterIP Service behind cloudflared (traefik-config.yaml), so no Ingress ever gets that status and prod-apps would
+  # never turn Healthy (issue #53). An Ingress with at least one rule counts as Healthy; one without rules is Degraded.
+  resource.customizations.health.networking.k8s.io_Ingress: |
+    hs = {}
+    if obj.spec ~= nil and obj.spec.rules ~= nil and #obj.spec.rules > 0 then
+      hs.status = "Healthy"
+      hs.message = "routed by Traefik (ClusterIP behind cloudflared, no load balancer status by design)"
+    else
+      hs.status = "Degraded"
+      hs.message = "Ingress has no rules"
+    end
+    return hs

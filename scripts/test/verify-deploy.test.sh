@@ -95,6 +95,15 @@ missing_app_fails() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+progressing_names_the_unhealthy_resources() {
+  reset; use prod-apps progressing-ingress
+  run --app prod-apps --revision "$rev" --deadline-s 1 --no-smoke
+  [ "$rc" -eq 1 ] || fail "${FUNCNAME[0]}" "expected exit 1, got $rc: $(cat "$tmp/out")"
+  grep -q '^  unhealthy Ingress/apps/web: Progressing' "$tmp/out" || fail "${FUNCNAME[0]}" "no unhealthy line: $(cat "$tmp/out")"
+  if grep -q 'unhealthy Deployment\|unhealthy Service' "$tmp/out"; then fail "${FUNCNAME[0]}" "listed a healthy resource: $(cat "$tmp/out")"; fi
+  echo "ok ${FUNCNAME[0]}"
+}
+
 expect_outofsync_passes() {
   reset; use root healthy; use prod-apps outofsync; use prod-tunnel outofsync
   run --app root --revision "$rev" --deadline-s 5 --no-smoke --expect-outofsync prod-apps,prod-tunnel
@@ -243,6 +252,7 @@ no_port_forward_left_running() {
 synced_and_healthy_passes
 wrong_revision_fails_with_details
 progressing_times_out
+progressing_names_the_unhealthy_resources
 missing_app_fails
 expect_outofsync_passes
 expect_outofsync_rejects_comparison_error
