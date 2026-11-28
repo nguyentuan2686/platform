@@ -1,5 +1,7 @@
 package dev.platform.reading.tuvi.adapter.config;
 
+import dev.platform.reading.tuvi.adapter.out.llm.AnthropicLlmAdapter;
+import dev.platform.reading.tuvi.adapter.out.llm.AnthropicSettings;
 import dev.platform.reading.tuvi.adapter.out.llm.FakeLlmProvider;
 import dev.platform.reading.tuvi.adapter.out.llm.FakeMode;
 import dev.platform.reading.tuvi.adapter.out.llm.OpenAiCompatibleLlmAdapter;
@@ -31,10 +33,17 @@ class LlmConfiguration {
 
   /** Env var holding each keyed provider's API key. */
   private static final Map<String, String> KEY_VARS =
-      Map.of("groq", "GROQ_API_KEY", "gemini", "GEMINI_API_KEY", "paid", "LLM_PAID_API_KEY");
+      Map.of(
+          "claude", "ANTHROPIC_API_KEY",
+          "groq", "GROQ_API_KEY",
+          "gemini", "GEMINI_API_KEY",
+          "paid", "LLM_PAID_API_KEY");
 
   /** Providers in failover order. */
   record ConfiguredProviders(List<LlmProviderPort> ordered) {}
+
+  /** Paid providers priced apart from the {@code paid} defaults, by provider id. */
+  record ProviderPricing(Map<String, PaidPricing> byId) {}
 
   @Bean
   Clock clock() {
@@ -56,6 +65,8 @@ class LlmConfiguration {
         String key = env.getProperty(KEY_VARS.get(id), "").strip();
         if (key.isBlank()) {
           LOG.warn("llm provider {} disabled: no api key", id);
+        } else if (id.equals("claude")) {
+          providers.add(anthropic(env, key));
         } else {
           providers.add(openAi(env, id, key));
         }
@@ -79,10 +90,56 @@ class LlmConfiguration {
         decimal(env, "LLM_PAID_MONTHLY_BUDGET_USD", "5"));
   }
 
+  /**
+   * Claude defaults: claude-haiku-5-5 list prices for prompts up to 100K tokens ($0.10 in, $0.50
+   * out, 5-minute cache write 1.25x and cache read 0.1x of input), checked against the claude-api
+   * skill on 2026-11-28. Re-check https://platform.claude.com/docs/en/about-claude/pricing when
+   * changing the model.
+   */
+  @Bean
+  ProviderPricing providerPricing(Environment env) {
+    return new ProviderPricing(
+        Map.of(
+            "claude",
+            new PaidPricing(
+                decimal(env, "ANTHROPIC_INPUT_USD_PER_MTOK", "0.10"),
+                decimal(env, "ANTHROPIC_OUTPUT_USD_PER_MTOK", "0.50"),
+                decimal(env, "ANTHROPIC_CACHE_WRITE_USD_PER_MTOK", "0.125"),
+                decimal(env, "ANTHROPIC_CACHE_READ_USD_PER_MTOK", "0.01"),
+                decimal(env, "ANTHROPIC_MONTHLY_BUDGET_USD", "5"))));
+  }
+
   @Bean
   LlmGateway llmGateway(
-      ConfiguredProviders providers, LlmUsagePort usage, PaidPricing pricing, Clock clock) {
-    return new LlmGateway(providers.ordered(), usage, pricing, clock);
+      ConfiguredProviders providers,
+      LlmUsagePort usage,
+      ProviderPricing providerPricing,
+      PaidPricing pricing,
+      Clock clock) {
+    return new LlmGateway(providers.ordered(), usage, providerPricing.byId(), pricing, clock);
+  }
+
+  /**
+   * claude-haiku-5-5: the low-cost tier, good instruction following, and a Q&A prompt is ~2K
+   * tokens. Effort {@code low} keeps adaptive thinking short; the headroom keeps thinking from
+   * eating the answer's token budget.
+   */
+  private static LlmProviderPort anthropic(Environment env, String key) {
+    return new AnthropicLlmAdapter(
+        new AnthropicSettings(
+            "claude",
+            URI.create(env.getProperty("ANTHROPIC_BASE_URL", "https://api.anthropic.com").strip()),
+            key,
+            env.getProperty("ANTHROPIC_MODEL", "claude-haiku-5-5").strip(),
+            env.getProperty("ANTHROPIC_EFFORT", "low").strip(),
+            Integer.parseInt(env.getProperty("ANTHROPIC_THINKING_HEADROOM_TOKENS", "1024").strip()),
+            Boolean.parseBoolean(env.getProperty("ANTHROPIC_PROMPT_CACHE", "true").strip()),
+            Integer.parseInt(
+                env.getProperty("ANTHROPIC_DAILY_REQUEST_LIMIT", String.valueOf(Integer.MAX_VALUE))
+                    .strip()),
+            Boolean.parseBoolean(env.getProperty("ANTHROPIC_SERVE_FREE_TIER", "true").strip()),
+            Duration.parse(env.getProperty("ANTHROPIC_TIMEOUT", "PT30S").strip())),
+        RestClient.builder());
   }
 
   /**

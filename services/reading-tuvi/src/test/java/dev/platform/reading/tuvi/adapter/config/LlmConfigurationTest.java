@@ -99,6 +99,69 @@ class LlmConfigurationTest {
   }
 
   @Test
+  void claude_with_key_comes_first_and_serves_free_tier_by_default() {
+    runner
+        .withPropertyValues(
+            "LLM_PROVIDERS=claude,groq,fake",
+            "ANTHROPIC_API_KEY=local-test-anthropic-key",
+            "GROQ_API_KEY=local-test-groq-key")
+        .run(
+            ctx -> {
+              var providers = ctx.getBean(LlmConfiguration.ConfiguredProviders.class);
+              assertThat(ids(providers)).containsExactly("claude", "groq", "fake");
+              var claude = providers.ordered().get(0);
+              assertThat(claude.paid()).isTrue();
+              assertThat(claude.servesFreeTier()).isTrue();
+              assertThat(claude.dailyRequestLimit()).isEqualTo(Integer.MAX_VALUE);
+            });
+  }
+
+  @Test
+  void claude_without_key_is_skipped_with_warn(CapturedOutput output) {
+    runner
+        .withPropertyValues("LLM_PROVIDERS=claude,fake")
+        .run(
+            ctx -> {
+              assertThat(ids(ctx.getBean(LlmConfiguration.ConfiguredProviders.class)))
+                  .containsExactly("fake");
+              assertThat(output.getAll()).contains("llm provider claude disabled: no api key");
+            });
+  }
+
+  @Test
+  void claude_free_tier_can_be_turned_off() {
+    runner
+        .withPropertyValues(
+            "LLM_PROVIDERS=claude",
+            "ANTHROPIC_API_KEY=local-test-anthropic-key",
+            "ANTHROPIC_SERVE_FREE_TIER=false")
+        .run(
+            ctx ->
+                assertThat(
+                        ctx.getBean(LlmConfiguration.ConfiguredProviders.class)
+                            .ordered()
+                            .get(0)
+                            .servesFreeTier())
+                    .isFalse());
+  }
+
+  @Test
+  void claude_pricing_defaults_and_overrides() {
+    runner
+        .withPropertyValues("ANTHROPIC_MONTHLY_BUDGET_USD=3")
+        .run(
+            ctx -> {
+              var pricing = ctx.getBean(LlmConfiguration.ProviderPricing.class).byId();
+              var claude = pricing.get("claude");
+              assertThat(claude.inputUsdPerMTok()).isEqualByComparingTo("0.10");
+              assertThat(claude.outputUsdPerMTok()).isEqualByComparingTo("0.50");
+              assertThat(claude.cacheWriteUsdPerMTok()).isEqualByComparingTo("0.125");
+              assertThat(claude.cacheReadUsdPerMTok()).isEqualByComparingTo("0.01");
+              assertThat(claude.monthlyBudgetUsd()).isEqualByComparingTo("3");
+            });
+  }
+
+  @Test
   void gateway_bean_is_built() {
     runner.run(ctx -> assertThat(ctx).hasSingleBean(LlmGateway.class));
   }
