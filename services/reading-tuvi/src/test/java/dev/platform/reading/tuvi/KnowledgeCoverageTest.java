@@ -70,6 +70,10 @@ class KnowledgeCoverageTest {
       approved.addAll(keysIn(file, true));
     }
 
+    Set<String> number = new HashSet<>();
+    KeyCatalog.number().forEach(k -> number.add(k.value()));
+    allowed.addAll(number);
+
     List<String> report = new ArrayList<>();
     for (String palace : KeyCatalog.P2_PALACES) {
       Set<String> p2 = new HashSet<>();
@@ -87,6 +91,9 @@ class KnowledgeCoverageTest {
     if (P1_GATE) {
       assertThat(covered).as("P1 coverage").isEqualTo(p1.size());
     }
+    Set<String> missingNumber = new HashSet<>(number);
+    missingNumber.removeAll(approved);
+    assertThat(missingNumber).as("number-check keys without an approved record").isEmpty();
   }
 
   private static int count(Set<String> wanted, Set<String> present) {

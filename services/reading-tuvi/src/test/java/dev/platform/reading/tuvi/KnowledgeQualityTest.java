@@ -163,6 +163,43 @@ class KnowledgeQualityTest {
                 + " người có chuyên môn.");
   }
 
+  /**
+   * Number-check readings (spec §6): every {@code so:} catalog key has exactly one approved record
+   * in {@code number.vi.jsonl}, cited as {@code original:number}, passing the content rules, with
+   * no bettable digit pair like {@code 12-34} and no advice to change a bank or plate number.
+   */
+  @Test
+  void number_readings_cover_the_catalog_and_pass_the_content_rules() throws IOException {
+    List<JsonNode> records = read(KNOWLEDGE.resolve("number.vi.jsonl"));
+    Set<String> catalog = new java.util.HashSet<>();
+    dev.platform.reading.tuvi.domain.KeyCatalog.number().forEach(k -> catalog.add(k.value()));
+    assertThat(records)
+        .extracting(r -> r.get("key").stringValue())
+        .containsExactlyInAnyOrderElementsOf(catalog);
+    Pattern bettable = Pattern.compile("\\d{2}\\s*[-–]\\s*\\d{2}");
+    Pattern changeNumber = Pattern.compile("(?i)(đổi|thay) (số|biển)");
+    for (JsonNode r : records) {
+      String key = r.get("key").stringValue();
+      String content = r.get("content").stringValue();
+      assertThat(r.get("status").stringValue()).as(key).isEqualTo("approved");
+      assertThat(r.get("source_ref").stringValue()).as(key).isEqualTo("original:number");
+      assertThat(bettable.matcher(content).find()).as("digit pair in %s", key).isFalse();
+      assertThat(changeNumber.matcher(content).find()).as("change advice in %s", key).isFalse();
+    }
+    assertThat(QualityRules.checkAll(records)).isEmpty();
+  }
+
+  @Test
+  void a_number_record_must_cite_original_number() {
+    JsonNode bad =
+        JsonMapper.shared()
+            .readTree(
+                "{\"key\":\"so:closing\",\"school\":\"iztro-default\",\"lang\":\"vi\","
+                    + "\"content\":\"Ta mong con bình an.\","
+                    + "\"source_ref\":\"ziwei-quanshu:juan2:一 命宫\",\"status\":\"approved\"}");
+    assertThat(QualityRules.check(bad)).containsExactly("rule=source_ref key=so:closing");
+  }
+
   @Test
   void p2_files_rarely_open_with_neu() throws IOException {
     if (!Files.isDirectory(KNOWLEDGE.resolve("doctrine"))) {
