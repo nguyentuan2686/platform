@@ -335,12 +335,32 @@ describe("QaAsk: what the server must re-read", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("does not refresh for a refusal or a failure (nothing was used)", async () => {
-    fetchMock.mockImplementation(async () => streamOf([META, ev("refused", { reading_id: "x", reason: "medical", text: "Ta không luận.", disclaimer: "d" })]));
+  // Prod 2026-11-28: a free question the model declined (off_topic) still used a free chat, but the
+  // counter kept saying "còn 1 câu hôm nay" until the server refused the next one with free_quota.
+  it("refreshes after a refusal (a model refusal of a free question uses a free chat)", async () => {
+    fetchMock.mockImplementation(async () => streamOf([META, ev("refused", { reading_id: "x", reason: "off_topic", text: "Câu này nằm ngoài.", disclaimer: "d" })]));
     view();
     fill();
     fireEvent.click(freeBtn());
-    await waitFor(() => expect(screen.getByText("Ta không luận.")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Câu này nằm ngoài.")).toBeTruthy());
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes on 409 free_quota so the counter shows none left", async () => {
+    fetchMock.mockImplementation(async () => problem(409, "free_quota"));
+    view();
+    fill();
+    fireEvent.click(freeBtn());
+    await screen.findByRole("alert");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh for a failure that used nothing", async () => {
+    fetchMock.mockImplementation(async () => problem(409, "reading_in_progress"));
+    view();
+    fill();
+    fireEvent.click(freeBtn());
+    await screen.findByRole("alert");
     expect(refresh).not.toHaveBeenCalled();
   });
 });

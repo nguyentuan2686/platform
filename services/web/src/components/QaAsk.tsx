@@ -67,8 +67,17 @@ export function QaAsk({
       ...(needsConsent ? { ai_consent: true } : {}),
     });
     if (res === null) return; // already sending
-    // A credit or a free chat was used: the header balance and the free count are read on the server.
-    if (res.phase === "done" || res.phase === "queued") router.refresh();
+    // The header balance and the free count are read on the server: re-read them whenever they may have
+    // moved. A model refusal of a free question uses a free chat (a paid one is refunded), and a
+    // free_quota refusal means the shown count is stale.
+    if (
+      res.phase === "done" ||
+      res.phase === "queued" ||
+      res.phase === "refused" ||
+      (res.phase === "failed" && res.reason === "free_quota")
+    ) {
+      router.refresh();
+    }
     // The id is spent when the server will not replay a usable answer for it.
     if (res.phase === "busy" || (res.phase === "failed" && /^reading_(conflict|refunded)$/.test(res.reason))) {
       reading.current = null;
