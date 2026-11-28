@@ -4,6 +4,5 @@ pub mod aspects;
 pub mod body;
 pub mod chart;
 pub mod houses;
-pub mod info;
 pub mod nutation;
 pub mod time;

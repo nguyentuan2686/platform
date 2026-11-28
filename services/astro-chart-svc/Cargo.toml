@@ -14,6 +14,7 @@ async-trait.workspace = true
 axum.workspace = true
 jiff.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["net", "signal"] }
@@ -24,7 +25,6 @@ vsop87.workspace = true
 tracing-subscriber.workspace = true
 http-body-util.workspace = true
 jsonschema.workspace = true
-serde_json.workspace = true
 time = { workspace = true, features = ["parsing", "macros"] }
 tower.workspace = true
 yaml_serde.workspace = true

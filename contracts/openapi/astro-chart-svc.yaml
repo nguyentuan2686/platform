@@ -3,8 +3,16 @@ info:
   title: astro-chart-svc
   version: 1.0.0
   description: >-
-    astro-chart-svc (scaffolded by scripts/new-service.sh). Replace the sample GET /v1/info with the real API;
-    the contract tests check every path below against the served routes and schemas.
+    Stateless Western (tropical) natal chart service. Pure function: the same request always
+    yields the same JSON (byte-identical on amd64). Coordinates are apparent geocentric
+    ecliptic longitude/latitude of date. Stable keys (bodies, angles, signs, aspects, house
+    systems) are ASCII and never translated; there are no labels in the output. Supported
+    local birth years are 1900-2100. The birth time is read in the zone's historical offset;
+    a time in a DST gap is rejected, an overlap takes the earlier instant. With
+    timeKnown=false the chart is cast at 12:00 local and has no angles, houses or body
+    houses; moonSignUncertain says whether the Moon changes sign during that local day.
+    Placidus is undefined near the poles; the response then uses whole-sign houses and says
+    so in houseFallback (school names the system actually used).
 paths:
   /health/live:
     get:
@@ -22,33 +30,210 @@ paths:
           description: Ready to serve traffic.
         '503':
           description: Not ready.
-  /v1/info:
-    get:
-      operationId: getInfo
-      summary: Sample endpoint, the service's name
+  /astro/chart:
+    post:
+      operationId: castChart
+      summary: Cast the natal chart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChartRequest'
       responses:
         '200':
-          description: The service's name
+          description: The natal chart.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Info'
-        '404':
-          description: Unknown route (every error is a problem+json with trace_id)
+                $ref: '#/components/schemas/Chart'
+        '400':
+          description: >-
+            Invalid request; errors[0].field is one of body, birth, zone, lat, lon, timeKnown,
+            houseSystem.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ValidationProblem'
+        '500':
+          description: Unexpected error
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
 components:
   schemas:
-    Info:
+    ChartRequest:
       type: object
-      required: [service]
+      required: [birth, zone, lat, lon, timeKnown]
       additionalProperties: false
       properties:
-        service:
+        birth:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$'
+          description: Local civil time YYYY-MM-DDTHH:MM, no offset; years 1900-2100.
+          examples: ['1990-07-15T14:30']
+        zone:
           type: string
           minLength: 1
+          description: IANA time zone of the birthplace.
+          examples: [Asia/Ho_Chi_Minh]
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+        timeKnown:
+          type: boolean
+          description: false when only the date is known (chart cast at 12:00 local).
+        houseSystem:
+          $ref: '#/components/schemas/HouseSystem'
+          default: placidus
+    HouseSystem:
+      type: string
+      enum: [placidus, whole-sign, equal]
+    BodyKey:
+      type: string
+      enum: [Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, NorthNode, Chiron]
+    PointKey:
+      type: string
+      enum:
+        [Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, NorthNode, Chiron, Asc, MC]
+    SignKey:
+      type: string
+      enum:
+        [Aries, Taurus, Gemini, Cancer, Leo, Virgo, Libra, Scorpio, Sagittarius, Capricorn, Aquarius, Pisces]
+    Chart:
+      type: object
+      required: [school, instantUtc, timeKnown, houseSystem, moonSignUncertain, bodies, aspects]
+      additionalProperties: false
+      properties:
+        school:
+          type: string
+          pattern: '^tropical;houses=(placidus|whole-sign|equal);node=true;aspects=ptolemaic-v1$'
+        instantUtc:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+        timeKnown:
+          type: boolean
+        houseSystem:
+          $ref: '#/components/schemas/HouseSystem'
+        houseFallback:
+          type: string
+          enum: [whole-sign]
+          description: Present only when the requested system was undefined at this place.
+        moonSignUncertain:
+          type: boolean
+        bodies:
+          type: array
+          minItems: 12
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/Body'
+        angles:
+          $ref: '#/components/schemas/Angles'
+        houses:
+          type: array
+          minItems: 12
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/House'
+        aspects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Aspect'
+    Body:
+      type: object
+      required: [key, lon, lat, sign, deg, speed, retrograde]
+      additionalProperties: false
+      properties:
+        key:
+          $ref: '#/components/schemas/BodyKey'
+        lon:
+          type: number
+          minimum: 0
+          maximum: 360
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        sign:
+          $ref: '#/components/schemas/SignKey'
+        deg:
+          type: number
+          minimum: 0
+          maximum: 30
+          description: Degrees within the sign.
+        speed:
+          type: number
+          description: Degrees per day (central difference over +-0.5 day).
+        retrograde:
+          type: boolean
+        house:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: Absent when timeKnown is false.
+    Angles:
+      type: object
+      required: [asc, mc]
+      additionalProperties: false
+      description: Absent when timeKnown is false.
+      properties:
+        asc:
+          $ref: '#/components/schemas/Angle'
+        mc:
+          $ref: '#/components/schemas/Angle'
+    Angle:
+      type: object
+      required: [lon, sign, deg]
+      additionalProperties: false
+      properties:
+        lon:
+          type: number
+          minimum: 0
+          maximum: 360
+        sign:
+          $ref: '#/components/schemas/SignKey'
+        deg:
+          type: number
+          minimum: 0
+          maximum: 30
+    House:
+      type: object
+      required: [house, cusp, sign]
+      additionalProperties: false
+      properties:
+        house:
+          type: integer
+          minimum: 1
+          maximum: 12
+        cusp:
+          type: number
+          minimum: 0
+          maximum: 360
+        sign:
+          $ref: '#/components/schemas/SignKey'
+    Aspect:
+      type: object
+      required: [a, b, type, orb, applying]
+      additionalProperties: false
+      properties:
+        a:
+          $ref: '#/components/schemas/PointKey'
+        b:
+          $ref: '#/components/schemas/PointKey'
+        type:
+          type: string
+          enum: [conjunction, opposition, trine, square, sextile]
+        orb:
+          type: number
+          minimum: 0
+        applying:
+          type: boolean
     Problem:
       type: object
       description: RFC 9457 problem details with platform extensions.
@@ -76,3 +261,21 @@ components:
                 type: string
               message:
                 type: string
+    ValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field:
+                    type: string
+                    enum: [body, birth, zone, lat, lon, timeKnown, houseSystem]
+                  message:
+                    type: string

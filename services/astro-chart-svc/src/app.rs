@@ -10,29 +10,37 @@ use platform_core::http::ReadinessCheck;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
+use crate::adapters::ephemeris::EphemerisAdapter;
 use crate::adapters::http;
-use crate::application::service::{InfoService, InfoUseCases};
+use crate::application::ports::EphemerisPort;
+use crate::application::service::ChartService;
 use crate::config::Config;
 
 /// Shared handler state.
 #[derive(Clone)]
 pub struct AppState {
     pub readiness: Arc<dyn ReadinessCheck>,
-    pub service: Arc<dyn InfoUseCases>,
+    pub service: ChartService,
 }
 
 impl AppState {
-    /// State for a stateless service: ready whenever the process can serve.
-    pub fn new(service_name: &str) -> anyhow::Result<Self> {
-        Ok(Self::with_service(InfoService::new(service_name)?))
+    /// State over the real ephemeris: ready whenever the process can serve.
+    pub fn new() -> Self {
+        Self::with_ephemeris(EphemerisAdapter::new())
     }
 
-    /// State over custom use cases (tests inject fakes).
-    pub fn with_service<S: InfoUseCases + 'static>(service: S) -> Self {
+    /// State over a custom ephemeris (tests inject failing ones).
+    pub fn with_ephemeris<E: EphemerisPort + 'static>(ephemeris: E) -> Self {
         Self {
             readiness: Arc::new(AlwaysReady),
-            service: Arc::new(service),
+            service: ChartService::new(Arc::new(ephemeris)),
         }
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -52,7 +60,7 @@ pub fn router(state: AppState) -> Router {
 
 /// Binds `0.0.0.0:<PORT>` and serves until a shutdown signal arrives.
 pub async fn run(config: Config) -> anyhow::Result<()> {
-    let state = AppState::new(&config.service_name)?;
+    let state = AppState::new();
     let listener = TcpListener::bind(("0.0.0.0", config.port))
         .await
         .with_context(|| format!("binding port {}", config.port))?;
@@ -113,16 +121,11 @@ async fn sigterm() {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_blank_service_name_fails_startup() {
-        assert!(AppState::new(" ").is_err());
-    }
-
     #[tokio::test]
     async fn serve_stops_gracefully_on_shutdown() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-        let state = AppState::new("svc").unwrap();
+        let state = AppState::new();
         let task = tokio::spawn(serve(listener, router(state), async {
             let _ = rx.await;
         }));
