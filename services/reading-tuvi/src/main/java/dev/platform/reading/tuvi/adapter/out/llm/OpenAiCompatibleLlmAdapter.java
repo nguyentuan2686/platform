@@ -146,7 +146,7 @@ public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
       // Reasoning models (gpt-oss) spend max_tokens on reasoning too: never serve a cut-off answer.
       if (root.path("choices").path(0).path("finish_reason").asString("").equals("length")) {
         LOG.warn("llm provider reply cut off provider={} finish_reason=length", id());
-        throw new LlmUnavailableException("llm provider " + id() + " reply cut off");
+        throw new LlmUnavailableException("llm provider " + id() + " reply cut off", out);
       }
       return out;
     } catch (JacksonException e) {

@@ -184,7 +184,10 @@ class OpenAiCompatibleLlmAdapterTest {
         "{\"choices\":[{\"message\":{\"content\":\"Con à, ta\"},\"finish_reason\":\"length\"}],"
             + "\"usage\":{\"prompt_tokens\":30,\"completion_tokens\":350}}";
 
-    assertThatThrownBy(() -> adapter().complete(REQ)).isInstanceOf(LlmUnavailableException.class);
+    assertThatThrownBy(() -> adapter().complete(REQ))
+        .isInstanceOfSatisfying(
+            LlmUnavailableException.class,
+            e -> assertThat(e.billed().map(b -> b.completionTokens())).contains(350));
   }
 
   @Test

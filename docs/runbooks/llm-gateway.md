@@ -17,15 +17,32 @@ Follow-ups (not blocking):
 
 ## 2. Enable a provider
 Set the key, put the provider in the ordered list, then roll reading-tuvi.
-- Free: `GROQ_API_KEY`, `GEMINI_API_KEY`, `LLM_PROVIDERS=groq,gemini` (order = failover order). A provider without a key is skipped.
-- Paid fallback: `LLM_PAID_API_KEY` (plus `LLM_PAID_BASE_URL`, `LLM_PAID_MODEL`, the two prices), `LLM_PROVIDERS=groq,gemini,paid`. Free chat never uses `paid`. When the month's spend reaches `LLM_PAID_MONTHLY_BUDGET_USD` the paid provider stops answering and paid questions fall into the retry path (section 4).
+- Claude (primary, Anthropic Messages API): `ANTHROPIC_API_KEY` in `reading-tuvi-secrets`, `LLM_PROVIDERS=claude,gemini,groq` (prod already lists `claude` first; it stays skipped with the WARN `llm provider claude disabled: no api key` until the key exists). See section 2a.
+- Free: `GROQ_API_KEY`, `GEMINI_API_KEY`, `LLM_PROVIDERS=gemini,groq` (order = failover order: when Gemini hits `GEMINI_DAILY_REQUEST_LIMIT` or answers 429, Groq answers). A provider without a key is skipped.
+- Paid fallback: `LLM_PAID_API_KEY` (plus `LLM_PAID_BASE_URL`, `LLM_PAID_MODEL`, the two prices), `LLM_PROVIDERS=gemini,groq,paid`. Free chat never uses `paid`. When the month's spend reaches `LLM_PAID_MONTHLY_BUDGET_USD` the paid provider stops answering and paid questions fall into the retry path (section 4).
 - Two deployments sharing one key count quota separately: set each `*_DAILY_REQUEST_LIMIT` to its share.
 Check: ask one question per provider and read `llm_usage` (section 3). Logs show provider id, outcome, latency and token counts, never text.
 
+## 2a. Claude (Anthropic)
+How it behaves:
+- `POST https://api.anthropic.com/v1/messages`, header `anthropic-version: 2026-10-21`, model `ANTHROPIC_MODEL` (default `claude-haiku-5-5`: the low-cost tier, about 2K input tokens per question), effort `ANTHROPIC_EFFORT` (default `low`). Adaptive thinking stays on, so each request asks for the answer budget plus `ANTHROPIC_THINKING_HEADROOM_TOKENS` (default 1024); answer length is still set by the prompt and checked by the output filter. No `temperature` (the model rejects it).
+- Prompt caching: the system block (fixed per topic and answer kind) carries a 5-minute `cache_control` breakpoint; `ANTHROPIC_PROMPT_CACHE=false` turns it off. Hits show as `cache_read_tokens` in the `llm completed` log line.
+- Claude is budgeted: cost per answer = plain input x `ANTHROPIC_INPUT_USD_PER_MTOK` (0.10) + cache writes x `ANTHROPIC_CACHE_WRITE_USD_PER_MTOK` (0.125) + cache reads x `ANTHROPIC_CACHE_READ_USD_PER_MTOK` (0.01) + output x `ANTHROPIC_OUTPUT_USD_PER_MTOK` (0.50), summed in `llm_usage.cost_micro_usd` for provider `claude`. When the month reaches `ANTHROPIC_MONTHLY_BUDGET_USD` (default 5, roughly 10,000 answers) Claude is skipped and Groq/Gemini answer. Change the four prices together with the model.
+- Free questions also use Claude (`ANTHROPIC_SERVE_FREE_TIER=true`, default); the free global daily cap (`QA_FREE_GLOBAL_DAILY_CAP`) and the budget bound the spend. Set it to `false` to keep free chat on Groq/Gemini only.
+- 429 (rate limit or the console spend limit) marks Claude exhausted (short `Retry-After`, else until UTC midnight); 5xx/529, timeouts (`ANTHROPIC_TIMEOUT`, default 30 s), a `refusal` stop reason or an empty answer fall through to the next provider; 400/401/402/403/404 log `llm provider rejected request provider=claude status=<code>` (check the key, billing and model id). Keys, prompts, questions and answers are never logged.
+
+Owner steps (Tuấn), only if Claude is wanted (today Hỏi thầy runs on the free Gemini and Groq keys; without this key Claude is skipped):
+1. Sign in at https://console.anthropic.com (an organization for the business; add billing in Settings > Billing and buy a small prepaid credit, e.g. 5 USD).
+2. Settings > Workspaces: create a workspace `xemtuvingay-prod` and give it a monthly spend limit a little above `ANTHROPIC_MONTHLY_BUDGET_USD` (e.g. 6 USD). This is the hard stop if the app's own budget ever fails. Also check Settings > Limits for the organization-wide limit.
+3. Settings > API Keys > Create Key, workspace `xemtuvingay-prod`, name `reading-tuvi-prod`. Copy it once into a password manager.
+4. On the sealing machine, add the line `ANTHROPIC_API_KEY=<key>` to `deploy/k8s/overlays/prod/secrets.local/reading-tuvi-secrets.env` (gitignored). Never paste the key into Git, an issue, a PR or a chat with Claude.
+5. Tell Claude it is pasted. Claude then adds `ANTHROPIC_API_KEY?` to the `reading-tuvi-secrets` row of `secrets.tsv` and to the e2e env, runs `scripts/seal-secrets.sh --cert deploy/k8s/overlays/prod/sealed/sealing-cert.crt --only reading-tuvi-secrets` and opens the PR with the sealed file. After the deploy: ask one question and check `llm completed provider=claude` in the logs and `llm_usage` (section 3).
+6. Add Anthropic to the privacy policy and the cross-border transfer dossier (as for Groq/Gemini, section 1 item 5), and read a few real answers before announcing.
+
 ## 3. Read `llm_usage`
-Table `llm_usage` in the `reading_tuvi` database: one row per provider and day with `requests`, `prompt_tokens`, `completion_tokens` and `cost_micro_usd` (millionths of a USD; only `paid` has a cost). `llm_provider_state.exhausted_until` shows a provider currently skipped after a quota or rate-limit answer.
+Table `llm_usage` in the `reading_tuvi` database: one row per provider and day with `requests`, `prompt_tokens`, `completion_tokens` and `cost_micro_usd` (millionths of a USD; only the budgeted providers `claude` and `paid` have a cost). `llm_provider_state.exhausted_until` shows a provider currently skipped after a quota or rate-limit answer.
 - Today vs limit: `select provider, requests, prompt_tokens, completion_tokens from llm_usage where day = current_date;` compare `requests` with `*_DAILY_REQUEST_LIMIT`.
-- Paid spend this month: `select sum(cost_micro_usd) / 1e6 as usd from llm_usage where provider = 'paid' and day >= date_trunc('month', current_date);` compare with `LLM_PAID_MONTHLY_BUDGET_USD`.
+- Paid spend this month: `select provider, sum(cost_micro_usd) / 1e6 as usd from llm_usage where provider in ('claude', 'paid') and day >= date_trunc('month', current_date) group by provider;` compare `claude` with `ANTHROPIC_MONTHLY_BUDGET_USD` and `paid` with `LLM_PAID_MONTHLY_BUDGET_USD`.
 - Skipped providers: `select * from llm_provider_state where exhausted_until > now();`
 
 ## 4. Stuck RETRYING / REFUND_PENDING rows
