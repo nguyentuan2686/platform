@@ -269,16 +269,17 @@ JQ_PRODINGRESS="$JQ_DEFS"'
       elif $o.kind == "Service" and (($o.spec.externalIPs // []) | length) > 0 then "POLICY: prod-ingress \($o | id): externalIPs are not allowed"
       else empty end )'
 
-# prod-backup: a sealed ops-secrets (ns data) <=> every BACKUP_REQUIRED of the pg-backup CronJob is "1". Sealed but 0:
-# a broken S3 config would skip silently with real data at stake; 1 without the secret: every nightly backup fails.
+# prod-backup: a sealed ops-secrets (ns data) <=> every BACKUP_REQUIRED of CronJobs pg-backup and log-export is "1".
+# Sealed but 0: a broken S3 config would skip silently with real data at stake; 1 without the secret: every nightly
+# backup (and log export) fails.
 JQ_PRODBACKUP="$JQ_DEFS"'
 ([.[] | select(type == "object" and .kind == "SealedSecret" and .metadata.name == "ops-secrets" and ns == "data")] | length > 0) as $sealed
-| [.[] | select(type == "object" and .kind == "CronJob" and .metadata.name == "pg-backup") as $o
+| [.[] | select(type == "object" and .kind == "CronJob" and (.metadata.name | IN("pg-backup", "log-export"))) as $o
    | (($o | podspec) | (.containers // []) + (.initContainers // []))[] as $c
-   | ($c.env // [])[] | select(.name == "BACKUP_REQUIRED") | {c: $c.name, v: (.value // "")}] as $req
+   | ($c.env // [])[] | select(.name == "BACKUP_REQUIRED") | {j: $o.metadata.name, c: $c.name, v: (.value // "")}] as $req
 | if $sealed and ($req | length) == 0 then "POLICY: prod-backup CronJob/pg-backup: ops-secrets is sealed but no pg-backup BACKUP_REQUIRED found"
-  elif $sealed then ($req[] | select(.v != "1") | "POLICY: prod-backup CronJob/pg-backup: container \(.c): ops-secrets is sealed, so BACKUP_REQUIRED must be \"1\" (got \"\(.v)\")")
-  else ($req[] | select(.v == "1") | "POLICY: prod-backup CronJob/pg-backup: container \(.c): BACKUP_REQUIRED is \"1\" but ops-secrets is not sealed (every backup would fail)")
+  elif $sealed then ($req[] | select(.v != "1") | "POLICY: prod-backup CronJob/\(.j): container \(.c): ops-secrets is sealed, so BACKUP_REQUIRED must be \"1\" (got \"\(.v)\")")
+  else ($req[] | select(.v == "1") | "POLICY: prod-backup CronJob/\(.j): container \(.c): BACKUP_REQUIRED is \"1\" but ops-secrets is not sealed (every backup would fail)")
   end'
 
 # Prod inventory inputs: a fixture may carry its own, else the real prod overlay's.

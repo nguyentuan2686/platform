@@ -379,6 +379,8 @@ sequenceDiagram
   participant NH as Ngân hàng + SePay
   participant K as Redpanda
   participant I as identity-svc
+  participant N as notify-svc
+  participant T as Telegram
   B->>W: buyAction(CREDIT_5)
   W->>P: POST /orders (X-Internal-Token, account_id)
   P-->>W: mã đơn TV8K2Q, 119000 VND
@@ -391,6 +393,9 @@ sequenceDiagram
   P->>K: OutboxRelay đẩy payments.payment-succeeded.v1
   K->>I: PaymentSucceededListener
   I->>I: processed_event(event_id) chống trùng, +5 credits
+  K->>N: notify-svc (group notify-svc-payments)
+  N->>N: lưu doanh thu (order_id), xếp tin Telegram vào outbox
+  N-->>T: 💰 Nạp tiền: gói, số tiền, giờ (Telegram của anh)
   B->>W: poll /api/orders/{id}
   W-->>B: "đã nhận tiền"
   </pre></div>
@@ -402,6 +407,7 @@ sequenceDiagram
       <li><b>Mất webhook:</b> job đối soát gọi API SePay mỗi chu kỳ. Hiện đang tắt (<code>SEPAY_RECONCILE_ENABLED=false</code>) cho tới khi kiểm tra định dạng API thật.</li>
       <li><b>Hoàn tiền</b> chỉ áp dụng cho gói lượt chưa dùng: identity thu lại lượt trước, rồi anh chuyển trả bằng app ngân hàng và bấm hoàn tất.</li>
       <li><b>Message lỗi hợp đồng</b> (sản phẩm hay account lạ) vào topic <code>payments.payment-succeeded.v1.DLT</code>.</li>
+      <li><b>Tin Telegram mỗi lần nạp</b> (notify-svc): chỉ gói, số tiền, giờ; không email, số điện thoại, tên, số tài khoản hay id. Một tin cho mỗi đơn dù event lặp. Event cũ hơn 1 giờ (lần đầu consumer đọc lại topic) chỉ tính doanh thu, không gửi tin. Telegram lỗi thì tin nằm trong outbox và gửi lại sau, quá 24 giờ thì bỏ.</li>
     </ul>
   </details>
   <div class="note"><b>Vì sao dùng outbox?</b> Tương tự <code>@Transactional</code> ghi DB rồi gửi Kafka, nhưng không mất message khi gửi Kafka lỗi sau commit. Event nằm trong bảng <code>outbox_event</code> cùng transaction; <code>OutboxRelay</code> (platform-starter) quét bằng <code>FOR UPDATE SKIP LOCKED</code> mỗi 500 ms, gửi với acks=all, kèm header <code>traceparent</code> để trace nối xuyên service.</div>
@@ -470,7 +476,7 @@ flowchart TD
       <tr><td><code>root</code></td><td>–</td><td><code>deploy/argocd/apps</code></td><td>AppProject <code>prod</code> và 4 app con</td></tr>
       <tr><td>AppProject <code>prod</code></td><td>-2</td><td></td><td>chỉ nhận nguồn từ repo này; <b>cấm <code>Secret</code> thường</b>, chỉ cho SealedSecret</td></tr>
       <tr><td><code>prod-sealed</code></td><td>-1</td><td><code>overlays/prod/sealed</code></td><td>namespaces + 8 SealedSecret</td></tr>
-      <tr><td><code>prod-platform</code></td><td>0</td><td><code>overlays/prod/platform</code></td><td>Postgres, Redpanda, otel-collector, otel-lgtm, CronJob backup và heartbeat</td></tr>
+      <tr><td><code>prod-platform</code></td><td>0</td><td><code>overlays/prod/platform</code></td><td>Postgres, Redpanda, otel-collector, otel-lgtm, CronJob backup, log-export và heartbeat</td></tr>
       <tr><td><code>prod-tunnel</code></td><td>1</td><td><code>overlays/prod/tunnel</code></td><td>cloudflared (named tunnel, <code>TUNNEL_TOKEN</code>)</td></tr>
       <tr><td><code>prod-apps</code></td><td>1</td><td><code>overlays/prod/apps</code></td><td>7 service, Ingress, middleware rate limit, tag ảnh</td></tr>
     </tbody>
@@ -540,6 +546,7 @@ flowchart LR
       <tr><td><code>order-svc-secrets</code>, <code>notify-svc-secrets</code></td><td>apps</td><td>thông tin DB</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>cloudflared-secrets</code></td><td>edge</td><td>TUNNEL_TOKEN</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>alerting-secrets</code></td><td>observability</td><td>TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>notify-telegram-secrets</code></td><td>apps</td><td>TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID (cùng bot và chat với <code>alerting-secrets</code>; tùy chọn: thiếu thì notify-svc chỉ xếp tin, không gửi)</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>ops-secrets</code></td><td>data</td><td>S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, HEALTHCHECKS_URL, HEALTHCHECKS_BACKUP_URL</td><td><span class="pill bad">chưa có</span></td></tr>
     </tbody>
   </table></div>
@@ -551,10 +558,11 @@ flowchart LR
 <section id="quan-sat">
   <h2><span class="no">5</span>Log, trace, cảnh báo, backup</h2>
   <ol class="steps">
-    <li><b>Log:</b> JSON trên stdout, mỗi dòng một object với các trường <code>timestamp, level, service, trace_id, span_id, message</code>. Java và Rust dùng cùng định dạng. DaemonSet otel-collector đọc <code>/var/log/pods</code> rồi đẩy sang Loki. Log không chứa ngày sinh, email, câu hỏi hay dãy số.</li>
+    <li><b>Log:</b> JSON trên stdout, mỗi dòng một object với các trường <code>timestamp, level, service, trace_id, span_id, message</code>. Java và Rust dùng cùng định dạng. DaemonSet otel-collector đọc <code>/var/log/pods</code> rồi đẩy sang Loki, giữ 30 ngày. Collector lưu vị trí đọc từng file và hàng đợi gửi trên host (<code>/var/lib/otelcol</code>), nên restart collector không mất và không lặp log; log của pod đã xóa chỉ mất nếu collector cũng đang tắt đúng lúc đó. CronJob <code>log-export</code> 00:30 xuất toàn bộ log ngày hôm trước (jsonl, gzip) lên cùng S3/R2 với backup, giữ 90 ngày; chưa có <code>ops-secrets</code> thì bỏ qua. Log không chứa ngày sinh, email, câu hỏi hay dãy số.</li>
     <li><b>Trace:</b> Java dùng OpenTelemetry Java agent, Rust dùng <code>tracing-opentelemetry</code>. W3C <code>traceparent</code> đi qua cả HTTP header lẫn Kafka header, nên một lần thanh toán là một trace xuyên payment → Redpanda → identity, xem được trong Tempo.</li>
     <li><b>Metrics:</b> service đẩy OTLP sang collector rồi sang Prometheus (không scrape service). Dashboard <code>platform-red</code> (rate, error, duration) và <code>platform-messaging</code> (outbox lag, consumer lag) nằm trong Git. Lỗi HTTP trả Problem Details có <code>trace_id</code>, từ lỗi tra ngược ra trace được.</li>
-    <li><b>Cảnh báo</b> (Grafana): error-rate-high, latency-p95-high, pod-restart-loop, consumer-lag-rising, disk-usage-high, deploy-failed, backup-skipped, mail-cap-reached, mail-client-cap-hits. Thông báo đi Telegram khi có <code>alerting-secrets</code>: vài dòng tiếng Việt (🔴 Lỗi / ✅ Đã ổn, lỗi gì, dịch vụ, giờ Việt Nam).</li>
+    <li><b>Cảnh báo</b> (Grafana): error-rate-high, latency-p95-high, pod-restart-loop, consumer-lag-rising, disk-usage-high, deploy-failed, backup-skipped, mail-cap-reached, mail-client-cap-hits, log-pipeline-down (15 phút không có log nào được ghi; CronJob heartbeat ghi một dòng mỗi 5 phút nên luôn có log). Thông báo đi Telegram khi có <code>alerting-secrets</code>: vài dòng tiếng Việt (🔴 Lỗi / ✅ Đã ổn, lỗi gì, dịch vụ, giờ Việt Nam).</li>
+    <li><b>Telegram cho chủ dự án</b> (notify-svc, ngoài cảnh báo): một tin mỗi lần nạp tiền, và 23:59 mỗi ngày một tin tổng kết: doanh thu theo gói (từ DB của notify-svc), lượt luận giải / hỏi đáp / xem số và tỷ lệ lỗi 5xx theo service (Prometheus), số lần cảnh báo (lịch sử cảnh báo của Grafana). Mỗi ngày đúng một tin; pod tắt lúc 23:59 thì gửi bù khi chạy lại. Prometheus hay Grafana không trả lời thì chờ tới 00:30 rồi gửi, dòng đó ghi "không lấy được".</li>
     <li><b>Backup:</b> CronJob <code>pg-backup</code> 03:00 giờ Việt Nam, chạy <code>pg_dump -Fc</code> 5 DB, đẩy lên S3/R2, giữ 14 ngày. CronJob <code>heartbeat</code> 5 phút một lần ping Healthchecks.io: VM chết thì mất ping và có cảnh báo từ bên ngoài. Diễn tập khôi phục bằng <code>scripts/pg-restore.sh</code> (mặc định khôi phục vào DB <code>*_restore_check</code>).</li>
   </ol>
   <p>Grafana, Argo CD UI và kube API chỉ mở trong tailnet, không có domain công khai. Xem từ laptop mà không cài Tailscale: ServiceAccount <code>ops-reader</code> (chỉ đọc pod, log, event, workload; port-forward chỉ trong <code>observability</code>; không đọc Secret, không exec), kubeconfig 30 ngày tạo trên host bằng <code>scripts/ops-kubeconfig.sh</code>, dùng qua Tailscale chạy trong container Docker (go-live.md §6a). Không bao giờ dùng trong CI.</p>
@@ -570,7 +578,8 @@ flowchart LR
       <tr><td>Domain + named tunnel</td><td><span class="pill ok">chạy</span></td><td>xemtuvingay.com, <code>cloudflared-named</code></td></tr>
       <tr><td>CD tự động + ruleset main</td><td><span class="pill ok">chạy</span></td><td>GitHub App <code>xemtuvingay-cd</code> là bypass actor duy nhất</td></tr>
       <tr><td>Thanh toán SePay</td><td><span class="pill ok">đã seal tài khoản nhận</span></td><td>trỏ webhook SePay tới <code>/webhooks/sepay</code>; chuyển thử 1.000đ</td></tr>
-      <tr><td>Backup off-host</td><td><span class="pill bad">chưa bật</span></td><td>seal <code>ops-secrets</code> và đặt <code>BACKUP_REQUIRED="1"</code> trong cùng một PR; diễn tập khôi phục</td></tr>
+      <tr><td>Backup + log off-host</td><td><span class="pill bad">chưa bật</span></td><td>seal <code>ops-secrets</code> và đặt <code>BACKUP_REQUIRED="1"</code> (pg-backup và log-export) trong cùng một PR; diễn tập khôi phục</td></tr>
+      <tr><td>Telegram nạp tiền + tổng kết 23:59</td><td><span class="pill ok">bật</span></td><td><code>notify-telegram-secrets</code> đã seal; đổi token thì seal lại rồi <code>kubectl -n apps rollout restart deployment/notify-svc</code></td></tr>
       <tr><td>Cảnh báo Telegram</td><td><span class="pill ok">bật</span></td><td><code>alerting-secrets</code> đã seal; lgtm tự restart khi annotation <code>platform.dev/alerting-secrets-rev</code> đổi</td></tr>
       <tr><td>Mail magic link</td><td><span class="pill bad">chưa có relay</span></td><td>relay SMTP + SPF/DKIM; sửa <code>MAIL_HOST</code>/<code>MAIL_PORT</code> trong patch identity-svc</td></tr>
       <tr><td>LLM thật</td><td><span class="pill warn">đang bật</span></td><td>key Gemini và Groq đã seal (Gemini trả lời trước, hết lượt chuyển Groq); còn: đọc điều khoản gói free về dùng thương mại và dữ liệu, key Anthropic khi cần Claude</td></tr>
@@ -588,6 +597,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>Log bền hơn: collector lưu vị trí đọc + hàng đợi gửi trên host, Loki giữ 30 ngày, CronJob <code>log-export</code> xuất log hằng ngày lên S3/R2 (chờ <code>ops-secrets</code>), cảnh báo <code>log-pipeline-down</code>. notify-svc đọc <code>payments.payment-succeeded.v1</code>: tin Telegram mỗi lần nạp tiền và tin tổng kết 23:59 (secret mới <code>notify-telegram-secrets</code>).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Seal key thật <code>OPENROUTER_API_KEY</code> (tùy chọn) trong <code>reading-tuvi-secrets</code>, chờ provider OpenRouter. Sửa <code>scripts/seal-secrets.sh</code> chết im lặng exit 141 (SIGPIPE ở <code>tr | sed q</code>).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Tin cảnh báo Telegram ngắn gọn, tiếng Việt: 🔴 Lỗi / ✅ Đã ổn, một dòng lỗi gì, dịch vụ, giờ Việt Nam; bỏ danh sách nhãn và link. Sửa lỗi <code>$$labels</code> làm tin hiện nguyên mẫu. Đổi luật hoặc mẫu tin thì lgtm tự restart (ConfigMap có hash).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>PR #62: service mới <code>astro-chart-svc</code> (Rust, :8086, stateless): <code>POST /astro/chart</code> (bản đồ sao natal) và <code>POST /astro/transits</code> (dữ kiện "Hôm nay"), contract <code>contracts/openapi/astro-chart-svc.yaml</code>; có job CI, image, kind e2e (smoke + RED metric); chưa có Ingress và chưa vào prod.</div></li>

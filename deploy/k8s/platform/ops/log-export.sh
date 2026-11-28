@@ -8,7 +8,6 @@
 # same switch as pg-backup (backup.sh). Secrets are read from the environment only (never argv) and never printed.
 # LOG_EXPORT_NOW (epoch seconds) overrides the clock in tests.
 set -eu
-set -o pipefail
 
 mode="${1:-}"
 dir="${LOG_EXPORT_DIR:-/export}"
@@ -37,8 +36,10 @@ case "$mode" in
     # --limit=0: every line (logcli pages in --batch steps); all streams of the day, oldest first.
     logcli query --addr="${LOKI_ADDR:-http://lgtm.observability.svc.cluster.local:3100}" \
       --from="${day}T00:00:00+07:00" --to="${next}T00:00:00+07:00" --limit=0 --batch=5000 --forward \
-      --output=jsonl --quiet '{service_name=~".+"}' | gzip >"$out"
-    lines=$(gzip -dc "$out" | wc -l | tr -d ' ')
+      --output=jsonl --quiet '{service_name=~".+"}' >"$dir/$day.jsonl"
+    # A plain file first, no pipe (POSIX sh has no pipefail): a failed query stops here under set -e.
+    lines=$(wc -l <"$dir/$day.jsonl" | tr -d ' ')
+    gzip -f "$dir/$day.jsonl"
     bytes=$(wc -c <"$out" | tr -d ' ')
     echo "$day" >"$dir/DAY"
     echo "log-export: exported $lines lines for $day ($bytes bytes gzipped)"

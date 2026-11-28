@@ -39,6 +39,12 @@ Severity warning. The nightly `pg-backup` skipped because S3 is not configured (
 - First queries: `max_over_time(platform_backup_skipped[26h])`; `kubectl -n data logs job/<latest pg-backup job> -c upload` (`backup: S3 not configured, skipping`).
 - Fix: seal `ops-secrets` and set both `BACKUP_REQUIRED` to `"1"` in one PR (`docs/runbooks/go-live.md` §5; `scripts/k8s-validate.sh` check `prod-backup` keeps the two together), then run a restore drill (§8).
 
+## log-pipeline-down
+Severity critical. The otel-collector exported no log record for 15m (held 5m), so new logs are not reaching Loki. The heartbeat CronJob prints a line every 5 min and its pods are read by `filelog`, so a working pipeline always exports something; a missing counter (collector down, self-scrape broken) fires too.
+- First queries: `sum by (exporter) (increase(otelcol_exporter_sent_log_records_total[15m]))`, `increase(otelcol_exporter_send_failed_log_records_total[15m])`, `increase(otelcol_receiver_accepted_log_records_total{receiver="filelog"}[15m])`; `kubectl -n observability get pod -l app=otel-collector`, `kubectl -n observability logs ds/otel-collector`; `kubectl -n data get jobs -l app=heartbeat`.
+- Likely fixes: collector crash-looping or OOM (raise its memory limit), lgtm down or refusing (`send_failed` rising: see lgtm logs; the persistent queue in `/var/lib/otelcol` re-sends once it is back), heartbeat CronJob suspended or failing (then only the canary is missing: check app logs in Grafana).
+- Durability: filelog keeps per-file checkpoints and the export queue in `/var/lib/otelcol` on the host, so a collector restart neither loses nor duplicates lines. Lines of a pod deleted while the collector was down are lost (kubelet removes its files). Loki keeps 30 days; CronJob `log-export` copies each day to S3 (`logs/<day>.jsonl.gz`, 90 days) once `ops-secrets` is sealed.
+
 ## mail-cap-reached
 Severity warning. identity-svc refused magic-link mail at the global daily cap (`MAIL_DAILY_CAP`, default 200 over all addresses per rolling 24h): logins by email answer 429 until older links age out. Counter `identity_magic_link_daily_cap_reached_total`.
 - First queries: `sum by (job) (increase(identity_magic_link_daily_cap_reached_total[1h]))`; Loki `{service_name="identity-svc"} |= "daily mail cap reached"`; the Traefik 429s on `/vi/dang-nhap` (edge limit per client IP).
