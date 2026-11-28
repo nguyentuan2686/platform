@@ -40,6 +40,31 @@ class KeyCatalogTest {
   }
 
   @Test
+  void number_keys_cover_spec_section_6() {
+    List<KnowledgeKey> number = KeyCatalog.number();
+    // intro 3 + menh 5 + element 5 + que 64 + amduong 3 + cungphi 3 + nut 3 + pairs 12 + band 4
+    // + closing 1
+    assertThat(number).hasSize(103);
+    assertThat(values(number))
+        .hasSize(103)
+        .contains(
+            "so:intro=sim",
+            "so:intro=bank",
+            "so:intro=plate",
+            "so:menh=thuy",
+            "so:element=khac_nhap",
+            "so:que=1",
+            "so:que=64",
+            "so:amduong=hoi_lech",
+            "so:cungphi=chua_hop",
+            "so:nut=vua",
+            "so:pair=6789",
+            "so:pair=53",
+            "so:band=binh_thuong",
+            "so:closing");
+  }
+
+  @Test
   void p2_has_70_keys_per_palace() {
     List<KnowledgeKey> menh = KeyCatalog.p2("Menh");
     assertThat(menh).hasSize(70);

@@ -9,7 +9,7 @@
   "properties": {
     "key": {
       "type": "string",
-      "pattern": "^tuvi:(frame=[a-z_]+|daily:area=(CongViec|DiLai|TienBac|SucKhoe):level=(Thuan|Binh|LuuY)|[a-z]+=[A-Za-z]+(:[a-z]+=[A-Za-z]+)*)$"
+      "pattern": "^(tuvi:(frame=[a-z_]+|daily:area=(CongViec|DiLai|TienBac|SucKhoe):level=(Thuan|Binh|LuuY)|[a-z]+=[A-Za-z]+(:[a-z]+=[A-Za-z]+)*)|so:(closing|[a-z]+=[a-z0-9_]+))$"
     },
     "school": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Engine school family without calendar suffix, e.g. iztro-default." },
     "lang": { "const": "vi" },

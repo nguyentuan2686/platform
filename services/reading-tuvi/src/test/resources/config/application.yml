@@ -7,3 +7,6 @@ qa:
   enc-key: bG9jYWwtdGVzdC1xYS1lbmMta2V5LTAxMjM0NTY3ODk=
   # the ITs run the jobs themselves (QaRetryIT), never on a background schedule
   jobs-enabled: false
+number-check:
+  hmac-key: local-test-number-check-hmac-key
+  jobs-enabled: false

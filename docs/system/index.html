@@ -406,12 +406,12 @@ sequenceDiagram
   </details>
   <div class="note"><b>Vì sao dùng outbox?</b> Tương tự <code>@Transactional</code> ghi DB rồi gửi Kafka, nhưng không mất message khi gửi Kafka lỗi sau commit. Event nằm trong bảng <code>outbox_event</code> cùng transaction; <code>OutboxRelay</code> (platform-starter) quét bằng <code>FOR UPDATE SKIP LOCKED</code> mỗi 500 ms, gửi với acks=all, kèm header <code>traceparent</code> để trace nối xuyên service.</div>
 
-  <h3 id="xem-so">2.5 Xem số hợp mệnh <span class="pill warn">PR #48 đang mở</span></h3>
+  <h3 id="xem-so">2.5 Xem số hợp mệnh</h3>
   <ol class="steps">
     <li><code>/vi/xem-so/{sim|so-tai-khoan|bien-so-xe}</code>: nhập dãy số, năm sinh, đánh dấu sinh trước Tết hay không, giới tính.</li>
     <li>JS gửi <code>POST /api/xem-so</code> (luôn POST, không bao giờ đặt số lên URL). web kiểm tra CSRF và đảm bảo có session, rồi gọi <code>reading-tuvi /tuvi/number-check</code> kèm <code>X-Client-Ip</code>.</li>
     <li>reading-tuvi chuẩn hóa số, chấm 6 tiêu chí trên thang 10 (ngũ hành, quẻ Kinh Dịch, âm dương, cung phi, số nút, cặp số dân gian), ghép lời luận từ <code>number.vi.jsonl</code>. Không dùng LLM.</li>
-    <li>Quota 2 số/người/ngày theo giờ Việt Nam, 20 số/IP/ngày. Xem lại đúng số cũ trong ngày không tính lượt. DB chỉ giữ HMAC-SHA256 của số và IP (<code>NUMBER_CHECK_HMAC_KEY</code>), xóa sau 2 ngày.</li>
+    <li>Quota 2 số/người/ngày theo giờ Việt Nam, 20 số/IP/ngày. Xem lại đúng số cũ trong ngày không tính lượt. Hết lượt trả 409 <code>number_quota</code> (theo người) hoặc <code>number_quota_ip</code> (theo mạng), mỗi lý do có câu báo riêng. DB chỉ giữ HMAC-SHA256 của số và IP (<code>NUMBER_CHECK_HMAC_KEY</code>), xóa sau 2 ngày.</li>
   </ol>
 
   <h3 id="chia-se">2.6 Chia sẻ lá số</h3>
@@ -534,7 +534,7 @@ flowchart LR
     <tbody>
       <tr><td><code>postgres-secrets</code></td><td>data</td><td>POSTGRES_PASSWORD, *_DB_PASSWORD cho 5 DB</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>identity-svc-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, PROFILE_ENC_KEY, OIDC_GOOGLE_CLIENT_SECRET?, MAIL_USERNAME?, MAIL_PASSWORD?</td><td><span class="pill ok">đã seal</span></td></tr>
-      <tr><td><code>reading-tuvi-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, QA_ENC_KEY, NUMBER_CHECK_HMAC_KEY, GROQ_API_KEY?, GEMINI_API_KEY?</td><td><span class="pill ok">đã seal</span> (HMAC key ở nhánh xem số)</td></tr>
+      <tr><td><code>reading-tuvi-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, QA_ENC_KEY, NUMBER_CHECK_HMAC_KEY, GROQ_API_KEY?, GEMINI_API_KEY?</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>payment-svc-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, ADMIN_API_TOKEN, SEPAY_WEBHOOK_SECRET, PAYPAL_FAKE_WEBHOOK_SECRET, SEPAY_BANK_CODE, SEPAY_ACCOUNT_NUMBER, SEPAY_ACCOUNT_NAME</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>web-secrets</code></td><td>apps</td><td>INTERNAL_API_TOKEN, ADMIN_API_TOKEN</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>order-svc-secrets</code>, <code>notify-svc-secrets</code></td><td>apps</td><td>thông tin DB</td><td><span class="pill ok">đã seal</span></td></tr>
@@ -575,7 +575,7 @@ flowchart LR
       <tr><td>Mail magic link</td><td><span class="pill bad">chưa có relay</span></td><td>relay SMTP + SPF/DKIM; sửa <code>MAIL_HOST</code>/<code>MAIL_PORT</code> trong patch identity-svc</td></tr>
       <tr><td>LLM thật</td><td><span class="pill warn">cần xác nhận</span></td><td>kiểm tra key Groq/Gemini đã seal chưa, đọc điều khoản dùng thương mại</td></tr>
       <tr><td>Google login, Turnstile</td><td><span class="pill warn">chưa làm</span></td><td>tùy chọn</td></tr>
-      <tr><td>Xem số hợp mệnh</td><td><span class="pill warn">PR #48</span></td><td>đang review</td></tr>
+      <tr><td>Xem số hợp mệnh</td><td><span class="pill ok">chạy</span></td><td>miễn phí, 2 số/người/ngày</td></tr>
       <tr><td>Chiêm tinh F2</td><td><span class="pill warn">đang làm</span></td><td>worktree <code>C:\platform-f2</code></td></tr>
       <tr><td>Trial GCP</td><td><span class="pill warn">hết 2027-02-24</span></td><td>lên kế hoạch chuyển host trước ngày đó</td></tr>
     </tbody>
@@ -588,6 +588,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>PR #48: xem số hợp mệnh lên prod (route <code>/api/xem-so</code>, endpoint <code>/tuvi/number-check</code>, bảng <code>number_check_usage</code>, secret <code>NUMBER_CHECK_HMAC_KEY</code> đã seal, lý do 409 <code>number_quota_ip</code>).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Bản đầu tiên: đường đi request, 6 luồng nghiệp vụ, CI/CD và Argo CD, nơi cất secret, observability, trạng thái go-live. Thêm luật cập nhật trong CLAUDE.md và CI job <code>system-docs</code>.</div></li>
   </ol>
   <h4>Khi nào phải sửa trang này</h4>

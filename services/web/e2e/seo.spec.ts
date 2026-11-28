@@ -34,9 +34,9 @@ test("legal page title carries the site suffix exactly once", async ({ page }) =
   await expect(page).toHaveTitle("Điều khoản sử dụng · Tử Vi Đẩu Số");
 });
 
-test("sitemap lists the 44 public URLs", async ({ request }) => {
+test("sitemap lists the 48 public URLs", async ({ request }) => {
   const sm = await (await request.get("/sitemap.xml")).text();
-  expect((sm.match(/<loc>/g) ?? []).length).toBe(44);
+  expect((sm.match(/<loc>/g) ?? []).length).toBe(48);
 });
 
 test("knowledge page ships hreflang, Open Graph and BreadcrumbList + Article JSON-LD in the HTML", async ({ page, request }) => {

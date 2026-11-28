@@ -1,5 +1,9 @@
 package dev.platform.reading.tuvi.domain;
 
+import dev.platform.reading.tuvi.domain.number.Band;
+import dev.platform.reading.tuvi.domain.number.Element;
+import dev.platform.reading.tuvi.domain.number.FolkPairs;
+import dev.platform.reading.tuvi.domain.number.NumberKind;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,6 +71,41 @@ public final class KeyCatalog {
     for (String s : MAJOR_STARS) {
       PALACES.forEach(p -> out.add(KnowledgeKey.star(s, p)));
     }
+    return List.copyOf(out);
+  }
+
+  /**
+   * Number-check reading keys (xem số spec §6): intro 3, mệnh 5, ngũ hành relation 5, quẻ 64, âm
+   * dương 3, cung phi 3, nút 3, one per folk pair, band 4, closing = 103.
+   */
+  public static List<KnowledgeKey> number() {
+    List<KnowledgeKey> out = new ArrayList<>();
+    for (NumberKind k : NumberKind.values()) {
+      out.add(KnowledgeKey.number("intro", k.key()));
+    }
+    for (Element e : Element.values()) {
+      out.add(KnowledgeKey.number("menh", e.key()));
+    }
+    for (String r : List.of("sinh_nhap", "tuong_hop", "khac_xuat", "sinh_xuat", "khac_nhap")) {
+      out.add(KnowledgeKey.number("element", r));
+    }
+    for (int i = 1; i <= 64; i++) {
+      out.add(KnowledgeKey.number("que", Integer.toString(i)));
+    }
+    for (String a : List.of("can_bang", "hoi_lech", "lech")) {
+      out.add(KnowledgeKey.number("amduong", a));
+    }
+    for (String c : List.of("hop_ca_hai", "hop_mot", "chua_hop")) {
+      out.add(KnowledgeKey.number("cungphi", c));
+    }
+    for (String n : List.of("cao", "vua", "thap")) {
+      out.add(KnowledgeKey.number("nut", n));
+    }
+    FolkPairs.all().forEach(p -> out.add(KnowledgeKey.number("pair", p)));
+    for (Band b : Band.values()) {
+      out.add(KnowledgeKey.number("band", b.key()));
+    }
+    out.add(KnowledgeKey.numberClosing());
     return List.copyOf(out);
   }
 

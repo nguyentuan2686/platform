@@ -147,6 +147,8 @@ services:
       IDENTITY_SVC_URL: http://identity-svc:8084
       # base64 of the 32-byte test phrase "local-test-qa-answer-key-0123456" (AES-256 key)
       QA_ENC_KEY: ${QA_ENC_KEY:-bG9jYWwtdGVzdC1xYS1hbnN3ZXIta2V5LTAxMjM0NTY=}
+      # HMAC key of the number-check quota (xem số); test value only.
+      NUMBER_CHECK_HMAC_KEY: ${NUMBER_CHECK_HMAC_KEY:-local-test-number-check-hmac-key}
       LLM_PROVIDERS: ${LLM_PROVIDERS:-fake}
       LLM_FAKE_MODE: ${LLM_FAKE_MODE:-ok}
       # Real keys: set only via Sealed Secrets / your shell, never commit.

@@ -54,6 +54,9 @@ final class QualityRules {
           Map.entry("TuTuc", "van-han"));
   private static final Pattern PALACE_IN_KEY = Pattern.compile("palace=([A-Za-z]+)");
 
+  /** Number-check readings (spec §6) are original copy, not doctrine from the source book. */
+  private static final String NUMBER_SOURCE = "original:number";
+
   private static final Schema SCHEMA = loadSchema();
 
   private QualityRules() {}
@@ -107,7 +110,11 @@ final class QualityRules {
     if (!VOICE.matcher(content).find()) {
       out.add(v("voice", key));
     }
-    if (refs(str(r, "source_ref")) == null) {
+    boolean sourceOk =
+        key.startsWith("so:")
+            ? NUMBER_SOURCE.equals(str(r, "source_ref"))
+            : refs(str(r, "source_ref")) != null;
+    if (!sourceOk) {
       out.add(v("source_ref", key));
     }
     String expected = expectedTopic(key);

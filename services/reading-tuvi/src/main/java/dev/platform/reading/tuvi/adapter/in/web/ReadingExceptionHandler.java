@@ -2,11 +2,13 @@ package dev.platform.reading.tuvi.adapter.in.web;
 
 import dev.platform.reading.tuvi.application.UpstreamUnavailableException;
 import dev.platform.reading.tuvi.application.UpstreamValidationException;
+import dev.platform.reading.tuvi.application.number.NumberQuotaExceededException;
 import dev.platform.reading.tuvi.application.qa.AccountRequiredException;
 import dev.platform.reading.tuvi.application.qa.QaConflictException;
 import dev.platform.reading.tuvi.application.qa.QaInvalidRequestException;
 import dev.platform.reading.tuvi.application.qa.QaNotFoundException;
 import dev.platform.reading.tuvi.application.qa.UnauthenticatedException;
+import dev.platform.reading.tuvi.domain.number.InvalidNumberException;
 import dev.platform.starter.web.PlatformProblemHandler;
 import java.net.URI;
 import java.util.List;
@@ -102,6 +104,37 @@ public class ReadingExceptionHandler {
         ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "The request conflicts");
     detail.setType(CONFLICT);
     detail.setProperty("reason", ex.reason());
+    return respond(HttpStatus.CONFLICT, detail, request);
+  }
+
+  /**
+   * A number check that cannot be scored: 400 with {@code reason} {@code invalid_number} (field
+   * {@code number}) or {@code invalid_birth} (field {@code birth_year}). Never echoes the input.
+   */
+  @ExceptionHandler(InvalidNumberException.class)
+  ResponseEntity<Object> invalidNumber(InvalidNumberException ex, WebRequest request)
+      throws Exception {
+    String field = "invalid_birth".equals(ex.reason()) ? "birth_year" : "number";
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
+    detail.setProperty("errors", List.of(Map.of("field", field, "message", field + " is invalid")));
+    detail.setProperty("reason", ex.reason());
+    return respond(HttpStatus.BAD_REQUEST, detail, request);
+  }
+
+  @ExceptionHandler(NumberQuotaExceededException.class)
+  ResponseEntity<Object> numberQuota(NumberQuotaExceededException ex, WebRequest request)
+      throws Exception {
+    ProblemDetail detail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Daily number checks used up");
+    detail.setType(CONFLICT);
+    detail.setProperty("reason", ex.reason());
+    detail.setProperty(
+        "quota",
+        Map.of(
+            "limit", ex.quota().limit(),
+            "used", ex.quota().used(),
+            "remaining", ex.quota().remaining()));
     return respond(HttpStatus.CONFLICT, detail, request);
   }
 

@@ -34,6 +34,21 @@ class KnowledgeKeyTest {
   }
 
   @Test
+  void builds_number_check_keys() {
+    assertThat(KnowledgeKey.number("intro", "sim").value()).isEqualTo("so:intro=sim");
+    assertThat(KnowledgeKey.number("element", "sinh_nhap").value())
+        .isEqualTo("so:element=sinh_nhap");
+    assertThat(KnowledgeKey.number("que", "64").value()).isEqualTo("so:que=64");
+    assertThat(KnowledgeKey.numberClosing().value()).isEqualTo("so:closing");
+    assertThatThrownBy(() -> new KnowledgeKey("so:Intro=sim"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new KnowledgeKey("so:intro=Sim"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new KnowledgeKey("so:other"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void rejects_keys_outside_the_grammar() {
     assertThatThrownBy(() -> new KnowledgeKey("tuvi:Star=TuVi"))
         .isInstanceOf(IllegalArgumentException.class);
