@@ -20,10 +20,11 @@ public final class Sentinel {
     }
     // tolerate markdown or quote decoration: **NGOAI_PHAM_VI**, "`KHONG_DU_TU_LIEU`"
     String s = DECORATION.matcher(answer).replaceFirst("");
-    if (s.startsWith(NGOAI_PHAM_VI)) {
+    // models misspell the tail (KHONG_DU_TIEU_LIEU); the underscore-joined head is unambiguous
+    if (s.startsWith(NGOAI_PHAM_VI) || s.startsWith("NGOAI_PHAM_")) {
       return Optional.of(RefusalReason.OFF_TOPIC);
     }
-    if (s.startsWith(KHONG_DU_TU_LIEU)) {
+    if (s.startsWith(KHONG_DU_TU_LIEU) || s.startsWith("KHONG_DU_")) {
       return Optional.of(RefusalReason.INSUFFICIENT);
     }
     return Optional.empty();

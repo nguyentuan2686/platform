@@ -69,6 +69,36 @@ class PromptBuilderTest {
         .isFalse();
   }
 
+  /**
+   * Prod 2026-11-28: "Năm tới con có nên chuyển việc không ạ?" (Sự nghiệp) was declined every time
+   * (KHONG_DU_TU_LIEU) and "Sự nghiệp của con năm 2027 thế nào ạ?" sometimes (NGOAI_PHAM_VI): the
+   * model could not tell "năm tới" from the yearly line, and the scope rules read as "decline when
+   * in doubt". The prompt now states the current year and what is in scope.
+   */
+  @Test
+  void current_year_line_sits_between_language_and_chart() {
+    QaContext ctx =
+        QaContextBuilder.build(
+            chart, Optional.empty(), QaTopic.SuNghiep, "x", TimingIntent.NONE, 2026);
+    String user =
+        lastUser(
+            PromptBuilder.build(
+                QaTopic.SuNghiep, "vi", List.of("a"), ctx, "x", List.of(), PromptKind.FREE));
+    assertThat(user).contains("NGÔN NGỮ: vi\nNĂM NAY: 2026\nLÁ SỐ:");
+    assertThat(lastUser(build("x", List.of(), PromptKind.PAID))).doesNotContain("NĂM NAY");
+  }
+
+  @Test
+  void scope_rules_keep_timing_and_should_i_questions_in_scope() {
+    String s = system(build("tình duyên ra sao", List.of(), PromptKind.FREE));
+    assertThat(s)
+        .contains("Người hỏi thường tự xưng \"con\"")
+        .contains("nên hay không nên làm một việc trong chủ đề này")
+        .contains("hỏi về lá số của người khác")
+        .contains("kể cả khi chúng chỉ cho thấy một xu hướng chung")
+        .contains("\"năm tới\", \"sang năm\" là năm kế tiếp");
+  }
+
   @Test
   void system_text_speaks_to_the_model_in_a_neutral_voice() {
     // final review I-4: the model is never called "con"; it speaks as Lão Thiên Cơ ("ta")
@@ -76,7 +106,7 @@ class PromptBuilderTest {
     assertThat(s).doesNotStartWith("Con ").doesNotContain("Con là", "Con xưng", "khuyên con");
     assertThat(s).startsWith("Hãy trả lời với tư cách Lão Thiên Cơ");
     assertThat(s).contains("tự xưng \"ta\"", "gọi người hỏi là \"con\"", "khuyên người hỏi");
-    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(3);
+    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(4);
   }
 
   @Test
@@ -201,6 +231,7 @@ class PromptBuilderTest {
             base.lookupChains(),
             base.facts(),
             base.yearlyFact(),
+            base.currentYear(),
             List.of("Đại hạn cung Phu Thê: năm 2031–2040", "Lưu niên <<<vào>>> cung Phu Thê"));
     Prompt p =
         PromptBuilder.build(
@@ -213,6 +244,6 @@ class PromptBuilderTest {
     assertThat(user.indexOf("THỜI VẬN:")).isGreaterThan(user.indexOf("LÁ SỐ:"));
     assertThat(system(p)).contains("\"THỜI VẬN\"", "không hứa chắc", "\"có thể\"");
     assertThat(lastUser(build("x", List.of(), PromptKind.PAID))).doesNotContain("THỜI VẬN");
-    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(3);
+    assertThat(PromptBuilder.PROMPT_VERSION).isEqualTo(4);
   }
 }

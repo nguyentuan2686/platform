@@ -86,6 +86,24 @@ class OpenAiCompatibleLlmAdapterTest {
   }
 
   @Test
+  void reasoning_effort_is_sent_only_when_set() throws Exception {
+    stub.body = fixture("completion-ok.json");
+    var groq =
+        new OpenAiCompatibleLlmAdapter(
+            new OpenAiCompatibleSettings(
+                "groq", stub.baseUrl(), KEY, "m", 900, false, Duration.ofSeconds(5), "low"),
+            RestClient.builder());
+
+    groq.complete(REQ);
+    adapter().complete(REQ);
+
+    var json = JsonMapper.shared();
+    assertThat(json.readTree(stub.requests().get(0).body()).get("reasoning_effort").asString())
+        .isEqualTo("low");
+    assertThat(json.readTree(stub.requests().get(1).body()).has("reasoning_effort")).isFalse();
+  }
+
+  @Test
   void parses_content_and_usage() throws Exception {
     stub.body = fixture("completion-ok.json");
 

@@ -156,11 +156,14 @@ class LlmConfiguration {
     String model;
     int limit;
     boolean paid = false;
+    String reasoning;
     switch (id) {
       case "groq" -> {
         base = URI.create(env.getProperty("GROQ_BASE_URL", "https://api.groq.com/openai/v1"));
         model = env.getProperty("GROQ_MODEL", "openai/gpt-oss-120b");
         limit = Integer.parseInt(env.getProperty("GROQ_DAILY_REQUEST_LIMIT", "900"));
+        // gpt-oss reasons inside max_tokens: at the default effort it used all 350 FREE tokens
+        reasoning = env.getProperty("GROQ_REASONING_EFFORT", "low");
       }
       case "gemini" -> {
         base =
@@ -169,17 +172,19 @@ class LlmConfiguration {
                     "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"));
         model = env.getProperty("GEMINI_MODEL", "gemini-3.5-flash-lite");
         limit = Integer.parseInt(env.getProperty("GEMINI_DAILY_REQUEST_LIMIT", "450"));
+        reasoning = env.getProperty("GEMINI_REASONING_EFFORT", "");
       }
       default -> {
         base = URI.create(env.getProperty("LLM_PAID_BASE_URL", "https://api.groq.com/openai/v1"));
         model = env.getProperty("LLM_PAID_MODEL", "openai/gpt-oss-120b");
         limit = Integer.MAX_VALUE;
+        reasoning = env.getProperty("LLM_PAID_REASONING_EFFORT", "low");
         paid = true;
       }
     }
     Duration timeout = Duration.parse(env.getProperty("LLM_TIMEOUT", "PT20S").strip());
     return new OpenAiCompatibleLlmAdapter(
-        new OpenAiCompatibleSettings(id, base, key, model, limit, paid, timeout),
+        new OpenAiCompatibleSettings(id, base, key, model, limit, paid, timeout, reasoning),
         RestClient.builder());
   }
 

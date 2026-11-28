@@ -104,6 +104,9 @@ public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
     body.put("max_tokens", request.maxTokens());
     body.put("temperature", request.temperature());
     body.put("stream", false);
+    if (settings.reasoningEffort() != null && !settings.reasoningEffort().isBlank()) {
+      body.put("reasoning_effort", settings.reasoningEffort().strip());
+    }
     return body;
   }
 

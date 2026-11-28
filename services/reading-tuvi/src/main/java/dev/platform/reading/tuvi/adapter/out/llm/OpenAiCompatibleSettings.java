@@ -3,7 +3,11 @@ package dev.platform.reading.tuvi.adapter.out.llm;
 import java.net.URI;
 import java.time.Duration;
 
-/** Connection settings for one OpenAI-compatible provider. {@link #toString} redacts the key. */
+/**
+ * Connection settings for one OpenAI-compatible provider. {@code reasoningEffort} is sent as {@code
+ * reasoning_effort} when not blank (reasoning models such as Groq's gpt-oss spend {@code
+ * max_tokens} on reasoning too). {@link #toString} redacts the key.
+ */
 public record OpenAiCompatibleSettings(
     String id,
     URI baseUrl,
@@ -11,7 +15,19 @@ public record OpenAiCompatibleSettings(
     String model,
     int dailyRequestLimit,
     boolean paid,
-    Duration timeout) {
+    Duration timeout,
+    String reasoningEffort) {
+
+  public OpenAiCompatibleSettings(
+      String id,
+      URI baseUrl,
+      String apiKey,
+      String model,
+      int dailyRequestLimit,
+      boolean paid,
+      Duration timeout) {
+    this(id, baseUrl, apiKey, model, dailyRequestLimit, paid, timeout, "");
+  }
 
   @Override
   public String toString() {
@@ -27,6 +43,8 @@ public record OpenAiCompatibleSettings(
         + paid
         + ", timeout="
         + timeout
+        + ", reasoningEffort="
+        + reasoningEffort
         + "]";
   }
 }
