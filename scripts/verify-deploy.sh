@@ -130,6 +130,12 @@ while :; do
     for a in "${missing[@]}"; do
       read -r sync health rev conds <<<"${last[$a]}"
       echo "FAIL argo-$a: sync=$sync health=$health revision=$rev conditions=$conds (want ${want[$a]} at $revision)"
+      # Which resources keep the app from Healthy (Argo's per-resource health; at most 20 lines).
+      unhealthy=$(kubectl -n argocd get application "$a" -o json 2>/dev/null | jq -r '[(.status.resources // [])[]
+          | select(.health != null and .health.status != "Healthy")
+          | "  unhealthy \(.kind)/\(.namespace // "-")/\(.name): \(.health.status) \(.health.message // "" | gsub("\\s+"; " ") | .[0:160])"]
+          | .[0:20][]' 2>/dev/null) || unhealthy=""
+      [ -z "$unhealthy" ] || printf '%s\n' "$unhealthy"
     done
     if [ "$unread" -eq "${#order[@]}" ]; then
       echo "UNREACHABLE: no Argo CD application could be read in the last poll (cluster, tailnet or credentials), not judged as a bad deploy"
