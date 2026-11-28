@@ -107,7 +107,7 @@ jobs:
         run: |
           # seal-secrets.sh only reads untracked, gitignored inputs, so the tracked e2e test values are copied into the
           # gitignored secrets.local of this throwaway checkout; --allow-test-values admits their local-test- values.
-          # Only the 7 required rows are sealed here, so alerting/ops/cloudflared-secrets stay absent (the e2e overlay's
+          # Only the required rows are sealed here, so alerting/ops-secrets stay absent (the e2e overlay's
           # alerting-secrets.env feeds the kind job's contact-point check, not this bootstrap).
           in=deploy/k8s/overlays/prod/secrets.local
           mkdir -p "$in"
@@ -148,7 +148,7 @@ jobs:
             [ "$SECONDS" -lt "$end" ] || { printf 'FAIL secret-materialised: %s\n' "${missing[@]}"; exit 1; }
             sleep 3
           done
-          for s in observability/alerting-secrets data/ops-secrets edge/cloudflared-secrets; do
+          for s in observability/alerting-secrets data/ops-secrets; do
             if kubectl -n "${s%%/*}" get secret "${s#*/}" >/dev/null 2>&1; then echo "FAIL secret-materialised: optional $s exists"; exit 1; fi
           done
           echo "OK secret-materialised"

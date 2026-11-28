@@ -1,12 +1,12 @@
 # Prod tunnel slice (Argo CD app `prod-tunnel`, wave 1): the outbound cloudflared tunnel to Traefik, the only public
-# entry. Namespace edge is owned by ../sealed (cloudflared-secrets lives there). Quick tunnel (random
-# *.trycloudflare.com URL, see scripts/public-url) until go-live; to serve APP_DOMAIN, replace
-# ../../../components/cloudflared-quick with ../../../components/cloudflared-named (needs the sealed cloudflared-secrets).
+# entry. Namespace edge is owned by ../sealed (cloudflared-secrets lives there). Named tunnel (token in the sealed
+# cloudflared-secrets; public hostname APP_DOMAIN -> Traefik set in the Cloudflare dashboard). To fall back to a quick
+# tunnel (random *.trycloudflare.com URL, scripts/public-url), use ../../../components/cloudflared-quick instead.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 components:
   - ../domain # APP_DOMAIN source for the quick tunnel's --http-host-header; must precede the cloudflared component
-  - ../../../components/cloudflared-quick
+  - ../../../components/cloudflared-named
 patches:
   - target: {kind: ConfigMap, name: app-domain}
     patch: |-
