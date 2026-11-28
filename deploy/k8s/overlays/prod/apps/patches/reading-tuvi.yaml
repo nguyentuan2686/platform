@@ -8,5 +8,5 @@ spec:
       containers:
         - name: reading-tuvi
           env:
-            # ADR 0003: ordered failover list; claude/gemini/groq are enabled only when their API key is set (claude has none yet, so it is skipped).
-            - {name: LLM_PROVIDERS, value: "claude,gemini,groq"}
+            # ADR 0003: ordered failover list; each provider is enabled only when its API key is in reading-tuvi-secrets (a keyless one is skipped with a WARN; cerebras has no key yet).
+            - {name: LLM_PROVIDERS, value: "claude,gemini,groq,openrouter,cerebras"}

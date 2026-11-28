@@ -22,8 +22,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Groq, Gemini (OpenAI-compatible endpoint) and the paid provider: {@code POST
- * {base}/chat/completions} with a Bearer key. Never logs keys, prompts or answers.
+ * Groq, Gemini (OpenAI-compatible endpoint), OpenRouter, Cerebras and the paid provider: {@code
+ * POST {base}/chat/completions} with a Bearer key. Never logs keys, prompts or answers.
  */
 public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
 
@@ -63,6 +63,11 @@ public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
   @Override
   public int dailyRequestLimit() {
     return settings.dailyRequestLimit();
+  }
+
+  @Override
+  public boolean servesFreeTier() {
+    return settings.servesFreeTier();
   }
 
   @Override

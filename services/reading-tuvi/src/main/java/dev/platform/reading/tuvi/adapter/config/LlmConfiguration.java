@@ -31,13 +31,73 @@ class LlmConfiguration {
 
   private static final Logger LOG = LoggerFactory.getLogger(LlmConfiguration.class);
 
-  /** Env var holding each keyed provider's API key. */
-  private static final Map<String, String> KEY_VARS =
+  /**
+   * One OpenAI-compatible provider: its env prefix ({@code <PREFIX>_API_KEY}, {@code _BASE_URL},
+   * {@code _MODEL}, {@code _DAILY_REQUEST_LIMIT}, {@code _REASONING_EFFORT}, {@code _PAID}, {@code
+   * _SERVE_FREE_TIER}) and the defaults of each. {@code servesFreeWhenPaid}: a paid model of this
+   * provider still answers free questions, within its monthly budget, unless turned off.
+   */
+  private record OpenAiSpec(
+      String prefix,
+      String baseUrl,
+      String model,
+      int dailyRequestLimit,
+      String reasoningEffort,
+      boolean paid,
+      boolean servesFreeWhenPaid) {}
+
+  /**
+   * Defaults probed with the prod keys on 2026-11-28 (chat completion 200, Vietnamese answer within
+   * the FREE token budget): Gemini gemini-3.5-flash-lite via the OpenAI-compatible endpoint, Groq
+   * openai/gpt-oss-120b (a reasoning model: its reasoning tokens count toward max_tokens; at the
+   * default effort it used all 350 FREE tokens). The OpenRouter (google/gemma-4-31b-it:free, 50
+   * free-model requests a day without credits) and Cerebras (gpt-oss-120b) defaults were not
+   * probed: no prod key may be probed, so check the first prod answers in the logs. Model ids are
+   * retired without notice: list them with GET {base}/models and override with {@code
+   * <PREFIX>_MODEL}. The paid defaults (LLM_PAID_*) were priced for the old Groq model; re-check
+   * https://groq.com/pricing before enabling paid.
+   */
+  private static final Map<String, OpenAiSpec> OPENAI =
       Map.of(
-          "claude", "ANTHROPIC_API_KEY",
-          "groq", "GROQ_API_KEY",
-          "gemini", "GEMINI_API_KEY",
-          "paid", "LLM_PAID_API_KEY");
+          "groq",
+          new OpenAiSpec(
+              "GROQ",
+              "https://api.groq.com/openai/v1",
+              "openai/gpt-oss-120b",
+              900,
+              "low",
+              false,
+              false),
+          "gemini",
+          new OpenAiSpec(
+              "GEMINI",
+              "https://generativelanguage.googleapis.com/v1beta/openai",
+              "gemini-3.5-flash-lite",
+              450,
+              "",
+              false,
+              false),
+          "openrouter",
+          new OpenAiSpec(
+              "OPENROUTER",
+              "https://openrouter.ai/api/v1",
+              "google/gemma-4-31b-it:free",
+              45,
+              "",
+              false,
+              true),
+          "cerebras",
+          new OpenAiSpec(
+              "CEREBRAS", "https://api.cerebras.ai/v1", "gpt-oss-120b", 900, "low", false, false),
+          "paid",
+          new OpenAiSpec(
+              "LLM_PAID",
+              "https://api.groq.com/openai/v1",
+              "openai/gpt-oss-120b",
+              Integer.MAX_VALUE,
+              "low",
+              true,
+              false));
 
   /** Providers in failover order. */
   record ConfiguredProviders(List<LlmProviderPort> ordered) {}
@@ -61,14 +121,16 @@ class LlmConfiguration {
       if (id.equals("fake")) {
         String mode = env.getProperty("LLM_FAKE_MODE", "ok").strip().toUpperCase(Locale.ROOT);
         providers.add(new FakeLlmProvider(FakeMode.valueOf(mode)));
-      } else if (KEY_VARS.containsKey(id)) {
-        String key = env.getProperty(KEY_VARS.get(id), "").strip();
+      } else if (id.equals("claude") || OPENAI.containsKey(id)) {
+        String keyVar =
+            id.equals("claude") ? "ANTHROPIC_API_KEY" : OPENAI.get(id).prefix() + "_API_KEY";
+        String key = env.getProperty(keyVar, "").strip();
         if (key.isBlank()) {
           LOG.warn("llm provider {} disabled: no api key", id);
         } else if (id.equals("claude")) {
           providers.add(anthropic(env, key));
         } else {
-          providers.add(openAi(env, id, key));
+          providers.add(openAi(env, id, OPENAI.get(id), key));
         }
       } else {
         throw new IllegalStateException("unknown llm provider " + id);
@@ -95,6 +157,11 @@ class LlmConfiguration {
    * out, 5-minute cache write 1.25x and cache read 0.1x of input), checked against the claude-api
    * skill on 2026-11-28. Re-check https://platform.claude.com/docs/en/about-claude/pricing when
    * changing the model.
+   *
+   * <p>OpenRouter is priced only when {@code OPENROUTER_PAID=true} (its default model is free). The
+   * defaults are deliberately high, so that a paid model whose prices nobody set reaches its budget
+   * early rather than late: set {@code OPENROUTER_*_USD_PER_MTOK} to the model's prices on
+   * https://openrouter.ai/models when switching (e.g. to deepseek/deepseek-v4-flash).
    */
   @Bean
   ProviderPricing providerPricing(Environment env) {
@@ -106,7 +173,12 @@ class LlmConfiguration {
                 decimal(env, "ANTHROPIC_OUTPUT_USD_PER_MTOK", "0.50"),
                 decimal(env, "ANTHROPIC_CACHE_WRITE_USD_PER_MTOK", "0.125"),
                 decimal(env, "ANTHROPIC_CACHE_READ_USD_PER_MTOK", "0.01"),
-                decimal(env, "ANTHROPIC_MONTHLY_BUDGET_USD", "5"))));
+                decimal(env, "ANTHROPIC_MONTHLY_BUDGET_USD", "5")),
+            "openrouter",
+            new PaidPricing(
+                decimal(env, "OPENROUTER_INPUT_USD_PER_MTOK", "1.00"),
+                decimal(env, "OPENROUTER_OUTPUT_USD_PER_MTOK", "4.00"),
+                decimal(env, "OPENROUTER_MONTHLY_BUDGET_USD", "2"))));
   }
 
   @Bean
@@ -147,48 +219,32 @@ class LlmConfiguration {
   }
 
   /**
-   * Defaults probed with the prod keys on 2026-11-28 (chat completion 200, Vietnamese answer within
-   * the FREE token budget): Gemini gemini-3.5-flash-lite via the OpenAI-compatible endpoint, Groq
-   * openai/gpt-oss-120b (a reasoning model: its reasoning tokens count toward max_tokens). The
-   * earlier defaults gemini-2.5-flash-lite and llama-3.3-70b-versatile were retired (HTTP 404).
-   * Model ids are retired without notice: list them with GET {base}/models and override with
-   * GEMINI_MODEL / GROQ_MODEL. The paid defaults (LLM_PAID_*) were priced for the old Groq model;
-   * re-check https://groq.com/pricing before enabling paid.
+   * A paid model has no daily cap by default (its monthly budget bounds it); a free one keeps the
+   * provider's free daily quota minus a margin.
    */
-  private static LlmProviderPort openAi(Environment env, String id, String key) {
-    URI base;
-    String model;
-    int limit;
-    boolean paid = false;
-    String reasoning;
-    switch (id) {
-      case "groq" -> {
-        base = URI.create(env.getProperty("GROQ_BASE_URL", "https://api.groq.com/openai/v1"));
-        model = env.getProperty("GROQ_MODEL", "openai/gpt-oss-120b");
-        limit = Integer.parseInt(env.getProperty("GROQ_DAILY_REQUEST_LIMIT", "900"));
-        // gpt-oss reasons inside max_tokens: at the default effort it used all 350 FREE tokens
-        reasoning = env.getProperty("GROQ_REASONING_EFFORT", "low");
-      }
-      case "gemini" -> {
-        base =
-            URI.create(
-                env.getProperty(
-                    "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"));
-        model = env.getProperty("GEMINI_MODEL", "gemini-3.5-flash-lite");
-        limit = Integer.parseInt(env.getProperty("GEMINI_DAILY_REQUEST_LIMIT", "450"));
-        reasoning = env.getProperty("GEMINI_REASONING_EFFORT", "");
-      }
-      default -> {
-        base = URI.create(env.getProperty("LLM_PAID_BASE_URL", "https://api.groq.com/openai/v1"));
-        model = env.getProperty("LLM_PAID_MODEL", "openai/gpt-oss-120b");
-        limit = Integer.MAX_VALUE;
-        reasoning = env.getProperty("LLM_PAID_REASONING_EFFORT", "low");
-        paid = true;
-      }
-    }
+  private static LlmProviderPort openAi(Environment env, String id, OpenAiSpec spec, String key) {
+    String p = spec.prefix();
+    boolean paid =
+        Boolean.parseBoolean(env.getProperty(p + "_PAID", String.valueOf(spec.paid())).strip());
+    int defaultLimit = paid ? Integer.MAX_VALUE : spec.dailyRequestLimit();
+    boolean servesFree =
+        Boolean.parseBoolean(
+            env.getProperty(
+                    p + "_SERVE_FREE_TIER", String.valueOf(!paid || spec.servesFreeWhenPaid()))
+                .strip());
     Duration timeout = Duration.parse(env.getProperty("LLM_TIMEOUT", "PT20S").strip());
     return new OpenAiCompatibleLlmAdapter(
-        new OpenAiCompatibleSettings(id, base, key, model, limit, paid, timeout, reasoning),
+        new OpenAiCompatibleSettings(
+            id,
+            URI.create(env.getProperty(p + "_BASE_URL", spec.baseUrl()).strip()),
+            key,
+            env.getProperty(p + "_MODEL", spec.model()).strip(),
+            Integer.parseInt(
+                env.getProperty(p + "_DAILY_REQUEST_LIMIT", String.valueOf(defaultLimit)).strip()),
+            paid,
+            timeout,
+            env.getProperty(p + "_REASONING_EFFORT", spec.reasoningEffort()).strip(),
+            servesFree),
         RestClient.builder());
   }
 
