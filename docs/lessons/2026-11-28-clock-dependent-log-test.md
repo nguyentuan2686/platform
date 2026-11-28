@@ -20,3 +20,8 @@ A "must not contain" assertion over logs must exclude fields the test does not c
 
 ## Escalation
 none (first occurrence)
+
+## Recurrence
+astro-chart-svc `ephemeris_failure_is_logged_once_without_the_birth` had the same raw-log needle search (found in review
+before it flaked in CI). Fixed the same way (timestamp dropped per parsed line). Escalated: rule added to the Test pyramid
+list in `.claude/skills/rust-service-conventions/SKILL.md`.
