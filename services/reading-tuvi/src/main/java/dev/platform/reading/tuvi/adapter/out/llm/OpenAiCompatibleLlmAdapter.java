@@ -137,11 +137,18 @@ public class OpenAiCompatibleLlmAdapter implements LlmProviderPort {
         throw new LlmUnavailableException("llm provider " + id() + " returned no content");
       }
       JsonNode usage = root.path("usage");
-      return new LlmCompletion(
-          text,
-          id(),
-          usage.path("prompt_tokens").asInt(0),
-          usage.path("completion_tokens").asInt(0));
+      LlmCompletion out =
+          new LlmCompletion(
+              text,
+              id(),
+              usage.path("prompt_tokens").asInt(0),
+              usage.path("completion_tokens").asInt(0));
+      // Reasoning models (gpt-oss) spend max_tokens on reasoning too: never serve a cut-off answer.
+      if (root.path("choices").path(0).path("finish_reason").asString("").equals("length")) {
+        LOG.warn("llm provider reply cut off provider={} finish_reason=length", id());
+        throw new LlmUnavailableException("llm provider " + id() + " reply cut off");
+      }
+      return out;
     } catch (JacksonException e) {
       throw new LlmUnavailableException("llm provider " + id() + " returned malformed json");
     }
