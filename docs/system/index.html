@@ -336,7 +336,7 @@ sequenceDiagram
     <li>web kiểm tra CSRF, kiểm tra cookie đồng ý gửi dữ liệu cho nhà cung cấp AI (<code>tv_ai_ok</code>), tạo session khách nếu cần, rồi mở stream SSE tới reading-tuvi.</li>
     <li>reading-tuvi chạy phần chuẩn bị theo thứ tự: <b>guard câu hỏi</b> (<code>QuestionGuard</code>: che PII, từ chối tự hại, cờ bạc, y tế, giải hạn...), đọc hồ sơ, gọi chart-svc, ghi hàng <code>qa_reading</code>, và với PAID thì <b>trừ lượt</b> qua identity <code>/internal/credits/consume</code>.</li>
     <li>Prompt chỉ gồm persona, chủ đề, dữ kiện cung và các đoạn kho được chọn theo khóa, cùng câu hỏi đã che PII. Không bao giờ có tên, email, ngày sinh hay chart_hash.</li>
-    <li>LLM gateway thử lần lượt theo <code>LLM_PROVIDERS</code> (prod: <code>groq,gemini</code>, PAID còn có thể rơi xuống <code>paid</code>). Có đủ câu trả lời mới chạy <code>AnswerFilter</code>; bị chặn thì sinh lại một lần. Sau đó trả về dạng SSE theo từng câu và nối disclaimer phía server.</li>
+    <li>LLM gateway thử lần lượt theo <code>LLM_PROVIDERS</code> (prod: <code>gemini,groq</code>, PAID còn có thể rơi xuống <code>paid</code>). Có đủ câu trả lời mới chạy <code>AnswerFilter</code>; bị chặn thì sinh lại một lần. Sau đó trả về dạng SSE theo từng câu và nối disclaimer phía server.</li>
     <li>Câu hỏi và trả lời được lưu mã hóa AES-GCM (<code>QA_ENC_KEY</code>). Log chỉ có id, trạng thái, provider, độ trễ và số token.</li>
   </ol>
   <div class="diagram"><pre class="mermaid">
@@ -539,7 +539,7 @@ flowchart LR
       <tr><td><code>web-secrets</code></td><td>apps</td><td>INTERNAL_API_TOKEN, ADMIN_API_TOKEN</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>order-svc-secrets</code>, <code>notify-svc-secrets</code></td><td>apps</td><td>thông tin DB</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>cloudflared-secrets</code></td><td>edge</td><td>TUNNEL_TOKEN</td><td><span class="pill ok">đã seal</span></td></tr>
-      <tr><td><code>alerting-secrets</code></td><td>observability</td><td>TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID</td><td><span class="pill bad">chưa có</span></td></tr>
+      <tr><td><code>alerting-secrets</code></td><td>observability</td><td>TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID</td><td><span class="pill ok">đã seal</span></td></tr>
       <tr><td><code>ops-secrets</code></td><td>data</td><td>S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, HEALTHCHECKS_URL, HEALTHCHECKS_BACKUP_URL</td><td><span class="pill bad">chưa có</span></td></tr>
     </tbody>
   </table></div>
@@ -571,9 +571,9 @@ flowchart LR
       <tr><td>CD tự động + ruleset main</td><td><span class="pill ok">chạy</span></td><td>GitHub App <code>xemtuvingay-cd</code> là bypass actor duy nhất</td></tr>
       <tr><td>Thanh toán SePay</td><td><span class="pill ok">đã seal tài khoản nhận</span></td><td>trỏ webhook SePay tới <code>/webhooks/sepay</code>; chuyển thử 1.000đ</td></tr>
       <tr><td>Backup off-host</td><td><span class="pill bad">chưa bật</span></td><td>seal <code>ops-secrets</code> và đặt <code>BACKUP_REQUIRED="1"</code> trong cùng một PR; diễn tập khôi phục</td></tr>
-      <tr><td>Cảnh báo Telegram</td><td><span class="pill bad">chưa bật</span></td><td>seal <code>alerting-secrets</code>, rollout restart lgtm</td></tr>
+      <tr><td>Cảnh báo Telegram</td><td><span class="pill ok">bật</span></td><td><code>alerting-secrets</code> đã seal; lgtm tự restart khi annotation <code>platform.dev/alerting-secrets-rev</code> đổi</td></tr>
       <tr><td>Mail magic link</td><td><span class="pill bad">chưa có relay</span></td><td>relay SMTP + SPF/DKIM; sửa <code>MAIL_HOST</code>/<code>MAIL_PORT</code> trong patch identity-svc</td></tr>
-      <tr><td>LLM thật</td><td><span class="pill warn">cần xác nhận</span></td><td>kiểm tra key Groq/Gemini đã seal chưa, đọc điều khoản dùng thương mại</td></tr>
+      <tr><td>LLM thật</td><td><span class="pill warn">đang bật</span></td><td>key Gemini và Groq đã seal (Gemini trả lời trước, hết lượt chuyển Groq); còn: đọc điều khoản gói free về dùng thương mại và dữ liệu, key Anthropic khi cần Claude</td></tr>
       <tr><td>Google login, Turnstile</td><td><span class="pill warn">chưa làm</span></td><td>tùy chọn</td></tr>
       <tr><td>Xem số hợp mệnh</td><td><span class="pill ok">chạy</span></td><td>miễn phí, 2 số/người/ngày</td></tr>
       <tr><td>Chiêm tinh F2</td><td><span class="pill warn">đang làm</span></td><td>worktree <code>C:\platform-f2</code></td></tr>
@@ -589,6 +589,8 @@ flowchart LR
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
     <li><time datetime="2026-11-28">2026-11-28</time><div>Job CI <code>bootstrap</code> (15–20 phút) chỉ chạy cho PR đổi những gì nó thật sự kiểm (infra, Argo, platform, secret prod, workflow CI), không chạy cho PR chỉ đổi app/domain/tunnel hay workflow khác; push lên main vẫn luôn chạy.</div></li>
+    <li><time datetime="2026-11-28">2026-11-28</time><div>Cảnh báo Telegram bật: <code>alerting-secrets</code> đã seal (bot riêng, chat của chủ dự án). lgtm chờ secret rồi tự restart (annotation <code>platform.dev/alerting-secrets-rev</code>), không cần lệnh tay.</div></li>
+    <li><time datetime="2026-11-28">2026-11-28</time><div>Seal key thật <code>GEMINI_API_KEY</code> và <code>GROQ_API_KEY</code> trong <code>reading-tuvi-secrets</code>: Hỏi thầy dùng LLM thật: prod <code>LLM_PROVIDERS=gemini,groq</code> (Gemini trước, hết lượt hoặc 429 thì Groq).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>CD: bước verify ghi lại mã thoát kể cả khi verify-deploy lỗi, nên deploy hỏng được rollback thật (trước đây báo rc=none, issue #53).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Argo CD coi Ingress là Healthy khi có rule (Traefik ClusterIP không bao giờ ghi status LoadBalancer, nên prod-apps kẹt Progressing, issue #53); verify-deploy in ra resource chưa Healthy khi lỗi. Cần chạy lại bootstrap trên host.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>PR #52: quyền chỉ đọc <code>ops-reader</code> qua tailnet (kubectl, log, Grafana từ laptop qua Docker); job bootstrap seal cả secret optional mà prod đã seal.</div></li>
