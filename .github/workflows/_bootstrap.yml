@@ -107,13 +107,14 @@ jobs:
         run: |
           # seal-secrets.sh only reads untracked, gitignored inputs, so the tracked e2e test values are copied into the
           # gitignored secrets.local of this throwaway checkout; --allow-test-values admits their local-test- values.
-          # Only the required rows are sealed here, so alerting/ops-secrets stay absent (the e2e overlay's
-          # alerting-secrets.env feeds the kind job's contact-point check, not this bootstrap).
+          # Sealed here: every required row, and every optional row that prod has sealed (alerting-secrets, ops-secrets
+          # once set up). This cluster's key cannot unseal the committed prod-key SealedSecret, so the e2e seal applied
+          # below replaces it. An optional row without a committed seal stays absent.
           in=deploy/k8s/overlays/prod/secrets.local
           mkdir -p "$in"
           while IFS=$'\t' read -r name _ns req _keys; do
             case "$name" in '#'* | '') continue ;; esac
-            [ "$req" = required ] || continue
+            [ "$req" = required ] || [ -f "deploy/k8s/overlays/prod/sealed/$name.sealedsecret.yaml" ] || continue
             cp "deploy/k8s/overlays/e2e/secrets/$name.env" "$in/"
           done < <(tr -d '\r' <deploy/k8s/overlays/prod/secrets.tsv)
           bash scripts/seal-secrets.sh --cert "$RUNNER_TEMP/fetched.crt" --in "$in" --out "$RUNNER_TEMP/sealed" --allow-test-values
@@ -133,7 +134,7 @@ jobs:
             missing=()
             while IFS=$'\t' read -r name ns req keys; do
               case "$name" in '#'* | '') continue ;; esac
-              [ "$req" = required ] || continue
+              [ "$req" = required ] || [ -f "deploy/k8s/overlays/prod/sealed/$name.sealedsecret.yaml" ] || continue
               want=$(tr ',' '\n' <<<"$keys" | sed 's/?$//' | sort | paste -sd, -)
               # Not there yet is a normal state of this loop, not a step failure (bash -e -o pipefail).
               have=$(kubectl -n "$ns" get secret "$name" -o json 2>/dev/null | jq -r '.data // {} | keys[]' | sort | paste -sd, -) || have=""
@@ -148,9 +149,13 @@ jobs:
             [ "$SECONDS" -lt "$end" ] || { printf 'FAIL secret-materialised: %s\n' "${missing[@]}"; exit 1; }
             sleep 3
           done
-          for s in observability/alerting-secrets data/ops-secrets; do
-            if kubectl -n "${s%%/*}" get secret "${s#*/}" >/dev/null 2>&1; then echo "FAIL secret-materialised: optional $s exists"; exit 1; fi
-          done
+          # An optional row that prod has not sealed is sealed by nobody, so its Secret must not exist.
+          while IFS=$'\t' read -r name ns req _keys; do
+            case "$name" in '#'* | '') continue ;; esac
+            [ "$req" = optional ] || continue
+            [ ! -f "deploy/k8s/overlays/prod/sealed/$name.sealedsecret.yaml" ] || continue
+            if kubectl -n "$ns" get secret "$name" >/dev/null 2>&1; then echo "FAIL secret-materialised: optional $ns/$name exists"; exit 1; fi
+          done < <(tr -d '\r' <deploy/k8s/overlays/prod/secrets.tsv)
           echo "OK secret-materialised"
 
       - name: old-key-unseals

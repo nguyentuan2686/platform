@@ -557,7 +557,7 @@ flowchart LR
     <li><b>Cảnh báo</b> (Grafana): error-rate-high, latency-p95-high, pod-restart-loop, consumer-lag-rising, disk-usage-high, deploy-failed, backup-skipped, mail-cap-reached, mail-client-cap-hits. Thông báo đi Telegram khi có <code>alerting-secrets</code>.</li>
     <li><b>Backup:</b> CronJob <code>pg-backup</code> 03:00 giờ Việt Nam, chạy <code>pg_dump -Fc</code> 5 DB, đẩy lên S3/R2, giữ 14 ngày. CronJob <code>heartbeat</code> 5 phút một lần ping Healthchecks.io: VM chết thì mất ping và có cảnh báo từ bên ngoài. Diễn tập khôi phục bằng <code>scripts/pg-restore.sh</code> (mặc định khôi phục vào DB <code>*_restore_check</code>).</li>
   </ol>
-  <p>Grafana, Argo CD UI và kube API chỉ mở trong tailnet, không có domain công khai.</p>
+  <p>Grafana, Argo CD UI và kube API chỉ mở trong tailnet, không có domain công khai. Xem từ laptop mà không cài Tailscale: ServiceAccount <code>ops-reader</code> (chỉ đọc pod, log, event, workload; port-forward chỉ trong <code>observability</code>; không đọc Secret, không exec), kubeconfig 30 ngày tạo trên host bằng <code>scripts/ops-kubeconfig.sh</code>, dùng qua Tailscale chạy trong container Docker (go-live.md §6a). Không bao giờ dùng trong CI.</p>
 </section>
 
 <!-- 6 -->
@@ -588,6 +588,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>PR #52: quyền chỉ đọc <code>ops-reader</code> qua tailnet (kubectl, log, Grafana từ laptop qua Docker); job bootstrap seal cả secret optional mà prod đã seal.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>PR #48: xem số hợp mệnh lên prod (route <code>/api/xem-so</code>, endpoint <code>/tuvi/number-check</code>, bảng <code>number_check_usage</code>, secret <code>NUMBER_CHECK_HMAC_KEY</code> đã seal, lý do 409 <code>number_quota_ip</code>).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Bản đầu tiên: đường đi request, 6 luồng nghiệp vụ, CI/CD và Argo CD, nơi cất secret, observability, trạng thái go-live. Thêm luật cập nhật trong CLAUDE.md và CI job <code>system-docs</code>.</div></li>
   </ol>
