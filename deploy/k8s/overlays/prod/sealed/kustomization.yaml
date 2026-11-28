@@ -12,6 +12,7 @@ resources:
   - identity-svc-secrets.sealedsecret.yaml
   - namespace-edge.yaml
   - notify-svc-secrets.sealedsecret.yaml
+  - notify-telegram-secrets.sealedsecret.yaml
   - order-svc-secrets.sealedsecret.yaml
   - payment-svc-secrets.sealedsecret.yaml
   - postgres-secrets.sealedsecret.yaml

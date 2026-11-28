@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://platform.dev/contracts/events/payment-succeeded.v1.schema.json",
   "title": "PaymentSucceeded v1",
-  "description": "Envelope published to topic payments.payment-succeeded.v1 (key = account_id). Consumed by identity-svc (grants credits or a pass, idempotent on event_id and on data.order_id).",
+  "description": "Envelope published to topic payments.payment-succeeded.v1 (key = account_id). Consumed by identity-svc (grants credits or a pass, idempotent on event_id and on data.order_id) and notify-svc (revenue + a Telegram message to the owner, idempotent on event_id and on data.order_id; reads order_id, product_code, amount, currency, paid_at).",
   "type": "object",
   "required": ["event_id", "event_type", "occurred_at", "data"],
   "properties": {

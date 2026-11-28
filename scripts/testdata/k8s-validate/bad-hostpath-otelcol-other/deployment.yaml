@@ -1,0 +1,18 @@
+# Self-test fixture: the collector's writable checkpoint dir /var/lib/otelcol, but in a workload that is not the
+# otel-collector DaemonSet (the exception is for that one workload only).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: fixture, namespace: observability}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      containers:
+        - name: c
+          image: busybox:1.37
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 32Mi}}
+          volumeMounts: [{name: state, mountPath: /state}]
+      volumes:
+        - name: state
+          hostPath: {path: /var/lib/otelcol, type: DirectoryOrCreate}

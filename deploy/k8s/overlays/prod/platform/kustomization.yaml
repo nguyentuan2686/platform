@@ -39,6 +39,24 @@ patches:
                   - name: upload
                     env:
                       - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1
+  # log-export: same switch as pg-backup (it uploads to the same S3 target).
+  - patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata: {name: log-export, namespace: data}
+      spec:
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                initContainers:
+                  - name: export
+                    env:
+                      - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1
+                containers:
+                  - name: upload
+                    env:
+                      - {name: BACKUP_REQUIRED, value: "0"} # go-live: set 1
   # Telegram alerts (alerting-secrets is sealed in prod): the init container renders the contact point only at pod
   # start, so (a) it must wait for the Secret instead of starting without it (non-optional ref: the kubelet retries
   # until prod-sealed has unsealed it), and (b) the pod restarts when this revision changes. Bump it in the PR that

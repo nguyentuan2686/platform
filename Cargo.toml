@@ -51,6 +51,9 @@ yaml_serde = "0.10.7"
 # Embeds the tz database: the distroless runtime image has no /usr/share/zoneinfo.
 jiff = { version = "1.0", default-features = false, features = ["std", "tzdb-bundle-always"] }
 x-iztro = { version = "0.9.0", default-features = false }
+# Outbound HTTPS (notify-svc: Telegram, Prometheus, Grafana) on the ring provider that rustls already uses here.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "query"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

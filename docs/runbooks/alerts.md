@@ -27,7 +27,7 @@ Severity warning. A Redpanda consumer group has lag above 100 messages and growi
 ## disk-usage-high
 Severity critical. A node's filesystem is more than 80% used for 10m (`k8s_node_filesystem_usage_bytes / k8s_node_filesystem_capacity_bytes`, from the collector's kubeletstats receiver, i.e. the kubelet's own filesystem stats; no pod mounts the host root).
 - First queries: `max by (k8s_node_name) (k8s_node_filesystem_usage_bytes) / max by (k8s_node_name) (k8s_node_filesystem_capacity_bytes)`; on the node `df -h /` and `du -xh --max-depth=2 / | sort -h | tail`.
-- Likely fixes: prune unused images (`k3s crictl rmi --prune`), shrink container logs, check that Prometheus, Loki and Tempo retention is in effect (15d, 168h, 168h) and the telemetry volume `lgtm-data` is not the culprit, remove old files in `/var/lib/rancher`; if the disk is simply too small, grow it.
+- Likely fixes: prune unused images (`k3s crictl rmi --prune`), shrink container logs, check that Prometheus, Loki and Tempo retention is in effect (Prometheus 15d, Loki 30d, Tempo 168h) and the telemetry volume `lgtm-data` is not the culprit, remove old files in `/var/lib/rancher`; if the disk is simply too small, grow it.
 
 ## deploy-failed
 Severity critical. An Argo CD application has been `Degraded` or `Missing` for 10m (`argocd_app_info{health_status=~"Degraded|Missing"}`, scraped from `argocd-metrics.argocd.svc.cluster.local:8082`).
@@ -38,6 +38,12 @@ Severity critical. An Argo CD application has been `Degraded` or `Missing` for 1
 Severity warning. The nightly `pg-backup` skipped because S3 is not configured (`ops-secrets` absent, `BACKUP_REQUIRED=0`): there is no off-host copy of the data. `backup.sh` pushes `platform_backup_skipped=1` (job `pg-backup`) to the collector on each skip; the rule looks back 26h, so it keeps firing while the backups keep skipping and clears a day after the first real backup.
 - First queries: `max_over_time(platform_backup_skipped[26h])`; `kubectl -n data logs job/<latest pg-backup job> -c upload` (`backup: S3 not configured, skipping`).
 - Fix: seal `ops-secrets` and set both `BACKUP_REQUIRED` to `"1"` in one PR (`docs/runbooks/go-live.md` §5; `scripts/k8s-validate.sh` check `prod-backup` keeps the two together), then run a restore drill (§8).
+
+## log-pipeline-down
+Severity critical. The otel-collector exported no log record for 15m (held 5m), so new logs are not reaching Loki. The heartbeat CronJob prints a line every 5 min and its pods are read by `filelog`, so a working pipeline always exports something; a missing counter (collector down, self-scrape broken) fires too.
+- First queries: `sum by (exporter) (increase(otelcol_exporter_sent_log_records_total[15m]))`, `increase(otelcol_exporter_send_failed_log_records_total[15m])`, `increase(otelcol_receiver_accepted_log_records_total{receiver="filelog"}[15m])`; `kubectl -n observability get pod -l app=otel-collector`, `kubectl -n observability logs ds/otel-collector`; `kubectl -n data get jobs -l app=heartbeat`.
+- Likely fixes: collector crash-looping or OOM (raise its memory limit), lgtm down or refusing (`send_failed` rising: see lgtm logs; the persistent queue in `/var/lib/otelcol` re-sends once it is back), heartbeat CronJob suspended or failing (then only the canary is missing: check app logs in Grafana).
+- Durability: filelog keeps per-file checkpoints and the export queue in `/var/lib/otelcol` on the host, so a collector restart neither loses nor duplicates lines. Lines of a pod deleted while the collector was down are lost (kubelet removes its files). Loki keeps 30 days; CronJob `log-export` copies each day to S3 (`logs/<day>.jsonl.gz`, 90 days) once `ops-secrets` is sealed.
 
 ## mail-cap-reached
 Severity warning. identity-svc refused magic-link mail at the global daily cap (`MAIL_DAILY_CAP`, default 200 over all addresses per rolling 24h): logins by email answer 429 until older links age out. Counter `identity_magic_link_daily_cap_reached_total`.

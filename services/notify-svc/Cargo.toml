@@ -12,12 +12,14 @@ platform-core = { path = "../../libs/rust/platform-core" }
 anyhow.workspace = true
 async-trait.workspace = true
 axum.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-time = { workspace = true, features = ["serde"] }
+time = { workspace = true, features = ["serde", "parsing", "macros"] }
 tokio = { workspace = true, features = ["net", "signal"] }
 tokio-util.workspace = true
 tracing.workspace = true
