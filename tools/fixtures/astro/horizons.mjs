@@ -1,0 +1,115 @@
+// Writes the JPL Horizons reference fixtures for astro-chart-svc (see README.md).
+// Node 22, built-in fetch, no dependencies. Deterministic: a pure function of the lists below.
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const svc = resolve(root, "services/astro-chart-svc");
+const API = "https://ssd.jpl.nasa.gov/api/horizons.api";
+
+const BODIES = [
+  ["Sun", "10"], ["Moon", "301"], ["Mercury", "199"], ["Venus", "299"], ["Mars", "499"],
+  ["Jupiter", "599"], ["Saturn", "699"], ["Uranus", "799"], ["Neptune", "899"],
+  ["Pluto", "999"], ["Chiron", "2060;"],
+];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const p2 = (n) => String(n).padStart(2, "0");
+const iso = (d) => d.toISOString().slice(0, 19) + "Z";
+const jd = (d) => d.getTime() / 86400000 + 2440587.5;
+const hzDate = (d) =>
+  `${d.getUTCFullYear()}-${MON[d.getUTCMonth()]}-${p2(d.getUTCDate())} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`;
+
+const parseHz = (s) => {
+  const m = s.match(/^(\d+)-(\w+)-(\d+) (\d+):(\d+)(?::(\d+(?:\.\d+)?))?/);
+  return Date.UTC(+m[1], MON.indexOf(m[2]), +m[3], +m[4], +m[5], Math.round(+(m[6] ?? 0)));
+};
+let last = 0;
+async function horizons(params) {
+  const qs = new URLSearchParams({ format: "json", MAKE_EPHEM: "YES", EPHEM_TYPE: "OBSERVER",
+    CENTER: "500@399", QUANTITIES: "31", ANG_FORMAT: "DEG", CSV_FORMAT: "YES", ...params });
+  for (let attempt = 1; ; attempt++) {
+    const wait = 1100 - (Date.now() - last);
+    if (wait > 0) await sleep(wait);
+    last = Date.now();
+    let res, text;
+    try {
+      res = await fetch(`${API}?${qs}`);
+      text = await res.text();
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      continue;
+    }
+    if (!res.ok && attempt < 4 && (res.status === 429 || res.status >= 500)) { await sleep(3000); continue; }
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`);
+    const result = JSON.parse(text).result ?? "";
+    const a = result.indexOf("$$SOE"), b = result.indexOf("$$EOE");
+    if (a < 0 || b < 0) throw new Error(`no data for ${params.COMMAND}: ${result.slice(0, 600)}`);
+    return result.slice(a + 5, b).split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+      const f = l.split(",").map((s) => s.trim());
+      const nums = f.slice(1).filter((s) => s !== "" && !Number.isNaN(Number(s)));
+      if (nums.length < 2) throw new Error(`bad row: ${l}`);
+      return { date: f[0], lon: nums[nums.length - 2], lat: nums[nums.length - 1] };
+    });
+  }
+}
+
+// --- epochs -------------------------------------------------------------
+const epochs = [];
+for (let k = 0; k <= 60; k++) { // every 40 months from 1900-01-15 to 2100-11-15
+  epochs.push(new Date(Date.UTC(1900, k * 40, 15, (k * 7) % 24, 0, 0)));
+}
+epochs.push(new Date(Date.UTC(1990, 6, 15, 7, 30)));  // snapshot birth
+epochs.push(new Date(Date.UTC(2023, 3, 21, 8, 0)));   // Mercury station
+epochs.push(new Date(Date.UTC(2100, 11, 31, 12, 0))); // end of range
+
+// Moon one hour before a sign ingress: hourly Moon from 2000-01-01, last sample still in the old sign
+const t0 = Date.UTC(2000, 0, 1);
+const moon = await horizons({ COMMAND: "'301'", TLIST_TYPE: "JD", TIME_TYPE: "UT",
+  START_TIME: "'2000-01-01 00:00'", STOP_TIME: "'2000-01-05 00:00'", STEP_SIZE: "'60 m'" });
+let ingress = null;
+for (let i = 0; i + 1 < moon.length; i++) {
+  if (Math.floor(Number(moon[i].lon) / 30) !== Math.floor(Number(moon[i + 1].lon) / 30)) {
+    ingress = new Date(t0 + i * 3600000);
+    console.log(`Moon ingress between ${moon[i].date} (${moon[i].lon}) and ${moon[i + 1].date} (${moon[i + 1].lon})`);
+    break;
+  }
+}
+if (!ingress) throw new Error("no Moon ingress found");
+epochs.push(ingress);
+epochs.sort((a, b) => a - b);
+
+// --- golden cases ---------------------------------------------------------
+const tlist = epochs.map((d) => `'${jd(d).toFixed(8)}'`).join(",");
+const cases = epochs.map((d) => ({ utc: iso(d), bodies: {} }));
+for (const [name, cmd] of BODIES) {
+  const rows = await horizons({ COMMAND: `'${cmd}'`, TLIST_TYPE: "JD", TIME_TYPE: "UT", TLIST: tlist });
+  if (rows.length !== epochs.length) throw new Error(`${name}: ${rows.length} rows for ${epochs.length} epochs`);
+  rows.forEach((r, i) => {
+    if (Math.abs(parseHz(r.date) - epochs[i]) > 1000) throw new Error(`${name}: row ${i} date ${r.date} != ${hzDate(epochs[i])}`);
+    cases[i].bodies[name] = { lon: Number(r.lon), lat: Number(r.lat) };
+  });
+  console.log(`${name}: ${rows.length} rows`);
+}
+mkdirSync(resolve(svc, "tests/fixtures"), { recursive: true });
+const golden = `{"source":"JPL Horizons API (ssd.jpl.nasa.gov/api/horizons.api), EPHEM_TYPE=OBSERVER CENTER=500@399 QUANTITIES=31 TIME_TYPE=UT ANG_FORMAT=DEG; generated by tools/fixtures/astro/horizons.mjs","cases":[\n` +
+  cases.map((c) => JSON.stringify(c)).join(",\n") + "\n]}\n";
+writeFileSync(resolve(svc, "tests/fixtures/horizons-golden.json"), golden);
+console.log(`horizons-golden.json: ${cases.length} cases`);
+
+// --- Pluto / Chiron TT tables ---------------------------------------------
+const START = Date.UTC(1899, 11, 21), STOP = Date.UTC(2101, 0, 10);
+const jdeStart = START / 86400000 + 2440587.5;
+mkdirSync(resolve(svc, "data"), { recursive: true });
+for (const [name, cmd, file] of [["Pluto", "999", "pluto.csv"], ["Chiron", "2060;", "chiron.csv"]]) {
+  const rows = await horizons({ COMMAND: `'${cmd}'`, TIME_TYPE: "TT",
+    START_TIME: "'1899-12-21 00:00'", STOP_TIME: "'2101-01-10 00:00'", STEP_SIZE: "'5 d'" });
+  const expected = Math.floor((STOP - START) / 86400000 / 5) + 1;
+  if (rows.length !== expected) throw new Error(`${name}: ${rows.length} rows, expected ${expected}`);
+  if (parseHz(rows[0].date) !== START) throw new Error(`${name}: first row ${rows[0].date}`);
+  const body = rows.map((r) => `${Number(r.lon).toFixed(7)},${Number(r.lat).toFixed(7)}`).join("\n");
+  writeFileSync(resolve(svc, "data", file),
+    `# jde_start=${jdeStart} step_days=5 source=JPL Horizons QUANTITIES=31 TIME_TYPE=TT\n${body}\n`);
+  console.log(`${file}: ${rows.length} rows (first ${rows[0].date}, last ${rows[rows.length - 1].date})`);
+}
