@@ -99,6 +99,16 @@ jobs:
           build-args: WEB_ORIGIN=http://localhost:3001
           cache-from: type=gha,scope=web-amd64
 
+      - name: Build astro-chart-svc
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/astro-chart-svc/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: astro-chart-svc:e2e
+          cache-from: type=gha,scope=astro-chart-svc-amd64
       # new-service: e2e-builds (scripts/new-service.sh inserts image builds above this line)
 
       - name: Install kind and kubectl (pinned, sha256 verified)
@@ -118,7 +128,7 @@ jobs:
 
       - name: Load images into kind
         run: |
-          for svc in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web; do # new-service: e2e-load
+          for svc in order-svc notify-svc chart-svc reading-tuvi identity-svc payment-svc web astro-chart-svc; do # new-service: e2e-load
             kind load docker-image "${svc}:e2e"
           done
 

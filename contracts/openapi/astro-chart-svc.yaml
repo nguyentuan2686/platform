@@ -1,0 +1,78 @@
+openapi: 3.1.0
+info:
+  title: astro-chart-svc
+  version: 1.0.0
+  description: >-
+    astro-chart-svc (scaffolded by scripts/new-service.sh). Replace the sample GET /v1/info with the real API;
+    the contract tests check every path below against the served routes and schemas.
+paths:
+  /health/live:
+    get:
+      operationId: healthLive
+      summary: Liveness probe
+      responses:
+        '200':
+          description: The process is up.
+  /health/ready:
+    get:
+      operationId: healthReady
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Ready to serve traffic.
+        '503':
+          description: Not ready.
+  /v1/info:
+    get:
+      operationId: getInfo
+      summary: Sample endpoint, the service's name
+      responses:
+        '200':
+          description: The service's name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Info'
+        '404':
+          description: Unknown route (every error is a problem+json with trace_id)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    Info:
+      type: object
+      required: [service]
+      additionalProperties: false
+      properties:
+        service:
+          type: string
+          minLength: 1
+    Problem:
+      type: object
+      description: RFC 9457 problem details with platform extensions.
+      required: [type, title, status, trace_id]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string

@@ -56,4 +56,14 @@ updates:
     groups:
       docker-minor-patch:
         update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /services/astro-chart-svc
+    schedule:
+      interval: weekly
+    # Rust toolchain is pinned in rust-toolchain.toml; bump it deliberately together with the Dockerfile tags.
+    ignore:
+      - dependency-name: rust
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
   # new-service: dependabot (scripts/new-service.sh inserts above this line)
