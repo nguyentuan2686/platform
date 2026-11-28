@@ -128,7 +128,7 @@ java_renders_and_registers() {
   done
   grep -qx '      - demo-java' "$scr/.github/workflows/ci.yml" || fail "$c" "not in ci-gate needs"
   once "$c" 'tags: demo-java:e2e' .github/workflows/_k8s-e2e.yml
-  once "$c" ' payment-svc web demo-java; do # new-service: e2e-load' .github/workflows/_k8s-e2e.yml
+  once "$c" ' astro-chart-svc demo-java; do # new-service: e2e-load' .github/workflows/_k8s-e2e.yml
   once "$c" 'directory: /services/demo-java' .github/dependabot.yml
   once "$c" '  demo-java:' deploy/local/docker-compose.yml
   once "$c" '"127.0.0.1:${DEMO_JAVA_PORT:-8901}:8901"' deploy/local/docker-compose.yml

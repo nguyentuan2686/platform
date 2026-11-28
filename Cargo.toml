@@ -4,6 +4,7 @@ members = [
   "libs/rust/platform-core",
   "services/notify-svc",
   "services/chart-svc",
+  "services/astro-chart-svc",
   # new-service: cargo-members (scripts/new-service.sh inserts above this line)
 ]
 
@@ -16,6 +17,7 @@ rust-version = "1.100"
 
 # Shared dependency versions go here; members use `dep.workspace = true`.
 [workspace.dependencies]
+vsop87 = "3.0.0"
 anyhow = "1.0.105"
 time = { version = "0.3.55", features = ["formatting"] }
 opentelemetry = "0.33.1"

@@ -1,0 +1,266 @@
+//! The natal chart as it goes on the wire (camelCase JSON). Angles, speeds and orbs are
+//! rounded to 4 decimals by [`round4`] when the value is built.
+
+use serde::Serialize;
+
+use super::angles::{norm360, Sign};
+
+/// Decimals kept on every angle, speed and orb.
+const SCALE: f64 = 10_000.0;
+
+/// `x` rounded to 4 decimals (never `-0.0`).
+pub fn round4(x: f64) -> f64 {
+    (x * SCALE).round() / SCALE + 0.0
+}
+
+/// A longitude as it goes on the wire: rounded to 4 decimals first and reduced to [0, 360)
+/// (so 359.99996 is 0.0), then the sign and the degrees within it taken from that rounded
+/// value, so `lon`, `sign` and `deg` always agree and `deg` stays below 30.
+pub fn round_lon(lon: f64) -> (f64, Sign, f64) {
+    let lon = norm360(round4(norm360(lon)));
+    let (sign, deg) = Sign::of(lon);
+    (lon, sign, round4(deg))
+}
+
+/// The house (1..=12) whose cusp interval contains `lon`; intervals may cross 360°.
+pub fn house_of(lon: f64, cusps: &[f64; 12]) -> u8 {
+    for (i, start) in cusps.iter().enumerate() {
+        let end = cusps[(i + 1) % 12];
+        let width = norm360(end - start);
+        if norm360(lon - start) < width {
+            #[allow(clippy::cast_possible_truncation)] // i <= 11
+            return i as u8 + 1;
+        }
+    }
+    // Unreachable for cusps going round once; the first house keeps the function total.
+    1
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Chart {
+    pub school: String,
+    pub instant_utc: String,
+    pub time_known: bool,
+    pub house_system: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub house_fallback: Option<&'static str>,
+    pub moon_sign_uncertain: bool,
+    pub bodies: Vec<BodyOut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angles: Option<AnglesOut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub houses: Option<Vec<HouseOut>>,
+    pub aspects: Vec<AspectOut>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BodyOut {
+    pub key: &'static str,
+    pub lon: f64,
+    pub lat: f64,
+    pub sign: &'static str,
+    pub deg: f64,
+    pub speed: f64,
+    pub retrograde: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub house: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnglesOut {
+    pub asc: AngleOut,
+    pub mc: AngleOut,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AngleOut {
+    pub lon: f64,
+    pub sign: &'static str,
+    pub deg: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HouseOut {
+    pub house: u8,
+    pub cusp: f64,
+    pub sign: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AspectOut {
+    pub a: &'static str,
+    pub b: &'static str,
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    pub orb: f64,
+    pub applying: bool,
+}
+
+/// The daily facts of `POST /astro/transits`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transits {
+    pub date: String,
+    pub moon: TransitMoon,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moon_ingress: Option<MoonIngress>,
+    pub aspects: Vec<AspectOut>,
+}
+
+/// The transiting Moon at 12:00 of the day, viewer-local.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitMoon {
+    pub sign: &'static str,
+    pub deg: f64,
+    pub house: u8,
+    /// `natal` (the natal cusps) or `solar` (whole signs from the natal Sun's sign).
+    pub house_basis: &'static str,
+    pub phase: &'static str,
+}
+
+/// The Moon entering a new sign during the viewer's local day.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonIngress {
+    /// Viewer-local `HH:MM`, truncated to the minute.
+    pub at: String,
+    pub sign: &'static str,
+}
+
+const PHASES: [&str; 8] = [
+    "new",
+    "waxing-crescent",
+    "first-quarter",
+    "waxing-gibbous",
+    "full",
+    "waning-gibbous",
+    "last-quarter",
+    "waning-crescent",
+];
+
+/// The Moon phase key for an elongation (Moon − Sun), in 45° bins centred on 0, 45, ….
+pub fn moon_phase_key(elongation: f64) -> &'static str {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // in [0, 8]
+    let bin = ((norm360(elongation) + 22.5) / 45.0).floor() as usize;
+    PHASES[bin % 8]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn equal_from(first: f64) -> [f64; 12] {
+        let mut c = [0.0; 12];
+        for (i, v) in c.iter_mut().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let step = 30.0 * i as f64;
+            *v = norm360(first + step);
+        }
+        c
+    }
+
+    #[test]
+    fn rounds_to_four_decimals_and_drops_negative_zero() {
+        assert!((round4(12.345_678) - 12.3457).abs() < 1e-12);
+        assert!(round4(-0.000_01).is_sign_positive());
+        assert!((round4(-1.234_56) - -1.2346).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_longitude_is_rounded_before_its_sign_is_taken() {
+        assert_eq!(round_lon(89.999_96), (90.0, Sign::Cancer, 0.0));
+        assert_eq!(round_lon(359.999_96), (0.0, Sign::Aries, 0.0));
+        assert_eq!(round_lon(-0.000_01), (0.0, Sign::Aries, 0.0));
+        let (lon, sign, deg) = round_lon(123.456_789);
+        assert_eq!((lon, sign), (123.4568, Sign::Leo));
+        assert!((deg - 3.4568).abs() < 1e-9, "{deg}");
+        for x in [29.999_95, 29.999_949, 59.999_999, 329.999_96] {
+            let (lon, sign, deg) = round_lon(x);
+            assert!(lon < 360.0 && deg < 30.0, "{x}: {lon} {deg}");
+            assert_eq!(Sign::of(lon).0, sign, "{x}");
+        }
+    }
+
+    #[test]
+    fn house_of_handles_the_wrap_at_360() {
+        let c = equal_from(345.0); // house 1 spans 345..15
+        assert_eq!(house_of(350.0, &c), 1);
+        assert_eq!(house_of(5.0, &c), 1);
+        assert_eq!(house_of(15.0, &c), 2);
+        assert_eq!(house_of(344.9, &c), 12);
+        assert_eq!(house_of(345.0, &c), 1);
+    }
+
+    #[test]
+    fn house_of_with_uneven_cusps() {
+        let c = [
+            10.0, 40.0, 75.0, 110.0, 140.0, 170.0, 190.0, 220.0, 255.0, 290.0, 320.0, 350.0,
+        ];
+        assert_eq!(house_of(100.0, &c), 3);
+        assert_eq!(house_of(355.0, &c), 12);
+        assert_eq!(house_of(2.0, &c), 12);
+    }
+
+    #[test]
+    fn phase_bins_are_centred_on_the_eight_phases() {
+        assert_eq!(moon_phase_key(0.0), "new");
+        assert_eq!(moon_phase_key(22.4), "new");
+        assert_eq!(moon_phase_key(22.6), "waxing-crescent");
+        assert_eq!(moon_phase_key(90.0), "first-quarter");
+        assert_eq!(moon_phase_key(135.0), "waxing-gibbous");
+        assert_eq!(moon_phase_key(180.0), "full");
+        assert_eq!(moon_phase_key(225.0), "waning-gibbous");
+        assert_eq!(moon_phase_key(270.0), "last-quarter");
+        assert_eq!(moon_phase_key(315.0), "waning-crescent");
+        assert_eq!(moon_phase_key(337.4), "waning-crescent");
+        assert_eq!(moon_phase_key(337.6), "new");
+        assert_eq!(moon_phase_key(-10.0), "new");
+    }
+
+    #[test]
+    fn serialises_camel_case_and_skips_absent_options() {
+        let chart = Chart {
+            school: "s".into(),
+            instant_utc: "t".into(),
+            time_known: false,
+            house_system: "placidus",
+            house_fallback: None,
+            moon_sign_uncertain: false,
+            bodies: vec![BodyOut {
+                key: "Sun",
+                lon: 1.0,
+                lat: 0.0,
+                sign: "Aries",
+                deg: 1.0,
+                speed: 1.0,
+                retrograde: false,
+                house: None,
+            }],
+            angles: None,
+            houses: None,
+            aspects: vec![AspectOut {
+                a: "Sun",
+                b: "Moon",
+                kind: "trine",
+                orb: 1.0,
+                applying: true,
+            }],
+        };
+        let json = serde_json::to_value(&chart).unwrap();
+        assert_eq!(json["instantUtc"], "t");
+        assert_eq!(json["moonSignUncertain"], false);
+        assert_eq!(json["aspects"][0]["type"], "trine");
+        let obj = json.as_object().unwrap();
+        assert!(!obj.contains_key("houseFallback"));
+        assert!(!obj.contains_key("angles"));
+        assert!(!obj.contains_key("houses"));
+        assert!(!json["bodies"][0].as_object().unwrap().contains_key("house"));
+    }
+}

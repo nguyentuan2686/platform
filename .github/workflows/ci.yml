@@ -39,6 +39,7 @@ jobs:
       identity: ${{ steps.filter.outputs.identity }}
       payment: ${{ steps.filter.outputs.payment }}
       web: ${{ steps.filter.outputs.web }}
+      astro_chart_svc: ${{ steps.filter.outputs.astro_chart_svc }}
       # new-service: ci-outputs (scripts/new-service.sh inserts above this line)
       scaffold: ${{ steps.filter.outputs.scaffold }}
       k8s: ${{ steps.filter.outputs.k8s }}
@@ -96,6 +97,15 @@ jobs:
               - 'services/web/**'
               - 'knowledge/tuvi/**'
               - 'deploy/k8s/overlays/prod/domain/**' # the build-time WEB_ORIGIN (scripts/web-origin.sh)
+            astro_chart_svc:
+              - 'services/astro-chart-svc/**'
+              - 'libs/rust/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'deny.toml'
+              - '.cargo/**'
+              - 'contracts/openapi/astro-chart-svc.yaml'
             # new-service: ci-filters (scripts/new-service.sh inserts above this line)
             scaffold:
               - 'templates/**'
@@ -246,6 +256,19 @@ jobs:
       image: web
       dockerfile: services/web/Dockerfile
       build-args: WEB_ORIGIN=${{ needs.changes.outputs.web_origin }}
+      publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+
+  astro-chart-svc:
+    needs: changes
+    if: needs.changes.outputs.astro_chart_svc == 'true' || needs.changes.outputs.root == 'true' || inputs.publish_all
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_rust-service.yml
+    with:
+      package: astro-chart-svc
+      image: astro-chart-svc
+      dockerfile: services/astro-chart-svc/Dockerfile
       publish: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
   # new-service: ci-jobs (scripts/new-service.sh inserts service jobs above this line)
@@ -455,6 +478,7 @@ jobs:
       - identity-svc
       - payment-svc
       - web
+      - astro-chart-svc
       # new-service: ci-gate-needs (scripts/new-service.sh inserts above this line)
       - scaffold
       - k8s-manifests

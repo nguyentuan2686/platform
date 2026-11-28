@@ -1,0 +1,478 @@
+//! HTTP adapter tests over the in-process router (`tower::ServiceExt::oneshot`).
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use http_body_util::BodyExt as _;
+use serde_json::{json, Value};
+use tower::ServiceExt as _;
+
+// The service crate in a group of its own: rustfmt sorts within a group, so the order of these
+// lines does not depend on the rendered crate name.
+use astro_chart_svc::app::{router, AppState};
+use astro_chart_svc::application::ports::EphemerisPort;
+use astro_chart_svc::domain::body::{Body as Planet, Ecliptic};
+use astro_chart_svc::domain::time::Moment;
+
+async fn send_to(state: AppState, req: Request<Body>) -> (StatusCode, String, Value) {
+    let res = router(state).oneshot(req).await.unwrap();
+    let status = res.status();
+    let ct = res
+        .headers()
+        .get("content-type")
+        .map_or_else(String::new, |v| v.to_str().unwrap().to_owned());
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, ct, serde_json::from_slice(&bytes).unwrap())
+}
+
+async fn send(req: Request<Body>) -> (StatusCode, String, Value) {
+    send_to(AppState::new(), req).await
+}
+
+async fn get(uri: &str) -> (StatusCode, String, Value) {
+    send(Request::get(uri).body(Body::empty()).unwrap()).await
+}
+
+fn post_raw(body: &str) -> Request<Body> {
+    Request::post("/astro/chart")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_owned()))
+        .unwrap()
+}
+
+async fn post(body: &Value) -> (StatusCode, String, Value) {
+    send(post_raw(&body.to_string())).await
+}
+
+/// A valid request with `patch` merged over it (a `null` value removes the field).
+fn valid_with(patch: &Value) -> Value {
+    let mut base = json!({
+        "birth": "1990-07-15T14:30",
+        "zone": "Asia/Ho_Chi_Minh",
+        "lat": 21.0285,
+        "lon": 105.8542,
+        "timeKnown": true,
+    });
+    for (k, v) in patch.as_object().unwrap() {
+        if v.is_null() {
+            base.as_object_mut().unwrap().remove(k);
+        } else {
+            base[k] = v.clone();
+        }
+    }
+    base
+}
+
+/// Asserts a 400 `validation-error` problem whose first error names `field`.
+async fn assert_invalid(body: &Value, field: &str) -> Value {
+    let (status, ct, problem) = post(body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body} -> {problem}");
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(problem["type"], "urn:problem:validation-error");
+    assert_eq!(problem["errors"][0]["field"], field, "{body} -> {problem}");
+    assert!(problem["trace_id"].is_string(), "{problem}");
+    problem
+}
+
+#[tokio::test]
+async fn live_is_up() {
+    let (status, _, body) = get("/health/live").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({"status": "UP"}));
+}
+
+#[tokio::test]
+async fn ready_is_up() {
+    let (status, _, body) = get("/health/ready").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "UP");
+}
+
+#[tokio::test]
+async fn the_scaffold_info_route_is_gone() {
+    let (status, _, _) = get("/v1/info").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn unknown_route_is_a_not_found_problem() {
+    let (status, ct, body) = get("/nope").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(body["type"], "urn:problem:not-found");
+    assert_eq!(body["status"], 404);
+    assert!(body["trace_id"].is_string(), "{body}");
+}
+
+#[tokio::test]
+async fn wrong_method_on_a_route_is_a_problem() {
+    let req = Request::get("/astro/chart").body(Body::empty()).unwrap();
+    let (status, ct, body) = send(req).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(body["detail"], "route GET /astro/chart not found");
+    assert!(body["trace_id"].is_string(), "{body}");
+}
+
+#[tokio::test]
+async fn a_valid_request_returns_a_camel_case_chart() {
+    let (status, ct, chart) = post(&valid_with(&json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{chart}");
+    assert!(ct.starts_with("application/json"), "{ct}");
+    assert_eq!(chart["instantUtc"], "1990-07-15T07:30:00Z");
+    assert_eq!(chart["timeKnown"], true);
+    assert_eq!(chart["houseSystem"], "placidus");
+    assert!(chart.get("houseFallback").is_none());
+    assert_eq!(chart["bodies"].as_array().unwrap().len(), 12);
+    assert_eq!(chart["bodies"][0]["key"], "Sun");
+    assert_eq!(chart["houses"].as_array().unwrap().len(), 12);
+    assert!(chart["angles"]["asc"]["lon"].is_number());
+}
+
+#[tokio::test]
+async fn the_house_system_is_honoured() {
+    let (status, _, chart) = post(&valid_with(&json!({"houseSystem": "whole-sign"}))).await;
+    assert_eq!(status, StatusCode::OK, "{chart}");
+    assert_eq!(chart["houseSystem"], "whole-sign");
+    assert!(chart["school"]
+        .as_str()
+        .unwrap()
+        .contains("houses=whole-sign"));
+}
+
+#[tokio::test]
+async fn an_unknown_time_has_no_angles_or_houses() {
+    let (status, _, chart) = post(&valid_with(&json!({"timeKnown": false}))).await;
+    assert_eq!(status, StatusCode::OK, "{chart}");
+    assert_eq!(chart["timeKnown"], false);
+    assert_eq!(chart["instantUtc"], "1990-07-15T05:00:00Z");
+    assert!(chart.get("angles").is_none());
+    assert!(chart.get("houses").is_none());
+    assert!(chart["moonSignUncertain"].is_boolean());
+}
+
+#[tokio::test]
+async fn an_arctic_birth_falls_back_to_whole_sign() {
+    let body = valid_with(&json!({"zone": "Europe/Oslo", "lat": 69.65, "lon": 18.96}));
+    let (status, _, chart) = post(&body).await;
+    assert_eq!(status, StatusCode::OK, "{chart}");
+    assert_eq!(chart["houseSystem"], "placidus");
+    assert_eq!(chart["houseFallback"], "whole-sign");
+}
+
+// Review Focus 5: every invalid input is a 400 naming its field, never a 500.
+
+#[tokio::test]
+async fn impossible_date_is_a_birth_error() {
+    assert_invalid(&valid_with(&json!({"birth": "1990-02-30T10:00"})), "birth").await;
+}
+
+#[tokio::test]
+async fn malformed_birth_strings_are_birth_errors() {
+    for birth in [
+        "1990-07-15",
+        "1990-07-15 14:30",
+        "1990-07-15T14:30:00",
+        "1990-07-15T14:30Z",
+        "1990-07-15T24:00",
+        "1990-07-15T14:60",
+        "",
+    ] {
+        assert_invalid(&valid_with(&json!({ "birth": birth })), "birth").await;
+    }
+    assert_invalid(&valid_with(&json!({"birth": 19_900_715})), "birth").await;
+    assert_invalid(&valid_with(&json!({"birth": null})), "birth").await;
+}
+
+#[tokio::test]
+async fn years_outside_1900_2100_are_birth_errors() {
+    for birth in ["1899-12-31T12:00", "2101-01-01T12:00"] {
+        assert_invalid(&valid_with(&json!({ "birth": birth })), "birth").await;
+    }
+    for birth in ["1900-01-01T12:00", "2100-12-31T12:00"] {
+        let (status, _, body) = post(&valid_with(&json!({ "birth": birth }))).await;
+        assert_eq!(status, StatusCode::OK, "{birth}: {body}");
+    }
+}
+
+/// The extreme instants of the supported range: the speed window reaches past them, and
+/// the Pluto/Chiron tables must still serve them (within their data).
+#[tokio::test]
+async fn the_first_and_last_minutes_of_the_range_are_charts() {
+    for (birth, zone) in [
+        ("2100-12-31T23:59", "Etc/GMT+12"),
+        ("1900-01-01T00:00", "Etc/GMT-14"),
+    ] {
+        let body = valid_with(&json!({ "birth": birth, "zone": zone }));
+        let (status, _, chart) = post(&body).await;
+        assert_eq!(status, StatusCode::OK, "{birth} {zone}: {chart}");
+        assert_eq!(chart["bodies"].as_array().unwrap().len(), 12, "{chart}");
+    }
+}
+
+#[tokio::test]
+async fn unknown_zone_is_a_zone_error() {
+    assert_invalid(&valid_with(&json!({"zone": "Mars/Base"})), "zone").await;
+    assert_invalid(&valid_with(&json!({"zone": null})), "zone").await;
+    assert_invalid(&valid_with(&json!({"zone": 7})), "zone").await;
+}
+
+#[tokio::test]
+async fn latitude_out_of_range_is_a_lat_error() {
+    assert_invalid(&valid_with(&json!({"lat": 91})), "lat").await;
+    assert_invalid(&valid_with(&json!({"lat": -90.5})), "lat").await;
+    assert_invalid(&valid_with(&json!({"lat": "21"})), "lat").await;
+    assert_invalid(&valid_with(&json!({"lat": null})), "lat").await;
+    let (status, _, _) = post(&valid_with(&json!({"lat": 90}))).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn longitude_out_of_range_is_a_lon_error() {
+    assert_invalid(&valid_with(&json!({"lon": -181})), "lon").await;
+    assert_invalid(&valid_with(&json!({"lon": 180.01})), "lon").await;
+    assert_invalid(&valid_with(&json!({"lon": true})), "lon").await;
+    assert_invalid(&valid_with(&json!({"lon": null})), "lon").await;
+}
+
+#[tokio::test]
+async fn unknown_house_system_is_a_house_system_error() {
+    assert_invalid(&valid_with(&json!({"houseSystem": "koch"})), "houseSystem").await;
+    assert_invalid(&valid_with(&json!({"houseSystem": 1})), "houseSystem").await;
+}
+
+#[tokio::test]
+async fn a_null_house_system_means_the_default() {
+    let (status, _, chart) = post(&valid_with(&json!({"houseSystem": null}))).await;
+    assert_eq!(status, StatusCode::OK, "{chart}");
+    assert_eq!(chart["houseSystem"], "placidus");
+}
+
+#[tokio::test]
+async fn missing_time_known_is_a_time_known_error() {
+    assert_invalid(&valid_with(&json!({"timeKnown": null})), "timeKnown").await;
+    assert_invalid(&valid_with(&json!({"timeKnown": "yes"})), "timeKnown").await;
+    assert_invalid(&valid_with(&json!({"timeKnown": 1})), "timeKnown").await;
+}
+
+#[tokio::test]
+async fn a_dst_gap_is_a_birth_error_with_the_gap_message() {
+    let body = valid_with(&json!({
+        "birth": "2021-03-14T02:30",
+        "zone": "America/New_York",
+        "lat": 40.7,
+        "lon": -74.0,
+    }));
+    let problem = assert_invalid(&body, "birth").await;
+    assert_eq!(
+        problem["errors"][0]["message"],
+        "does not exist in the zone (DST gap)"
+    );
+}
+
+#[tokio::test]
+async fn malformed_json_is_a_body_error() {
+    for raw in ["{", "", "not json", "{\"birth\": }"] {
+        let (status, ct, problem) = send(post_raw(raw)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{raw:?}");
+        assert!(ct.starts_with("application/problem+json"), "{ct}");
+        assert_eq!(problem["type"], "urn:problem:validation-error");
+        assert_eq!(problem["errors"][0]["field"], "body", "{raw:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_non_json_content_type_is_a_body_error() {
+    let req = Request::post("/astro/chart")
+        .header("content-type", "text/plain")
+        .body(Body::from(valid_with(&json!({})).to_string()))
+        .unwrap();
+    let (status, _, problem) = send(req).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(problem["errors"][0]["field"], "body");
+}
+
+#[tokio::test]
+async fn a_non_object_or_unknown_field_is_a_body_error() {
+    for raw in ["[]", "null", "42", "\"x\""] {
+        let (status, _, problem) = send(post_raw(raw)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{raw}");
+        assert_eq!(problem["errors"][0]["field"], "body", "{raw}");
+    }
+    assert_invalid(&valid_with(&json!({"extra": 1})), "body").await;
+}
+
+#[tokio::test]
+async fn every_problem_is_reported_not_just_the_first() {
+    let body = json!({"birth": "x", "zone": "Mars/Base", "lat": "n", "timeKnown": true});
+    let (_, _, problem) = post(&body).await;
+    let fields: Vec<&str> = problem["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["field"].as_str().unwrap())
+        .collect();
+    assert_eq!(fields, ["birth", "lat", "lon"]);
+}
+
+struct BrokenEphemeris;
+
+impl EphemerisPort for BrokenEphemeris {
+    fn apparent(&self, _: Planet, _: Moment) -> anyhow::Result<Ecliptic> {
+        Err(anyhow::anyhow!("ephemeris broke"))
+    }
+}
+
+#[tokio::test]
+async fn an_ephemeris_failure_is_a_generic_500() {
+    let req = post_raw(&valid_with(&json!({})).to_string());
+    let (status, ct, problem) = send_to(AppState::with_ephemeris(BrokenEphemeris), req).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(problem["type"], "urn:problem:internal-error");
+    assert_eq!(problem["detail"], "Unexpected error");
+    assert!(problem["trace_id"].is_string(), "{problem}");
+    assert!(
+        !problem.to_string().contains("ephemeris broke"),
+        "{problem}"
+    );
+}
+
+// ---------------------------------------------------------------- POST /astro/transits
+
+fn transit_with(patch: &Value) -> Value {
+    let mut base = json!({
+        "natal": valid_with(&json!({})),
+        "date": "2026-03-10",
+        "viewerZone": "Asia/Ho_Chi_Minh",
+    });
+    for (k, v) in patch.as_object().unwrap() {
+        if v.is_null() {
+            base.as_object_mut().unwrap().remove(k);
+        } else {
+            base[k] = v.clone();
+        }
+    }
+    base
+}
+
+/// A transit request whose `natal` has `patch` merged over the valid natal request.
+fn natal_with(patch: &Value) -> Value {
+    transit_with(&json!({ "natal": valid_with(patch) }))
+}
+
+async fn post_transits(body: &Value) -> (StatusCode, String, Value) {
+    send(
+        Request::post("/astro/transits")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+    )
+    .await
+}
+
+async fn assert_transit_invalid(body: &Value, field: &str) {
+    let (status, ct, problem) = post_transits(body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body} -> {problem}");
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(problem["type"], "urn:problem:validation-error");
+    assert_eq!(problem["errors"][0]["field"], field, "{body} -> {problem}");
+    assert!(problem["trace_id"].is_string(), "{problem}");
+}
+
+#[tokio::test]
+async fn a_valid_transit_request_returns_the_daily_facts() {
+    let (status, ct, t) = post_transits(&transit_with(&json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{t}");
+    assert!(ct.starts_with("application/json"), "{ct}");
+    assert_eq!(t["date"], "2026-03-10");
+    assert_eq!(t["moon"]["houseBasis"], "natal");
+    assert!(t["moon"]["sign"].is_string());
+    assert!(t["moon"]["phase"].is_string());
+    assert!(t["moon"]["house"].as_u64().unwrap() >= 1);
+    assert!(t["aspects"].is_array());
+}
+
+#[tokio::test]
+async fn an_unknown_birth_time_gives_the_solar_house_basis() {
+    let (status, _, t) = post_transits(&natal_with(&json!({"timeKnown": false}))).await;
+    assert_eq!(status, StatusCode::OK, "{t}");
+    assert_eq!(t["moon"]["houseBasis"], "solar");
+}
+
+#[tokio::test]
+async fn natal_field_errors_are_prefixed() {
+    let cases = [
+        (json!({"birth": "1990-02-30T10:00"}), "natal.birth"),
+        (json!({"birth": "1899-12-31T12:00"}), "natal.birth"),
+        (json!({"zone": "Mars/Base"}), "natal.zone"),
+        (json!({"lat": 91}), "natal.lat"),
+        (json!({"lon": -181}), "natal.lon"),
+        (json!({"timeKnown": null}), "natal.timeKnown"),
+        (json!({"houseSystem": "koch"}), "natal.houseSystem"),
+    ];
+    for (patch, field) in cases {
+        assert_transit_invalid(&natal_with(&patch), field).await;
+    }
+}
+
+#[tokio::test]
+async fn bad_date_and_viewer_zone_name_their_fields() {
+    for date in ["2026-02-30", "2026-3-1", "", "x", "2101-01-01"] {
+        assert_transit_invalid(&transit_with(&json!({ "date": date })), "date").await;
+    }
+    assert_transit_invalid(&transit_with(&json!({ "date": 20_260_310 })), "date").await;
+    assert_transit_invalid(&transit_with(&json!({"date": null})), "date").await;
+    let bad_zone = transit_with(&json!({"viewerZone": "Mars/Base"}));
+    assert_transit_invalid(&bad_zone, "viewerZone").await;
+    assert_transit_invalid(&transit_with(&json!({"viewerZone": null})), "viewerZone").await;
+}
+
+#[tokio::test]
+async fn the_last_day_of_the_range_is_a_transit_day() {
+    let natal = valid_with(&json!({"birth": "2100-12-31T23:59", "zone": "Etc/GMT+12"}));
+    let body = transit_with(&json!({
+        "natal": natal,
+        "date": "2100-12-31",
+        "viewerZone": "Etc/GMT+12",
+    }));
+    let (status, _, t) = post_transits(&body).await;
+    assert_eq!(status, StatusCode::OK, "{t}");
+    assert_eq!(t["date"], "2100-12-31");
+}
+
+#[tokio::test]
+async fn a_date_whose_noon_does_not_exist_is_a_date_error() {
+    // Samoa skipped 2011-12-30 entirely (UTC-10 -> UTC+14).
+    let body = transit_with(&json!({"date": "2011-12-30", "viewerZone": "Pacific/Apia"}));
+    let (status, _, problem) = post_transits(&body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{problem}");
+    assert_eq!(problem["errors"][0]["field"], "date", "{problem}");
+    let message = problem["errors"][0]["message"].as_str().unwrap();
+    assert!(message.contains("does not exist in the zone"), "{message}");
+    // The out-of-range message stays for a year outside 1900-2100.
+    let body = transit_with(&json!({"date": "2101-01-01"}));
+    let (_, _, problem) = post_transits(&body).await;
+    assert_eq!(
+        problem["errors"][0]["message"],
+        "must fall in the years 1900-2100"
+    );
+}
+
+#[tokio::test]
+async fn a_bad_transit_body_is_a_body_error() {
+    assert_transit_invalid(&transit_with(&json!({"natal": null})), "body").await;
+    assert_transit_invalid(&transit_with(&json!({"natal": "x"})), "body").await;
+    assert_transit_invalid(&transit_with(&json!({"extra": 1})), "body").await;
+    let mut natal = valid_with(&json!({}));
+    natal["extra"] = json!(1);
+    assert_transit_invalid(&transit_with(&json!({ "natal": natal })), "body").await;
+    let (status, _, problem) = send(
+        Request::post("/astro/transits")
+            .header("content-type", "application/json")
+            .body(Body::from("[1]"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(problem["errors"][0]["field"], "body");
+}

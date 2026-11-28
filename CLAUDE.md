@@ -18,7 +18,7 @@ CLAUDE.md, .claude/{settings.json,skills/}
 Cargo.toml, rust-toolchain.toml, deny.toml, tools/rust-dev/Dockerfile   # Rust workspace + dev image
 contracts/{openapi/<svc>.yaml, events/<event>.schema.json, knowledge/}
 knowledge/tuvi/   # reading-tuvi knowledge base (jsonl), imported at startup
-services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust), reading-tuvi (Java), identity-svc (Java), payment-svc (Java), web (Next.js)}
+services/{order-svc (Java), notify-svc (Rust), chart-svc (Rust), astro-chart-svc (Rust), reading-tuvi (Java), identity-svc (Java), payment-svc (Java), web (Next.js)}
 libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service, k8s, contracts, registration}   # rendered by scripts/new-service.sh (tokens __SERVICE__ etc.); registration/ snippets go in at `new-service: <point>` marker comments
 deploy/{local/docker-compose.yml, k8s/{base,platform,components/{cloudflared-quick,cloudflared-named},overlays/{e2e,prod/{platform,tunnel,apps,sealed,domain}}}, argocd/{root.yaml,apps/}}   # k8s: Kustomize; overlays/e2e = CI kind test values; overlays/prod = Argo CD slices (prod-sealed/-platform/-tunnel/-apps), secrets.tsv = prod secret inventory, domain/domain.yaml = APP_DOMAIN
@@ -46,7 +46,7 @@ docs/{system, adr, superpowers/{specs,plans}, runbooks, lessons}   # system/inde
 - Events: JSON envelope `{event_id, event_type, occurred_at, data}`; W3C `traceparent` Kafka header; consumers idempotent on `event_id`. Topics are declared at startup by their producer (Java: a `NewTopic` bean; Spring consumers too), never left to broker auto-create (off in the k8s Redpanda).
 - Event evolution rule: additive changes (new optional `data` fields) stay in v1, so event schemas leave `data` open and consumers ignore unknown fields; breaking changes (remove/rename/retype a field, change meaning) go to a new topic `<name>.v2` with its own schema, published alongside v1 until consumers migrate.
 - Images: non-root, multi-arch `linux/amd64` + `linux/arm64`, tag `sha-<commit>`, pushed to `ghcr.io/<owner>/<service>`.
-- Dev machine is weak (2 cores / 12GB): local stack <= ~3GB (full `--profile app` is ~2.75GB; identity-svc and payment-svc need `mem_limit: 512m`, the JVM off-heap alone is ~170MiB); heavy verification runs in CI.
+- Dev machine is weak (2 cores / 12GB): local stack <= ~3GB (full `--profile app` is ~2.8GB; identity-svc and payment-svc need `mem_limit: 512m`, the JVM off-heap alone is ~170MiB); heavy verification runs in CI.
 
 ## Rust conventions
 See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all cargo via `scripts/cargo.sh` (Docker). Toolchain pinned in `rust-toolchain.toml`.
@@ -55,9 +55,10 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `mvn -q verify` - build, test, Spotless check, coverage gate
 - `mvn spotless:apply` - auto-format
 - `docker compose -f deploy/local/docker-compose.yml up -d` - local Postgres + Redpanda + otel-lgtm
-- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080), notify-svc (:8081) and chart-svc (:8082, stateless) and reading-tuvi (:8083; needs the `reading_tuvi` db), identity-svc (:8084), payment-svc (:8085) and Mailpit (SMTP :1025, UI :8025) (if a `pgdata` volume from before F1.3 exists, run `down -v` once so `init-db.sql` creates the notify, reading_tuvi, identity and payment dbs; test secrets in `deploy/local/.env.example`)
+- `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build` - also order-svc (:8080), notify-svc (:8081) and chart-svc (:8082, stateless) and astro-chart-svc (:8086, stateless) and reading-tuvi (:8083; needs the `reading_tuvi` db), identity-svc (:8084), payment-svc (:8085) and Mailpit (SMTP :1025, UI :8025) (if a `pgdata` volume from before F1.3 exists, run `down -v` once so `init-db.sql` creates the notify, reading_tuvi, identity and payment dbs; test secrets in `deploy/local/.env.example`)
 - `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
 - `scripts/smoke-chart.sh http://localhost:8082` - POST /tuvi/chart happy path: 12 palaces, lunar.month 2
+- `scripts/smoke-astro-chart.sh http://localhost:8086` - POST /astro/chart happy path: 12 bodies, 12 house cusps, school tropical/placidus
 - `scripts/smoke-reading.sh http://localhost:8083 [IDENTITY_URL]` - basic reading (17 sections, last `disclaimer`) + today (4 areas) via reading-tuvi -> chart-svc, then one SIM number check (xem số: numeric `score`, 6 criteria) as a fresh identity-svc guest
 - `scripts/smoke-qa.sh` - paid/free tử vi Q&A end to end on the fake provider (needs `postgres redpanda mailpit chart-svc identity-svc reading-tuvi`; bring up with `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build --no-deps <those>`; each run uses a fresh birth time because the free quota is per chart)
 - `scripts/smoke-identity-payment.sh [IDENTITY_URL] [PAYMENT_URL] [MAILPIT_URL]` - guest -> magic link (read from Mailpit) -> login -> CREDIT_5 order -> simulated SePay transfer (`scripts/sepay-simulate.sh`) -> credits 6, duplicate delivery changes nothing; low-memory subset: `docker compose -f deploy/local/docker-compose.yml --profile app up -d postgres redpanda mailpit identity-svc payment-svc`

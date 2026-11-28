@@ -109,7 +109,7 @@ web-astro (Next.js, next-intl)  ─────────────►  astr
 | Mặt Trăng | Meeus, *Astronomical Algorithms* ch.47 (ELP-2000/82 rút gọn, ~10″) | công thức tự cài |
 | Pluto, Chiron | bảng tính sẵn từ **JPL Horizons** (kinh độ và vĩ độ hoàng đạo biểu kiến địa tâm của ngày, 5 ngày một điểm, 1900–2100, nội suy Lagrange 4 điểm), commit trong repo, ghi công "JPL Solar System Dynamics, Horizons". Pluto dùng bảng chứ không dùng Meeus ch.37, vì công thức đó chỉ hợp lệ đến 2099 và bảng ít code hơn | dữ liệu JPL; Tuấn/Claude gửi email xin xác nhận dùng thương mại trước khi mở bán |
 | True Node | node mật tiếp (osculating), tính từ vị trí và vận tốc Mặt Trăng (r × v) | tự cài |
-| Nutation, độ nghiêng hoàng đạo, ΔT | Meeus ch.22 (IAU 1980), đa thức ΔT Espenak–Meeus (NASA) | công thức |
+| Nutation, độ nghiêng hoàng đạo, ΔT | Meeus ch.22 (IAU 1980); ΔT: đa thức Espenak–Meeus (NASA) trước 2005; 2005–2024 theo giá trị quan sát hằng năm; từ 2024 giữ cố định 69,18 s (như JPL Horizons cho ngày tương lai) | công thức |
 | Quang sai, light-time, hiệu chỉnh FK5 | Meeus ch.25/33 | công thức |
 | Asc, MC, nhà | công thức chuẩn (Placidus lặp), Whole Sign, Equal | tự cài |
 
@@ -155,7 +155,7 @@ web-astro (Next.js, next-intl)  ─────────────►  astr
 - Thuần hàm: trên cùng một kiến trúc CPU, cùng input cho ra JSON giống nhau từng byte. Số làm tròn cố định 4 chữ số thập phân độ.
   - Giữa amd64 và arm64 không đòi giống từng byte, vì `vsop87` dùng `sin`/`cos` của nền tảng.
   - Golden so theo ngưỡng (1′), nên không phụ thuộc kiến trúc. Snapshot byte-exact chỉ chạy trên CI amd64.
-- **Transit**: `POST /astro/transits {birth (như request /astro/chart), date (YYYY-MM-DD), zone (múi giờ người xem)}`.
+- **Transit**: `POST /astro/transits {natal (như request /astro/chart), date (YYYY-MM-DD), viewerZone (múi giờ người xem)}`.
   - Service tự tính lại bản đồ gốc từ dữ liệu sinh, không tin bản đồ do client gửi.
   - Trả dữ kiện tại **12:00 trưa của `date` theo `zone`**:
     - cung của Mặt Trăng transit,
