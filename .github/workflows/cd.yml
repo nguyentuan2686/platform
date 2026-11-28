@@ -304,7 +304,8 @@ jobs:
       - name: Verify the deploy (Argo CD synced + healthy, smoke via Traefik)
         id: verify
         run: |
-          set -uo pipefail
+          # +e: GitHub runs this as `bash -e`; a failing pipeline must not end the step before rc= is recorded (issue #53).
+          set +e -uo pipefail
           # Exit 1 = deployed but unhealthy (roll back); 4 = cluster/tailnet not checkable (never roll back).
           bash scripts/verify-deploy.sh --app prod-platform,prod-tunnel,prod-apps --revision "$BUMP_SHA" --allow-descendant \
             2>&1 | tee "$RUNNER_TEMP/verify.out"
