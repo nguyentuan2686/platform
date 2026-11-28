@@ -64,7 +64,9 @@ class LlmConfiguration {
       }
     }
     if (providers.isEmpty()) {
-      throw new IllegalStateException("no llm provider enabled (check LLM_PROVIDERS)");
+      // Readings and charts do not need an LLM: start anyway, Q&A answers fail as "all providers
+      // exhausted" until a key is set (a missing key once crash-looped the whole service in prod).
+      LOG.error("no llm provider enabled (check LLM_PROVIDERS and the api keys): Q&A unavailable");
     }
     return new ConfiguredProviders(List.copyOf(providers));
   }
