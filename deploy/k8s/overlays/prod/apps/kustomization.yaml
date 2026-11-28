@@ -47,11 +47,11 @@ replacements:
         fieldPaths: ["spec.template.spec.containers.[name=identity-svc].env.[name=MAIL_FROM].value"]
         options: {delimiter: "@", index: 1} # no-reply@<APP_DOMAIN>; MAIL_HOST is the SMTP relay, not domain-bound
 images:
-  - {name: ghcr.io/nguyentuan2686/order-svc, newTag: sha-1b599d71ac5ab51b68ee69e8d3d86abf76788e0f}
-  - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: sha-1b599d71ac5ab51b68ee69e8d3d86abf76788e0f}
-  - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
-  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: sha-1b599d71ac5ab51b68ee69e8d3d86abf76788e0f}
-  - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
-  - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
-  - {name: ghcr.io/nguyentuan2686/web, newTag: sha-1b599d71ac5ab51b68ee69e8d3d86abf76788e0f}
+  - {name: ghcr.io/nguyentuan2686/order-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
+  - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
+  - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
+  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
+  - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
+  - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
+  - {name: ghcr.io/nguyentuan2686/web, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
   # new-service: prod-images (scripts/new-service.sh inserts above this line; CD bumps these tags)
