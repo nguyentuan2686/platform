@@ -19,7 +19,7 @@ The test parses each line and drops `timestamp` before searching for the birth.
 A "must not contain" assertion over logs must exclude fields the test does not control (timestamps, ids).
 
 ## Escalation
-none (first occurrence)
+Second occurrence (astro-chart-svc, 2026-11-28): rule added to `.claude/skills/rust-service-conventions/SKILL.md` (Test pyramid).
 
 ## Recurrence
 astro-chart-svc `ephemeris_failure_is_logged_once_without_the_birth` had the same raw-log needle search (found in review
