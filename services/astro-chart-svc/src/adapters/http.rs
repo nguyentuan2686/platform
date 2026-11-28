@@ -1,4 +1,4 @@
-//! HTTP API: `POST /astro/chart`, the platform health endpoints and problem+json
+//! HTTP API: `POST /astro/chart`, `POST /astro/transits`, the platform health endpoints and problem+json
 //! `not-found` fallbacks (unknown path, wrong method).
 //!
 //! The request DTO keeps each field as raw JSON and denies unknown fields; the fields are
@@ -17,8 +17,8 @@ use time::{Date, Month, PrimitiveDateTime, Time};
 
 use crate::app::AppState;
 use crate::application::birth::{Birth, BirthError};
-use crate::application::service::{ChartError, ChartRequest};
-use crate::domain::chart::Chart;
+use crate::application::service::{ChartError, ChartRequest, TransitRequest};
+use crate::domain::chart::{Chart, Transits};
 use crate::domain::houses::HouseSystem;
 
 /// Router with `/astro/chart`, `/health/live`, `/health/ready` and `not-found` problem
@@ -27,6 +27,7 @@ pub fn router(state: AppState) -> Router {
     let readiness = state.readiness.clone();
     Router::new()
         .route("/astro/chart", post(chart))
+        .route("/astro/transits", post(transits))
         .with_state(state)
         .merge(health_router(readiness))
         .fallback(not_found)
@@ -103,15 +104,25 @@ fn fields(body: Value) -> Result<ChartFields, ApiError> {
 /// Validates the fields into a request; every problem found is reported, each on its field.
 fn parse(f: &ChartFields) -> Result<ChartRequest, ApiError> {
     let mut errors = Vec::new();
-    let local = required_str(f.birth.as_ref(), "birth", &mut errors).and_then(|s| {
+    let req = parse_into(f, &mut errors);
+    match req {
+        Some(req) if errors.is_empty() => Ok(req),
+        _ => Err(ApiError::Validation(errors)),
+    }
+}
+
+/// The shared chart-field validation (also the `natal` object of a transit request); the
+/// problems are pushed on `errors`, named by the bare field.
+fn parse_into(f: &ChartFields, errors: &mut Vec<FieldError>) -> Option<ChartRequest> {
+    let local = required_str(f.birth.as_ref(), "birth", errors).and_then(|s| {
         parse_birth(s).or_else(|| {
             errors.push(fe("birth", "must be YYYY-MM-DDTHH:MM without an offset"));
             None
         })
     });
-    let zone = required_str(f.zone.as_ref(), "zone", &mut errors);
-    let lat = required_number(f.lat.as_ref(), "lat", &mut errors);
-    let lon = required_number(f.lon.as_ref(), "lon", &mut errors);
+    let zone = required_str(f.zone.as_ref(), "zone", errors);
+    let lat = required_number(f.lat.as_ref(), "lat", errors);
+    let lon = required_number(f.lon.as_ref(), "lon", errors);
     let time_known = match f.time_known.as_ref() {
         Some(Value::Bool(b)) => Some(*b),
         None | Some(Value::Null) => {
@@ -123,7 +134,7 @@ fn parse(f: &ChartFields) -> Result<ChartRequest, ApiError> {
             None
         }
     };
-    let house_system = match optional_str(f.house_system.as_ref(), "houseSystem", &mut errors) {
+    let house_system = match optional_str(f.house_system.as_ref(), "houseSystem", errors) {
         None | Some("placidus") => Some(HouseSystem::Placidus),
         Some("whole-sign") => Some(HouseSystem::WholeSign),
         Some("equal") => Some(HouseSystem::Equal),
@@ -133,10 +144,8 @@ fn parse(f: &ChartFields) -> Result<ChartRequest, ApiError> {
         }
     };
     match (local, zone, lat, lon, time_known, house_system) {
-        (Some(local), Some(zone), Some(lat), Some(lon), Some(time_known), Some(house_system))
-            if errors.is_empty() =>
-        {
-            Ok(ChartRequest {
+        (Some(local), Some(zone), Some(lat), Some(lon), Some(time_known), Some(house_system)) => {
+            Some(ChartRequest {
                 birth: Birth {
                     local,
                     zone: zone.to_owned(),
@@ -147,6 +156,66 @@ fn parse(f: &ChartFields) -> Result<ChartRequest, ApiError> {
                 house_system,
             })
         }
+        _ => None,
+    }
+}
+
+/// Fields of a `POST /astro/transits` body: the raw `natal` object (the chart fields), the
+/// local `date` and the viewer's IANA zone.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct TransitFields {
+    natal: Option<Value>,
+    date: Option<Value>,
+    viewer_zone: Option<Value>,
+}
+
+/// Validates a transit request. The natal chart fields are checked as for `/astro/chart`, their
+/// errors named `natal.<field>`; a missing or malformed `natal` object is a `body` error.
+fn parse_transits(body: Value) -> Result<TransitRequest, ApiError> {
+    if !body.is_object() {
+        return Err(field_error("body", "must be a JSON object"));
+    }
+    let f: TransitFields =
+        serde_json::from_value(body).map_err(|_| field_error("body", "has an unknown field"))?;
+    let mut errors = Vec::new();
+    let natal = match f.natal {
+        None | Some(Value::Null) => {
+            errors.push(fe("body", "natal is required"));
+            None
+        }
+        Some(v) if !v.is_object() => {
+            errors.push(fe("body", "natal must be a JSON object"));
+            None
+        }
+        Some(v) => {
+            if let Ok(nf) = fields(v) {
+                let mut natal_errors = Vec::new();
+                let req = parse_into(&nf, &mut natal_errors);
+                errors.extend(natal_errors.into_iter().map(|e| FieldError {
+                    field: format!("natal.{}", e.field),
+                    message: e.message,
+                }));
+                req
+            } else {
+                errors.push(fe("body", "natal has an unknown field"));
+                None
+            }
+        }
+    };
+    let date = required_str(f.date.as_ref(), "date", &mut errors).and_then(|s| {
+        parse_date(s).or_else(|| {
+            errors.push(fe("date", "must be a valid date YYYY-MM-DD"));
+            None
+        })
+    });
+    let viewer_zone = required_str(f.viewer_zone.as_ref(), "viewerZone", &mut errors);
+    match (natal, date, viewer_zone) {
+        (Some(natal), Some(date), Some(zone)) if errors.is_empty() => Ok(TransitRequest {
+            natal,
+            date,
+            viewer_zone: zone.to_owned(),
+        }),
         _ => Err(ApiError::Validation(errors)),
     }
 }
@@ -240,15 +309,18 @@ fn parse_birth(s: &str) -> Option<PrimitiveDateTime> {
 
 /// A chart failure as a problem: a bad birth names its field, an ephemeris failure is a 500
 /// (`ApiError::Internal` logs it once with `error_type` and the cause chain, never the request).
-fn chart_failure(e: ChartError) -> ApiError {
+fn chart_failure(e: ChartError, prefix: &str) -> ApiError {
+    let natal = |field: &str, message: &str| field_error(&format!("{prefix}{field}"), message);
     match e {
         ChartError::Birth(b) => match b {
-            BirthError::UnknownZone => field_error("zone", "unknown IANA time zone"),
-            BirthError::Nonexistent => field_error("birth", "does not exist in the zone (DST gap)"),
-            BirthError::OutOfRange => field_error("birth", "must fall in the years 1900-2100"),
-            BirthError::BadLatitude => field_error("lat", "must be within [-90, 90]"),
-            BirthError::BadLongitude => field_error("lon", "must be within [-180, 180]"),
+            BirthError::UnknownZone => natal("zone", "unknown IANA time zone"),
+            BirthError::Nonexistent => natal("birth", "does not exist in the zone (DST gap)"),
+            BirthError::OutOfRange => natal("birth", "must fall in the years 1900-2100"),
+            BirthError::BadLatitude => natal("lat", "must be within [-90, 90]"),
+            BirthError::BadLongitude => natal("lon", "must be within [-180, 180]"),
         },
+        ChartError::Date => field_error("date", "must fall in the years 1900-2100"),
+        ChartError::ViewerZone => field_error("viewerZone", "unknown IANA time zone"),
         ChartError::Ephemeris(cause) => ApiError::Internal(cause.context("ephemeris failed")),
     }
 }
@@ -257,6 +329,21 @@ fn chart_failure(e: ChartError) -> ApiError {
 
 async fn chart(State(state): State<AppState>, Body(body): Body) -> Result<Json<Chart>, ApiError> {
     let req = parse(&fields(body)?)?;
-    let chart = state.service.chart(&req).map_err(chart_failure)?;
+    let chart = state
+        .service
+        .chart(&req)
+        .map_err(|e| chart_failure(e, ""))?;
     Ok(Json(chart))
+}
+
+async fn transits(
+    State(state): State<AppState>,
+    Body(body): Body,
+) -> Result<Json<Transits>, ApiError> {
+    let req = parse_transits(body)?;
+    let transits = state
+        .service
+        .transits(&req)
+        .map_err(|e| chart_failure(e, "natal."))?;
+    Ok(Json(transits))
 }

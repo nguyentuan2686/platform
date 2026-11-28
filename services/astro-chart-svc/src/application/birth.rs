@@ -82,6 +82,14 @@ pub fn local_day_bounds(date: Date, zone: &str) -> Result<(i64, i64), BirthError
     Ok((edge(Time::MIDNIGHT)?, edge(last)?))
 }
 
+/// `HH:MM` of a unix instant on the wall clock of `zone`, seconds truncated.
+pub fn local_hhmm(secs: i64, zone: &str) -> Result<String, BirthError> {
+    let tz = TimeZone::get(zone).map_err(|_| BirthError::UnknownZone)?;
+    let ts = jiff::Timestamp::from_second(secs).map_err(|_| BirthError::OutOfRange)?;
+    let z = tz.to_datetime(ts);
+    Ok(format!("{:02}:{:02}", z.hour(), z.minute()))
+}
+
 fn check_year(d: Date) -> Result<(), BirthError> {
     if YEARS.contains(&d.year()) {
         Ok(())

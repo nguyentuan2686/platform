@@ -321,3 +321,112 @@ async fn an_ephemeris_failure_is_a_generic_500() {
         "{problem}"
     );
 }
+
+// ---------------------------------------------------------------- POST /astro/transits
+
+fn transit_with(patch: &Value) -> Value {
+    let mut base = json!({
+        "natal": valid_with(&json!({})),
+        "date": "2026-03-10",
+        "viewerZone": "Asia/Ho_Chi_Minh",
+    });
+    for (k, v) in patch.as_object().unwrap() {
+        if v.is_null() {
+            base.as_object_mut().unwrap().remove(k);
+        } else {
+            base[k] = v.clone();
+        }
+    }
+    base
+}
+
+/// A transit request whose `natal` has `patch` merged over the valid natal request.
+fn natal_with(patch: &Value) -> Value {
+    transit_with(&json!({ "natal": valid_with(patch) }))
+}
+
+async fn post_transits(body: &Value) -> (StatusCode, String, Value) {
+    send(
+        Request::post("/astro/transits")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+    )
+    .await
+}
+
+async fn assert_transit_invalid(body: &Value, field: &str) {
+    let (status, ct, problem) = post_transits(body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body} -> {problem}");
+    assert!(ct.starts_with("application/problem+json"), "{ct}");
+    assert_eq!(problem["type"], "urn:problem:validation-error");
+    assert_eq!(problem["errors"][0]["field"], field, "{body} -> {problem}");
+    assert!(problem["trace_id"].is_string(), "{problem}");
+}
+
+#[tokio::test]
+async fn a_valid_transit_request_returns_the_daily_facts() {
+    let (status, ct, t) = post_transits(&transit_with(&json!({}))).await;
+    assert_eq!(status, StatusCode::OK, "{t}");
+    assert!(ct.starts_with("application/json"), "{ct}");
+    assert_eq!(t["date"], "2026-03-10");
+    assert_eq!(t["moon"]["houseBasis"], "natal");
+    assert!(t["moon"]["sign"].is_string());
+    assert!(t["moon"]["phase"].is_string());
+    assert!(t["moon"]["house"].as_u64().unwrap() >= 1);
+    assert!(t["aspects"].is_array());
+}
+
+#[tokio::test]
+async fn an_unknown_birth_time_gives_the_solar_house_basis() {
+    let (status, _, t) = post_transits(&natal_with(&json!({"timeKnown": false}))).await;
+    assert_eq!(status, StatusCode::OK, "{t}");
+    assert_eq!(t["moon"]["houseBasis"], "solar");
+}
+
+#[tokio::test]
+async fn natal_field_errors_are_prefixed() {
+    let cases = [
+        (json!({"birth": "1990-02-30T10:00"}), "natal.birth"),
+        (json!({"birth": "1899-12-31T12:00"}), "natal.birth"),
+        (json!({"zone": "Mars/Base"}), "natal.zone"),
+        (json!({"lat": 91}), "natal.lat"),
+        (json!({"lon": -181}), "natal.lon"),
+        (json!({"timeKnown": null}), "natal.timeKnown"),
+        (json!({"houseSystem": "koch"}), "natal.houseSystem"),
+    ];
+    for (patch, field) in cases {
+        assert_transit_invalid(&natal_with(&patch), field).await;
+    }
+}
+
+#[tokio::test]
+async fn bad_date_and_viewer_zone_name_their_fields() {
+    for date in ["2026-02-30", "2026-3-1", "", "x", "2101-01-01"] {
+        assert_transit_invalid(&transit_with(&json!({ "date": date })), "date").await;
+    }
+    assert_transit_invalid(&transit_with(&json!({ "date": 20_260_310 })), "date").await;
+    assert_transit_invalid(&transit_with(&json!({"date": null})), "date").await;
+    let bad_zone = transit_with(&json!({"viewerZone": "Mars/Base"}));
+    assert_transit_invalid(&bad_zone, "viewerZone").await;
+    assert_transit_invalid(&transit_with(&json!({"viewerZone": null})), "viewerZone").await;
+}
+
+#[tokio::test]
+async fn a_bad_transit_body_is_a_body_error() {
+    assert_transit_invalid(&transit_with(&json!({"natal": null})), "body").await;
+    assert_transit_invalid(&transit_with(&json!({"natal": "x"})), "body").await;
+    assert_transit_invalid(&transit_with(&json!({"extra": 1})), "body").await;
+    let mut natal = valid_with(&json!({}));
+    natal["extra"] = json!(1);
+    assert_transit_invalid(&transit_with(&json!({ "natal": natal })), "body").await;
+    let (status, _, problem) = send(
+        Request::post("/astro/transits")
+            .header("content-type", "application/json")
+            .body(Body::from("[1]"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(problem["errors"][0]["field"], "body");
+}

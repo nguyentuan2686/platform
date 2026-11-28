@@ -104,7 +104,12 @@ async fn every_path_in_the_spec_is_served() {
     declared.sort();
     assert_eq!(
         declared,
-        ["GET /health/live", "GET /health/ready", "POST /astro/chart"]
+        [
+            "GET /health/live",
+            "GET /health/ready",
+            "POST /astro/chart",
+            "POST /astro/transits"
+        ]
     );
     for path in ["/health/live", "/health/ready"] {
         let (status, _) = call(
@@ -293,4 +298,177 @@ async fn not_found_problem_matches_the_spec() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_valid(&validator(PROBLEM), &body);
     assert!(!validator(PROBLEM).is_valid(&json!({"title": "x", "status": 404})));
+}
+
+const TRANSITS_REQUEST: &str =
+    "/paths/~1astro~1transits/post/requestBody/content/application~1json/schema";
+const TRANSITS_200: &str =
+    "/paths/~1astro~1transits/post/responses/200/content/application~1json/schema";
+const TRANSITS_400: &str =
+    "/paths/~1astro~1transits/post/responses/400/content/application~1problem+json/schema";
+const TRANSITS_500: &str =
+    "/paths/~1astro~1transits/post/responses/500/content/application~1problem+json/schema";
+
+fn transit_request(patch: &Value) -> Value {
+    let mut base = json!({
+        "natal": request(&json!({})),
+        "date": "2026-03-10",
+        "viewerZone": "Asia/Ho_Chi_Minh",
+    });
+    for (k, v) in patch.as_object().unwrap() {
+        if v.is_null() {
+            base.as_object_mut().unwrap().remove(k);
+        } else {
+            base[k] = v.clone();
+        }
+    }
+    base
+}
+
+async fn post_transits(state: AppState, body: &Value) -> (StatusCode, Value) {
+    call(
+        state,
+        Request::post("/astro/transits")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn transits_response_matches_the_spec() {
+    let req = transit_request(&json!({}));
+    assert_valid(&validator(TRANSITS_REQUEST), &req);
+    let (status, body) = post_transits(AppState::new(), &req).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_valid(&validator(TRANSITS_200), &body);
+
+    let req = transit_request(&json!({"natal": request(&json!({"timeKnown": false}))}));
+    let (status, body) = post_transits(AppState::new(), &req).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["moon"]["houseBasis"], "solar");
+    assert_valid(&validator(TRANSITS_200), &body);
+}
+
+#[test]
+fn transit_request_schema_requires_the_fields_and_closes_the_object() {
+    let v = validator(TRANSITS_REQUEST);
+    assert!(v.is_valid(&transit_request(&json!({}))));
+    for required in ["natal", "date", "viewerZone"] {
+        assert!(
+            !v.is_valid(&transit_request(&json!({ required: null }))),
+            "{required}"
+        );
+    }
+    assert!(!v.is_valid(&transit_request(&json!({"extra": 1}))));
+    assert!(!v.is_valid(&transit_request(&json!({"date": "2026-3-1"}))));
+    let bad_lat = request(&json!({"lat": 91}));
+    assert!(!v.is_valid(&transit_request(&json!({ "natal": bad_lat }))));
+    let extra = request(&json!({"extra": 1}));
+    assert!(!v.is_valid(&transit_request(&json!({ "natal": extra }))));
+}
+
+#[tokio::test]
+async fn transits_schema_is_not_vacuous() {
+    let (_, t) = post_transits(AppState::new(), &transit_request(&json!({}))).await;
+    let v = validator(TRANSITS_200);
+    assert_valid(&v, &t);
+
+    let mut bad = t.clone();
+    bad["surprise"] = json!(1);
+    assert!(!v.is_valid(&bad), "top level is closed");
+
+    let mut bad = t.clone();
+    bad["moon"]["label"] = json!("x");
+    assert!(!v.is_valid(&bad), "moon is closed");
+
+    let mut bad = t.clone();
+    bad["moon"]["phase"] = json!("gibbous");
+    assert!(!v.is_valid(&bad), "phases are an enum");
+
+    let mut bad = t.clone();
+    bad["moon"]["houseBasis"] = json!("equal");
+    assert!(!v.is_valid(&bad), "house bases are an enum");
+
+    let mut bad = t.clone();
+    bad["moonIngress"] = json!({"at": "25:00", "sign": "Leo"});
+    assert!(!v.is_valid(&bad), "ingress time is HH:MM");
+    bad["moonIngress"] = json!({"at": "15:20", "sign": "Leo"});
+    assert!(v.is_valid(&bad));
+    bad["moonIngress"]["x"] = json!(1);
+    assert!(!v.is_valid(&bad), "ingress is closed");
+
+    let mut bad = t.clone();
+    bad.as_object_mut().unwrap().remove("moon");
+    assert!(!v.is_valid(&bad), "moon is required");
+}
+
+#[tokio::test]
+async fn transit_validation_problems_match_the_spec_for_every_field() {
+    let natal = |p: Value| transit_request(&json!({ "natal": request(&p) }));
+    let cases = [
+        (natal(json!({"birth": "1990-02-30T10:00"})), "natal.birth"),
+        (natal(json!({"zone": "Mars/Base"})), "natal.zone"),
+        (natal(json!({"lat": 91})), "natal.lat"),
+        (natal(json!({"lon": -181})), "natal.lon"),
+        (natal(json!({"timeKnown": null})), "natal.timeKnown"),
+        (natal(json!({"houseSystem": "koch"})), "natal.houseSystem"),
+        (transit_request(&json!({"date": "2026-02-30"})), "date"),
+        (
+            transit_request(&json!({"viewerZone": "Mars/Base"})),
+            "viewerZone",
+        ),
+        (transit_request(&json!({"natal": null})), "body"),
+        (transit_request(&json!({"extra": 1})), "body"),
+    ];
+    let v = validator(TRANSITS_400);
+    for (req, field) in cases {
+        let (status, body) = post_transits(AppState::new(), &req).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{req}");
+        assert_eq!(body["errors"][0]["field"], field, "{req}");
+        assert_valid(&v, &body);
+    }
+}
+
+#[test]
+fn the_transits_400_field_enum_is_exactly_the_documented_one() {
+    let v = validator(TRANSITS_400);
+    let problem = |field: &str| {
+        json!({
+            "type": "urn:problem:validation-error",
+            "title": "Bad Request",
+            "status": 400,
+            "trace_id": "t",
+            "errors": [{"field": field, "message": "m"}],
+        })
+    };
+    for field in [
+        "body",
+        "natal.birth",
+        "natal.zone",
+        "natal.lat",
+        "natal.lon",
+        "natal.timeKnown",
+        "natal.houseSystem",
+        "date",
+        "viewerZone",
+    ] {
+        assert!(v.is_valid(&problem(field)), "{field}");
+    }
+    for field in ["birth", "natal", "natal.gender"] {
+        assert!(!v.is_valid(&problem(field)), "{field}");
+    }
+}
+
+#[tokio::test]
+async fn transits_internal_error_problem_matches_the_spec() {
+    let (status, body) = post_transits(
+        AppState::with_ephemeris(BrokenEphemeris),
+        &transit_request(&json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(body["detail"], "Unexpected error");
+    assert_valid(&validator(TRANSITS_500), &body);
 }

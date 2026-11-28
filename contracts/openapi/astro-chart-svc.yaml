@@ -61,6 +61,44 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /astro/transits:
+    post:
+      operationId: dailyTransits
+      summary: Daily transit facts against a natal chart
+      description: >-
+        The natal chart is recomputed from `natal` (the /astro/chart request). The transit moment
+        is 12:00 of `date` on the wall clock of `viewerZone`. The Moon's house comes from the
+        natal cusps when the birth time is known (houseBasis natal), else from whole-sign houses
+        starting at the natal Sun's sign (solar). Transit aspects use orbs 3 (Moon) and 2
+        (Sun, Mercury, Venus, Mars) to the ten natal planets, plus Asc and MC when known; in
+        each aspect `a` is the transiting body and `b` the natal point.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitRequest'
+      responses:
+        '200':
+          description: The daily transit facts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transits'
+        '400':
+          description: >-
+            Invalid request; errors[0].field is one of body, natal.birth, natal.zone, natal.lat,
+            natal.lon, natal.timeKnown, natal.houseSystem, date, viewerZone.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/TransitValidationProblem'
+        '500':
+          description: Unexpected error
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   schemas:
     ChartRequest:
@@ -279,3 +317,100 @@ components:
                     enum: [body, birth, zone, lat, lon, timeKnown, houseSystem]
                   message:
                     type: string
+    TransitValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field:
+                    type: string
+                    enum:
+                      [
+                        body,
+                        natal.birth,
+                        natal.zone,
+                        natal.lat,
+                        natal.lon,
+                        natal.timeKnown,
+                        natal.houseSystem,
+                        date,
+                        viewerZone,
+                      ]
+                  message:
+                    type: string
+    TransitRequest:
+      type: object
+      required: [natal, date, viewerZone]
+      additionalProperties: false
+      properties:
+        natal:
+          $ref: '#/components/schemas/ChartRequest'
+        date:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          description: Local day YYYY-MM-DD in viewerZone; years 1900-2100.
+          examples: ['2026-03-10']
+        viewerZone:
+          type: string
+          minLength: 1
+          description: IANA time zone of the viewer; the transit moment is 12:00 of date there.
+          examples: [Asia/Ho_Chi_Minh]
+    Transits:
+      type: object
+      required: [date, moon, aspects]
+      additionalProperties: false
+      properties:
+        date:
+          type: string
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+        moon:
+          $ref: '#/components/schemas/TransitMoon'
+        moonIngress:
+          $ref: '#/components/schemas/MoonIngress'
+        aspects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Aspect'
+    TransitMoon:
+      type: object
+      required: [sign, deg, house, houseBasis, phase]
+      additionalProperties: false
+      properties:
+        sign:
+          $ref: '#/components/schemas/SignKey'
+        deg:
+          type: number
+          minimum: 0
+          maximum: 30
+        house:
+          type: integer
+          minimum: 1
+          maximum: 12
+        houseBasis:
+          type: string
+          enum: [natal, solar]
+          description: natal cusps when the birth time is known, else whole signs from the natal Sun's sign.
+        phase:
+          type: string
+          enum:
+            [new, waxing-crescent, first-quarter, waxing-gibbous, full, waning-gibbous, last-quarter, waning-crescent]
+    MoonIngress:
+      type: object
+      required: [at, sign]
+      additionalProperties: false
+      description: Present only when the Moon enters a new sign during the viewer's local day.
+      properties:
+        at:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Viewer-local HH:MM, truncated to the minute.
+        sign:
+          $ref: '#/components/schemas/SignKey'

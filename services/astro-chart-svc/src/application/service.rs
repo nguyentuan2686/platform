@@ -2,15 +2,16 @@
 
 use std::sync::Arc;
 
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
 
-use crate::application::birth::{birth_instant, local_day_bounds, Birth, BirthError};
+use crate::application::birth::{birth_instant, local_day_bounds, local_hhmm, Birth, BirthError};
 use crate::application::ports::EphemerisPort;
 use crate::domain::angles::{angle_diff, norm360, Sign};
-use crate::domain::aspects::{natal_aspects, Point, PointPos};
+use crate::domain::aspects::{natal_aspects, transit_aspects, Aspect, Point, PointPos};
 use crate::domain::body::{Body, Ecliptic};
 use crate::domain::chart::{
-    house_of, round4, AngleOut, AnglesOut, AspectOut, BodyOut, Chart, HouseOut,
+    house_of, moon_phase_key, round4, AngleOut, AnglesOut, AspectOut, BodyOut, Chart, HouseOut,
+    MoonIngress, TransitMoon, Transits,
 };
 use crate::domain::houses::{angles, cusps, Angles, HouseError, HouseSystem};
 use crate::domain::nutation::{apparent_sidereal_deg, true_obliquity};
@@ -23,12 +24,26 @@ pub struct ChartRequest {
     pub house_system: HouseSystem,
 }
 
+/// A request for the daily transit facts against a natal chart.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TransitRequest {
+    pub natal: ChartRequest,
+    /// The local day in `viewer_zone`; the transit moment is 12:00 of it.
+    pub date: Date,
+    pub viewer_zone: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ChartError {
     #[error("invalid birth")]
     Birth(#[source] BirthError),
     #[error("ephemeris failure")]
     Ephemeris(#[source] anyhow::Error),
+    /// The transit day is outside 1900-2100 or its noon does not exist in the viewer zone.
+    #[error("invalid transit date")]
+    Date,
+    #[error("unknown viewer time zone")]
+    ViewerZone,
 }
 
 impl From<BirthError> for ChartError {
@@ -164,17 +179,147 @@ impl ChartService {
                     })
                     .collect()
             }),
-            aspects: natal_aspects(&points)
-                .into_iter()
-                .map(|a| AspectOut {
-                    a: a.a.key(),
-                    b: a.b.key(),
-                    kind: a.kind.key(),
-                    orb: round4(a.orb),
-                    applying: a.applying,
-                })
+            aspects: natal_aspects(&points).iter().map(aspect_out).collect(),
+        })
+    }
+
+    /// Daily facts for `req.date`: the transiting Moon (sign, house, phase), its sign
+    /// ingress during the viewer's local day, and the transit aspects to the natal chart.
+    pub fn transits(&self, req: &TransitRequest) -> Result<Transits, ChartError> {
+        let birth = &req.natal.birth;
+        let natal_m = Moment::from_unix(birth_instant(birth)?);
+        let tm = Moment::from_unix(transit_instant(req.date, &req.viewer_zone)?);
+
+        let mut natal = Vec::with_capacity(NATAL_TARGETS + 2);
+        for body in Body::ALL.into_iter().take(NATAL_TARGETS) {
+            let (pos, speed) = self.body_state(body, natal_m)?;
+            natal.push(PointPos {
+                point: Point::Body(body),
+                lon: pos.lon,
+                speed,
+            });
+        }
+        let natal_sun = natal[0].lon;
+        let cusps = if birth.time_known {
+            let (_, _, a, c) = place_houses(birth, req.natal.house_system, natal_m);
+            for (point, lon) in [(Point::Asc, a.asc), (Point::MC, a.mc)] {
+                natal.push(PointPos {
+                    point,
+                    lon,
+                    speed: 0.0,
+                });
+            }
+            c
+        } else {
+            solar_cusps(natal_sun)
+        };
+
+        let mut transiting = Vec::with_capacity(TRANSITING.len());
+        for body in TRANSITING {
+            let (pos, speed) = self.body_state(body, tm)?;
+            transiting.push(PointPos {
+                point: Point::Body(body),
+                lon: pos.lon,
+                speed,
+            });
+        }
+        let lon_of = |b: Body| transiting.iter().find(|p| p.point == Point::Body(b));
+        let (sun, moon) = match (lon_of(Body::Sun), lon_of(Body::Moon)) {
+            (Some(s), Some(m)) => (s.lon, m.lon),
+            // TRANSITING always holds the Sun and the Moon.
+            _ => (0.0, 0.0),
+        };
+        let (sign, deg) = Sign::of(moon);
+        Ok(Transits {
+            date: req.date.to_string(),
+            moon: TransitMoon {
+                sign: sign.key(),
+                deg: round4(deg),
+                house: house_of(moon, &cusps),
+                house_basis: if birth.time_known { "natal" } else { "solar" },
+                phase: moon_phase_key(angle_diff(moon, sun)),
+            },
+            moon_ingress: self.moon_ingress(req.date, &req.viewer_zone)?,
+            aspects: transit_aspects(&transiting, &natal)
+                .iter()
+                .map(aspect_out)
                 .collect(),
         })
+    }
+
+    /// The first moment of the viewer's local day when the Moon is in a new sign, found by
+    /// bisection to the second and shown truncated to the minute; `None` when it stays put.
+    fn moon_ingress(&self, date: Date, zone: &str) -> Result<Option<MoonIngress>, ChartError> {
+        let (start, end) = local_day_bounds(date, zone)?;
+        let sign_at = |t: i64| -> Result<Sign, ChartError> {
+            Ok(Sign::of(self.at(Body::Moon, Moment::from_unix(t))?.lon).0)
+        };
+        let before = sign_at(start)?;
+        if sign_at(end)? == before {
+            return Ok(None);
+        }
+        // The Moon stays under 15 degrees a day, so one change of sign at most.
+        let (mut lo, mut hi) = (start, end);
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if sign_at(mid)? == before {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        Ok(Some(MoonIngress {
+            at: local_hhmm(hi, zone)?,
+            sign: sign_at(hi)?.key(),
+        }))
+    }
+}
+
+/// The natal targets of a transit: the ten planets, Sun to Pluto.
+const NATAL_TARGETS: usize = 10;
+
+/// The transiting bodies.
+const TRANSITING: [Body; 5] = [
+    Body::Sun,
+    Body::Moon,
+    Body::Mercury,
+    Body::Venus,
+    Body::Mars,
+];
+
+/// 12:00 of `date` on the wall clock of `zone`, as a unix instant. A noon in a DST gap or a
+/// year outside 1900-2100 is a bad date, an unknown zone a bad viewer zone.
+fn transit_instant(date: Date, zone: &str) -> Result<i64, ChartError> {
+    let noon = Birth {
+        local: PrimitiveDateTime::new(
+            date,
+            Time::from_hms(12, 0, 0).map_err(|_| ChartError::Date)?,
+        ),
+        zone: zone.to_owned(),
+        lat: 0.0,
+        lon: 0.0,
+        time_known: true,
+    };
+    birth_instant(&noon).map_err(|e| match e {
+        BirthError::UnknownZone => ChartError::ViewerZone,
+        _ => ChartError::Date,
+    })
+}
+
+/// Whole-sign cusps starting at the sign of the natal Sun (the house basis without a birth time).
+#[allow(clippy::cast_precision_loss)] // indices <= 11
+fn solar_cusps(natal_sun: f64) -> [f64; 12] {
+    let first = 30.0 * Sign::of(natal_sun).0.index() as f64;
+    std::array::from_fn(|i| norm360(first + 30.0 * i as f64))
+}
+
+fn aspect_out(a: &Aspect) -> AspectOut {
+    AspectOut {
+        a: a.a.key(),
+        b: a.b.key(),
+        kind: a.kind.key(),
+        orb: round4(a.orb),
+        applying: a.applying,
     }
 }
 
@@ -394,5 +539,206 @@ mod chart_tests {
             .unwrap();
         assert!((c.bodies[0].lon - 10.1235).abs() < 1e-12);
         assert!(c.bodies[0].lat.abs() < 1e-12);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::cast_precision_loss)] // body indices <= 11
+mod transit_tests {
+    use super::*;
+    use time::macros::{date, datetime};
+
+    type Source = Box<dyn Fn(Body, Moment) -> Ecliptic + Send + Sync>;
+
+    struct Fake(Source);
+
+    impl EphemerisPort for Fake {
+        fn apparent(&self, body: Body, m: Moment) -> anyhow::Result<Ecliptic> {
+            Ok((self.0)(body, m))
+        }
+    }
+
+    fn service(f: impl Fn(Body, Moment) -> Ecliptic + Send + Sync + 'static) -> ChartService {
+        ChartService::new(Arc::new(Fake(Box::new(f))))
+    }
+
+    fn at_lon(lon: f64) -> Ecliptic {
+        Ecliptic { lon, lat: 0.0 }
+    }
+
+    fn req(time_known: bool, zone: &str, d: time::Date) -> TransitRequest {
+        TransitRequest {
+            natal: ChartRequest {
+                birth: Birth {
+                    local: datetime!(2000-01-01 12:00),
+                    zone: "UTC".into(),
+                    lat: 50.0,
+                    lon: 18.96,
+                    time_known,
+                },
+                house_system: HouseSystem::Placidus,
+            },
+            date: d,
+            viewer_zone: zone.into(),
+        }
+    }
+
+    /// 2000-01-01 12:00 UTC, the natal instant.
+    fn natal_jd() -> f64 {
+        Moment::from_unix(946_728_000).jd_ut
+    }
+
+    #[test]
+    fn unknown_natal_time_uses_solar_whole_sign_houses() {
+        // Natal Sun at 100 (Cancer): house 1 = 90..120, so a Moon at 125 is house 2.
+        let s = service(|b, _| match b {
+            Body::Sun => at_lon(100.0),
+            Body::Moon => at_lon(125.0),
+            _ => at_lon(300.0),
+        });
+        let t = s
+            .transits(&req(false, "Asia/Ho_Chi_Minh", date!(2026 - 03 - 10)))
+            .unwrap();
+        assert_eq!(t.date, "2026-03-10");
+        assert_eq!(t.moon.house_basis, "solar");
+        assert_eq!(t.moon.house, 2);
+        assert_eq!(t.moon.sign, "Leo");
+        assert!((t.moon.deg - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn known_natal_time_uses_the_natal_cusps() {
+        let s = service(|b, _| match b {
+            Body::Moon => at_lon(125.0),
+            _ => at_lon(300.0),
+        });
+        let t = s
+            .transits(&req(true, "UTC", date!(2026 - 03 - 10)))
+            .unwrap();
+        assert_eq!(t.moon.house_basis, "natal");
+        assert!((1..=12).contains(&t.moon.house));
+    }
+
+    #[test]
+    fn moon_ingress_is_found_to_the_minute_in_viewer_local_time() {
+        // The Moon reaches 90 degrees (0 Cancer) at 15:20 Ho Chi Minh time = 08:20Z.
+        let cross = Moment::from_unix(1_773_130_800 /* 2026-03-10 08:20:00Z */).jd_ut;
+        let s = service(move |b, m| match b {
+            Body::Moon => at_lon(90.0 + 13.0 * (m.jd_ut - cross)),
+            _ => at_lon(300.0),
+        });
+        let t = s
+            .transits(&req(false, "Asia/Ho_Chi_Minh", date!(2026 - 03 - 10)))
+            .unwrap();
+        let ing = t.moon_ingress.unwrap();
+        assert_eq!(ing.at, "15:20");
+        assert_eq!(ing.sign, "Cancer");
+        assert_eq!(
+            t.moon.sign, "Gemini",
+            "at 12:00 the Moon is still before the ingress"
+        );
+    }
+
+    #[test]
+    fn no_ingress_when_the_sign_holds_all_day() {
+        let s = service(|_, _| at_lon(100.0));
+        let t = s
+            .transits(&req(false, "UTC", date!(2026 - 03 - 10)))
+            .unwrap();
+        assert!(t.moon_ingress.is_none());
+    }
+
+    fn venus_case(venus: f64) -> Transits {
+        let nj = natal_jd();
+        let s = service(move |b, m| match b {
+            Body::Moon => at_lon(10.0),
+            Body::Venus if (m.jd_ut - nj).abs() < 1.0 => at_lon(venus),
+            _ => at_lon(250.0 + 0.001 * (b as usize) as f64),
+        });
+        s.transits(&req(false, "UTC", date!(2026 - 03 - 10)))
+            .unwrap()
+    }
+
+    fn moon_venus(t: &Transits) -> Option<&AspectOut> {
+        t.aspects.iter().find(|a| a.a == "Moon" && a.b == "Venus")
+    }
+
+    #[test]
+    fn the_transiting_moon_orb_is_three_degrees() {
+        assert!(moon_venus(&venus_case(13.1)).is_none());
+        let t = venus_case(12.9);
+        let a = moon_venus(&t).unwrap();
+        assert_eq!(a.kind, "conjunction");
+    }
+
+    #[test]
+    fn other_transiting_bodies_use_two_degrees_and_only_the_five_listed_transit() {
+        let nj = natal_jd();
+        let s = service(move |b, m| {
+            let natal = (m.jd_ut - nj).abs() < 1.0;
+            match b {
+                Body::Mars if !natal => at_lon(50.0),
+                Body::Venus if natal => at_lon(52.5),
+                Body::Mercury if natal => at_lon(51.9),
+                Body::Jupiter if !natal => at_lon(51.0), // not a transiting body
+                _ => at_lon(200.0 + 7.0 * (b as usize) as f64),
+            }
+        });
+        let t = s
+            .transits(&req(false, "UTC", date!(2026 - 03 - 10)))
+            .unwrap();
+        let find = |a: &str, b: &str| t.aspects.iter().find(|x| x.a == a && x.b == b);
+        assert!(find("Mars", "Venus").is_none(), "2.5 > 2");
+        assert!(find("Mars", "Mercury").is_some(), "1.9 <= 2");
+        assert!(t.aspects.iter().all(|x| x.a != "Jupiter"));
+        assert!(t
+            .aspects
+            .iter()
+            .all(|x| !matches!(x.b, "NorthNode" | "Chiron" | "Asc" | "MC")));
+    }
+
+    #[test]
+    fn known_natal_time_adds_the_angles_as_targets() {
+        let s = service(|_, _| at_lon(10.0));
+        let natal = s
+            .chart(&req(true, "UTC", date!(2026 - 03 - 10)).natal)
+            .unwrap();
+        let asc = natal.angles.unwrap().asc.lon;
+        let s = service(move |b, m| {
+            if matches!(b, Body::Moon) && (m.jd_ut - natal_jd()).abs() > 1.0 {
+                at_lon(asc + 1.0)
+            } else {
+                at_lon(asc + 100.0 + 5.0 * (b as usize) as f64)
+            }
+        });
+        let t = s
+            .transits(&req(true, "UTC", date!(2026 - 03 - 10)))
+            .unwrap();
+        assert!(t
+            .aspects
+            .iter()
+            .any(|x| x.a == "Moon" && x.b == "Asc" && x.kind == "conjunction"));
+    }
+
+    #[test]
+    fn a_bad_viewer_zone_or_date_is_reported() {
+        let s = service(|_, _| at_lon(10.0));
+        let e = s
+            .transits(&req(false, "Mars/Base", date!(2026 - 03 - 10)))
+            .unwrap_err();
+        assert!(matches!(e, ChartError::ViewerZone));
+        let e = s
+            .transits(&req(false, "UTC", date!(2101 - 01 - 01)))
+            .unwrap_err();
+        assert!(matches!(e, ChartError::Date));
+    }
+
+    #[test]
+    fn a_bad_natal_birth_is_reported_as_a_birth_error() {
+        let s = service(|_, _| at_lon(10.0));
+        let mut r = req(false, "UTC", date!(2026 - 03 - 10));
+        r.natal.birth.zone = "Nowhere/Land".into();
+        let e = s.transits(&r).unwrap_err();
+        assert!(matches!(e, ChartError::Birth(BirthError::UnknownZone)));
     }
 }

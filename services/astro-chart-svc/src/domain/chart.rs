@@ -93,6 +93,56 @@ pub struct AspectOut {
     pub applying: bool,
 }
 
+/// The daily facts of `POST /astro/transits`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transits {
+    pub date: String,
+    pub moon: TransitMoon,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moon_ingress: Option<MoonIngress>,
+    pub aspects: Vec<AspectOut>,
+}
+
+/// The transiting Moon at 12:00 of the day, viewer-local.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitMoon {
+    pub sign: &'static str,
+    pub deg: f64,
+    pub house: u8,
+    /// `natal` (the natal cusps) or `solar` (whole signs from the natal Sun's sign).
+    pub house_basis: &'static str,
+    pub phase: &'static str,
+}
+
+/// The Moon entering a new sign during the viewer's local day.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoonIngress {
+    /// Viewer-local `HH:MM`, truncated to the minute.
+    pub at: String,
+    pub sign: &'static str,
+}
+
+const PHASES: [&str; 8] = [
+    "new",
+    "waxing-crescent",
+    "first-quarter",
+    "waxing-gibbous",
+    "full",
+    "waning-gibbous",
+    "last-quarter",
+    "waning-crescent",
+];
+
+/// The Moon phase key for an elongation (Moon − Sun), in 45° bins centred on 0, 45, ….
+pub fn moon_phase_key(elongation: f64) -> &'static str {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // in [0, 8]
+    let bin = ((norm360(elongation) + 22.5) / 45.0).floor() as usize;
+    PHASES[bin % 8]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +182,22 @@ mod tests {
         assert_eq!(house_of(100.0, &c), 3);
         assert_eq!(house_of(355.0, &c), 12);
         assert_eq!(house_of(2.0, &c), 12);
+    }
+
+    #[test]
+    fn phase_bins_are_centred_on_the_eight_phases() {
+        assert_eq!(moon_phase_key(0.0), "new");
+        assert_eq!(moon_phase_key(22.4), "new");
+        assert_eq!(moon_phase_key(22.6), "waxing-crescent");
+        assert_eq!(moon_phase_key(90.0), "first-quarter");
+        assert_eq!(moon_phase_key(135.0), "waxing-gibbous");
+        assert_eq!(moon_phase_key(180.0), "full");
+        assert_eq!(moon_phase_key(225.0), "waning-gibbous");
+        assert_eq!(moon_phase_key(270.0), "last-quarter");
+        assert_eq!(moon_phase_key(315.0), "waning-crescent");
+        assert_eq!(moon_phase_key(337.4), "waning-crescent");
+        assert_eq!(moon_phase_key(337.6), "new");
+        assert_eq!(moon_phase_key(-10.0), "new");
     }
 
     #[test]
