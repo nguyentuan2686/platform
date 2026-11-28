@@ -278,7 +278,7 @@ sudo scripts/public-url                              # the URL; open it, the hom
 curl -fsS "$(sudo scripts/public-url)/" | grep -c 'Lão Thiên Cơ'   # >= 1: the tunnel (never run in CI) serves the site
 ```
 
-Alerts reach Telegram. The lgtm init container renders the `telegram` contact point **only at pod start**, and lgtm usually started before `alerting-secrets` existed (§4). So restart it once the go-live PR is synced, and after every Telegram token rotation (`docs/runbooks/alerts.md`):
+Alerts reach Telegram. The lgtm init container renders the `telegram` contact point **only at pod start**, and lgtm usually started before `alerting-secrets` existed (§4). In prod the restart is automatic: the init container waits for the Secret and the PR that seals or re-seals it bumps `platform.dev/alerting-secrets-rev` (`docs/runbooks/alerts.md`). To check, or to restart by hand:
 ```sh
 sudo kubectl -n observability rollout restart deployment/lgtm
 sudo kubectl -n observability rollout status deployment/lgtm --timeout=5m
