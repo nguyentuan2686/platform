@@ -36,6 +36,8 @@ spec:
             - {name: OTEL_METRIC_EXPORT_INTERVAL, value: "60000"}
           envFrom:
             - secretRef: {name: notify-svc-secrets}
+            # Telegram bot + chat for top-up and daily-summary messages; absent: messages are queued, not sent.
+            - secretRef: {name: notify-telegram-secrets, optional: true}
           resources:
             requests: {cpu: 25m, memory: 128Mi}
             limits: {memory: 128Mi}

@@ -1,5 +1,6 @@
 //! Contract tests: real HTTP responses against `contracts/openapi/notify-svc.yaml`, and an
-//! order-svc-shaped event against `contracts/events/order-placed.v1.schema.json`.
+//! order-svc-shaped event against `contracts/events/order-placed.v1.schema.json`, and a payment-svc-shaped one against
+//! `contracts/events/payment-succeeded.v1.schema.json`.
 
 mod common;
 
@@ -8,7 +9,7 @@ use std::path::PathBuf;
 use axum::http::StatusCode;
 use common::{app, get, notification, InMemoryRepo};
 use jsonschema::Validator;
-use notify_svc::domain::OrderPlaced;
+use notify_svc::domain::{OrderPlaced, PaymentSucceeded, TopUp};
 use platform_core::messaging::Envelope;
 use serde_json::{json, Value};
 
@@ -152,4 +153,71 @@ fn event_schema_rejects_missing_required_data() {
     let mut event = order_svc_envelope();
     event["data"].as_object_mut().unwrap().remove("total");
     assert!(!event_schema().is_valid(&event));
+}
+
+fn payment_schema() -> Value {
+    let text = std::fs::read_to_string(contracts().join("events/payment-succeeded.v1.schema.json"))
+        .unwrap();
+    serde_json::from_str(&text).unwrap()
+}
+
+/// As payment-svc publishes it (`Instant.toString()` timestamps, `BigDecimal.toPlainString()` amount).
+fn payment_svc_envelope() -> Value {
+    json!({
+        "event_id": "2b4e28ba-2fa1-4d2b-9f3c-0f6a8e2b7c11",
+        "event_type": "PaymentSucceeded",
+        "occurred_at": "2026-11-28T07:05:09.123456Z",
+        "data": {
+            "order_id": "9a7d5c3e-6b1f-4e2a-8c0d-3f5e7a9b1c2d",
+            "order_code": "TV7K2M",
+            "account_id": "3c7d5c3e-6b1f-4e2a-8c0d-3f5e7a9b1c2d",
+            "product_code": "CREDIT_5",
+            "site": "tuvi",
+            "amount": "50000.00",
+            "currency": "VND",
+            "provider": "SEPAY",
+            "paid_at": "2026-11-28T07:05:09.123456Z",
+            "chart_profile_id": null
+        }
+    })
+}
+
+#[test]
+fn payment_svc_event_matches_schema_and_becomes_the_topup_message() {
+    let event = payment_svc_envelope();
+    let validator = jsonschema::options()
+        .should_validate_formats(true)
+        .build(&payment_schema())
+        .unwrap();
+    assert_valid(&validator, &event);
+
+    let envelope = Envelope::parse(&serde_json::to_vec(&event).unwrap()).unwrap();
+    assert_eq!(envelope.event_type, "PaymentSucceeded");
+    let data: PaymentSucceeded = serde_json::from_value(envelope.data).unwrap();
+    let text = TopUp::from_event(&data).unwrap().message();
+    assert_eq!(
+        text,
+        "💰 Nạp tiền\nGói: CREDIT_5 (5 lượt)\nSố tiền: 50.000đ\nLúc: 14:05 28/11"
+    );
+    for secret in ["TV7K2M", "3c7d5c3e", "9a7d5c3e", "SEPAY"] {
+        assert!(!text.contains(secret), "{secret} in {text}");
+    }
+}
+
+#[test]
+fn every_schema_product_code_has_a_vietnamese_label() {
+    let schema = payment_schema();
+    let codes = schema
+        .pointer("/properties/data/properties/product_code/enum")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    for code in codes {
+        let code = code.as_str().unwrap();
+        assert_ne!(
+            notify_svc::domain::topup::package_label(code),
+            code,
+            "{code} has no label"
+        );
+    }
 }

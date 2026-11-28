@@ -1,4 +1,5 @@
-//! Startup wiring: pool → platform + service migrations → HTTP server and Kafka consumer.
+//! Startup wiring: pool → platform + service migrations → HTTP server, the two Kafka consumers (`OrderPlaced`,
+//! `PaymentSucceeded`) and the Telegram loop (daily summary + outbox delivery).
 //!
 //! The HTTP port is bound only after the pool is connected and migrations are applied. The
 //! consumer runs in its own task; Kafka failures are logged and retried and never stop the HTTP
@@ -17,13 +18,20 @@ use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
-use crate::adapters::db::{self, NotificationRepositoryAdapter, PgReadiness};
+use crate::adapters::db::{self, NotificationRepositoryAdapter, PgReadiness, TelegramStoreAdapter};
 use crate::adapters::http;
-use crate::adapters::messaging::{OrderPlacedHandler, CONSUMER_NAME, TOPIC};
+use crate::adapters::messaging::{
+    OrderPlacedHandler, PaymentSucceededHandler, CONSUMER_NAME, PAYMENTS_CONSUMER_NAME,
+    PAYMENTS_TOPIC, TOPIC,
+};
+use crate::adapters::outbound::{self, ClusterDayMetrics, TelegramMessenger};
 use crate::adapters::system::{RandomIds, SystemClock};
-use crate::application::NotificationService;
+use crate::application::{
+    Clock, Delivery, MessengerPort, NotificationService, OutboxPort, OutboxSender,
+    PaymentRepositoryPort, SummaryService, SummaryTick, TopUpService,
+};
 use crate::config::Config;
 
 /// Delay before re-creating the consumer after `run_consumer` returned an error.
@@ -79,12 +87,49 @@ async fn start(
         TOPIC,
         CONSUMER_NAME,
     );
-    let consumer = tokio::spawn(consume(
-        consumer_cfg,
-        pool.clone(),
-        handler,
-        shutdown.clone(),
+
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    let store = TelegramStoreAdapter::new(pool.clone());
+    let topups = Arc::new(TopUpService::new(store.clone(), clock.clone()));
+    let payment_handler: Arc<dyn EventHandler> = Arc::new(PaymentSucceededHandler::new(topups));
+    let payments_cfg = ConsumerConfig::new(
+        config.kafka_bootstrap_servers.clone(),
+        config.payments_group_id.clone(),
+        PAYMENTS_TOPIC,
+        PAYMENTS_CONSUMER_NAME,
+    );
+    // Both consumers in one supervised task: the first that fails ends it (the service then exits non-zero).
+    let consumer = {
+        let (pool, shutdown) = (pool.clone(), shutdown.clone());
+        tokio::spawn(async move {
+            tokio::try_join!(
+                consume(consumer_cfg, pool.clone(), handler, shutdown.clone()),
+                consume(payments_cfg, pool, payment_handler, shutdown),
+            )
+            .map(|((), ())| ())
+        })
+    };
+
+    let client = outbound::http_client()?;
+    let messenger: Option<Arc<dyn MessengerPort>> = config.telegram.as_ref().map(|t| {
+        Arc::new(TelegramMessenger::new(
+            client.clone(),
+            &config.telegram_api_url,
+            &t.bot_token,
+            &t.chat_id,
+        )) as Arc<dyn MessengerPort>
+    });
+    if messenger.is_none() {
+        warn!("TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID unset: top-up and daily-summary messages are queued, not sent");
+    }
+    let sender = OutboxSender::new(store.clone(), messenger, clock.clone());
+    let metrics = Arc::new(ClusterDayMetrics::new(
+        client,
+        &config.prometheus_url,
+        &config.grafana_url,
     ));
+    let summary = SummaryService::new(store.clone(), store, metrics, clock);
+    tokio::spawn(telegram_loop(sender, summary, shutdown.clone()));
 
     let router = http::router(service, Arc::new(PgReadiness::new(pool.clone())));
     info!(addr = %listener.local_addr()?, "http server listening");
@@ -193,6 +238,48 @@ async fn consume(
                     () = shutdown.cancelled() => return Ok(()),
                     () = tokio::time::sleep(CONSUMER_RESTART_DELAY) => {}
                 }
+            }
+        }
+    }
+}
+
+/// How often the Telegram loop queues the due daily summary and delivers the outbox.
+pub const TELEGRAM_TICK: Duration = Duration::from_secs(15);
+
+/// Until shutdown: every [`TELEGRAM_TICK`], queue the daily summary when due, then deliver due messages. Failures
+/// are logged and retried next tick; they never stop the service.
+async fn telegram_loop<O, P>(
+    sender: OutboxSender<O>,
+    summary: SummaryService<P, O>,
+    shutdown: CancellationToken,
+) where
+    O: OutboxPort,
+    P: PaymentRepositoryPort,
+{
+    let mut tick = tokio::time::interval(TELEGRAM_TICK);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => return,
+            _ = tick.tick() => {}
+        }
+        match summary.tick().await {
+            Ok(SummaryTick::Queued) => info!("daily summary queued"),
+            Ok(_) => {}
+            Err(e) => {
+                error!(error = %format!("{e:#}"), error_type = "SummaryFailed", "daily summary tick failed");
+            }
+        }
+        match sender.deliver_due().await {
+            Ok(d) if d == Delivery::default() => {}
+            Ok(d) => info!(
+                sent = d.sent,
+                failed = d.failed,
+                expired = d.expired,
+                "telegram outbox delivered"
+            ),
+            Err(e) => {
+                error!(error = %format!("{e:#}"), error_type = "OutboxFailed", "telegram outbox pass failed");
             }
         }
     }

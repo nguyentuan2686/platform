@@ -14,10 +14,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{ensure, Context as _};
 use notify_svc::adapters::db::{self, NotificationRepositoryAdapter};
-use notify_svc::adapters::messaging::TOPIC;
+use notify_svc::adapters::messaging::{PAYMENTS_TOPIC, TOPIC};
 use notify_svc::adapters::system::{RandomIds, SystemClock};
 use notify_svc::application::NotificationService;
-use notify_svc::config::Config;
+use notify_svc::config::{Config, TelegramConfig};
 use notify_svc::domain::{Channel, OrderPlaced};
 use rdkafka::admin::{AdminClient, AdminOptions, NewTopic, TopicReplication};
 use rdkafka::client::DefaultClientContext;
@@ -127,7 +127,10 @@ impl Env {
             .create()?;
         for r in admin
             .create_topics(
-                &[NewTopic::new(TOPIC, 1, TopicReplication::Fixed(1))],
+                &[
+                    NewTopic::new(TOPIC, 1, TopicReplication::Fixed(1)),
+                    NewTopic::new(PAYMENTS_TOPIC, 1, TopicReplication::Fixed(1)),
+                ],
                 &AdminOptions::new(),
             )
             .await?
@@ -154,13 +157,24 @@ impl Env {
     }
 
     async fn produce(&self, payload: &[u8], traceparent: Option<&str>) -> anyhow::Result<()> {
+        self.produce_to(TOPIC, "OrderPlaced", payload, traceparent)
+            .await
+    }
+
+    async fn produce_to(
+        &self,
+        topic: &str,
+        event_type: &str,
+        payload: &[u8],
+        traceparent: Option<&str>,
+    ) -> anyhow::Result<()> {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", &self.kafka)
             .set("message.timeout.ms", "10000")
             .create()?;
         let mut headers = OwnedHeaders::new().insert(Header {
             key: "event_type",
-            value: Some("OrderPlaced"),
+            value: Some(event_type),
         });
         if let Some(tp) = traceparent {
             headers = headers.insert(Header {
@@ -170,7 +184,7 @@ impl Env {
         }
         producer
             .send(
-                FutureRecord::to(TOPIC)
+                FutureRecord::to(topic)
                     .key("order")
                     .payload(payload)
                     .headers(headers),
@@ -183,6 +197,9 @@ impl Env {
     }
 }
 
+/// Nothing listens on port 9: Telegram off, Prometheus/Grafana unreachable (the summary then waits or has gaps).
+const NOWHERE: &str = "http://127.0.0.1:9";
+
 fn config(db_url: String, kafka: &str) -> Config {
     Config {
         db_url,
@@ -190,7 +207,59 @@ fn config(db_url: String, kafka: &str) -> Config {
         port: 0,
         kafka_group_id: format!("g-{}", Uuid::new_v4().simple()),
         service_name: "notify-svc".to_owned(),
+        payments_group_id: format!("p-{}", Uuid::new_v4().simple()),
+        telegram: None,
+        telegram_api_url: NOWHERE.to_owned(),
+        prometheus_url: NOWHERE.to_owned(),
+        grafana_url: NOWHERE.to_owned(),
     }
+}
+
+/// Fake Telegram Bot API: records every sent text; its base URL.
+async fn fake_telegram() -> anyhow::Result<(String, Arc<std::sync::Mutex<Vec<String>>>)> {
+    use axum::routing::post;
+    let texts: Arc<std::sync::Mutex<Vec<String>>> = Arc::default();
+    let seen = texts.clone();
+    let app = axum::Router::new().route(
+        "/botTEST-TOKEN/sendMessage",
+        post(move |axum::Json(b): axum::Json<serde_json::Value>| {
+            let seen = seen.clone();
+            async move {
+                seen.lock()
+                    .unwrap()
+                    .push(b["text"].as_str().unwrap_or_default().to_owned());
+                axum::Json(serde_json::json!({"ok": true}))
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let url = format!("http://{}", listener.local_addr()?);
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    Ok((url, texts))
+}
+
+/// `PaymentSucceeded` envelope as payment-svc publishes it (contract v1).
+fn payment_envelope(
+    event_id: Uuid,
+    order_id: Uuid,
+    product: &str,
+    amount: &str,
+    paid_at: time::OffsetDateTime,
+) -> Vec<u8> {
+    let paid_at = paid_at
+        .format(&time::format_description::well_known::Rfc3339)
+        .expect("formattable");
+    serde_json::to_vec(&serde_json::json!({
+        "event_id": event_id,
+        "event_type": "PaymentSucceeded",
+        "occurred_at": paid_at,
+        "data": {
+            "order_id": order_id, "order_code": "TV1", "account_id": Uuid::new_v4(),
+            "product_code": product, "site": "tuvi", "amount": amount, "currency": "VND",
+            "provider": "SEPAY", "paid_at": paid_at, "chart_profile_id": null
+        },
+    }))
+    .expect("serializable")
 }
 
 /// Envelope as order-svc's outbox relay publishes it.
@@ -527,6 +596,94 @@ async fn missing_database_fails_fast(env: &Env) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn scalar(db_url: &str, sql: &'static str) -> anyhow::Result<i64> {
+    let pool = PgPool::connect(db_url).await?;
+    let n = sqlx::query_scalar(sql).fetch_one(&pool).await?;
+    pool.close().await;
+    Ok(n)
+}
+
+/// A top-up arrives three times (same event twice, then a new event id for the same order) next to an old replayed
+/// payment: one payments row per order, exactly one Telegram message (the recent one), and the daily summary of
+/// the past day is sent too (its metrics are unreachable, so it goes out with gaps after the grace period).
+async fn payment_succeeded_is_recorded_and_announced_once(env: &Env) -> anyhow::Result<()> {
+    let db_url = env.new_db_url().await?;
+    let (telegram_url, texts) = fake_telegram().await?;
+    let mut cfg = config(db_url.clone(), &env.kafka);
+    cfg.telegram = Some(TelegramConfig {
+        bot_token: "TEST-TOKEN".into(),
+        chat_id: "1".into(),
+    });
+    cfg.telegram_api_url = telegram_url;
+    let app = RunningApp::start(cfg).await?;
+    let outcome = async {
+        let now = time::OffsetDateTime::now_utc();
+        let (event, order, old_order) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+        let fresh = payment_envelope(event, order, "CREDIT_5", "50000.00", now);
+        env.produce_to(PAYMENTS_TOPIC, "PaymentSucceeded", &fresh, None)
+            .await?;
+        env.produce_to(PAYMENTS_TOPIC, "PaymentSucceeded", &fresh, None)
+            .await?;
+        let again = payment_envelope(Uuid::new_v4(), order, "CREDIT_5", "50000.00", now);
+        env.produce_to(PAYMENTS_TOPIC, "PaymentSucceeded", &again, None)
+            .await?;
+        let old = payment_envelope(
+            Uuid::new_v4(),
+            old_order,
+            "CREDIT_1",
+            "10000.00",
+            now - time::Duration::hours(3),
+        );
+        env.produce_to(PAYMENTS_TOPIC, "PaymentSucceeded", &old, None)
+            .await?;
+
+        // the consumer group join dominates: same budget as the order warm-up
+        wait_for("both payments stored", Duration::from_secs(60), || async {
+            Ok(scalar(&db_url, "SELECT count(*) FROM payments").await? == 2)
+        })
+        .await?;
+        let topup = |t: &String| t.starts_with("💰 Nạp tiền");
+        wait_for("top-up message sent", Duration::from_secs(30), || async {
+            Ok(texts.lock().unwrap().iter().any(topup))
+        })
+        .await?;
+        wait_for("daily summary sent", Duration::from_secs(30), || async {
+            Ok(texts
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|t| t.starts_with("📊 Tổng kết")))
+        })
+        .await?;
+        let sent: Vec<String> = texts
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|t| topup(t))
+            .cloned()
+            .collect();
+        ensure!(sent.len() == 1, "exactly one top-up message: {sent:?}");
+        ensure!(
+            sent[0].contains("Gói: CREDIT_5 (5 lượt)\nSố tiền: 50.000đ\nLúc: "),
+            "text: {}",
+            sent[0]
+        );
+        ensure!(
+            scalar(
+                &db_url,
+                "SELECT count(*) FROM telegram_outbox WHERE status = 'pending'"
+            )
+            .await?
+                == 0,
+            "outbox drained"
+        );
+        Ok(())
+    }
+    .await;
+    app.stop().await?;
+    outcome
+}
+
 macro_rules! scenario {
     ($env:expr, $failures:expr, $name:ident) => {{
         let t = Instant::now();
@@ -567,6 +724,11 @@ fn notify_svc_flow_integration() {
             &env,
             failures,
             invalid_data_is_skipped_and_consumer_continues
+        );
+        scenario!(
+            &env,
+            failures,
+            payment_succeeded_is_recorded_and_announced_once
         );
         eprintln!("flow IT total {:.1}s", started.elapsed().as_secs_f64());
         assert!(

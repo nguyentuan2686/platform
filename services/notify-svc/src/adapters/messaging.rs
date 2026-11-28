@@ -1,4 +1,4 @@
-//! Kafka: the `OrderPlaced` handler run by `platform_core::messaging::run_consumer`.
+//! Kafka: the `OrderPlaced` and `PaymentSucceeded` handlers run by `platform_core::messaging::run_consumer`.
 
 use std::sync::Arc;
 
@@ -8,8 +8,11 @@ use sqlx::postgres::PgDatabaseError;
 use sqlx::{Postgres, Transaction};
 use tracing::info;
 
-use crate::application::{AppError, NotificationRepositoryPort, NotificationService};
-use crate::domain::OrderPlaced;
+use crate::application::{
+    AppError, NotificationRepositoryPort, NotificationService, PaymentRepositoryPort,
+    TelegramError, TopUpService,
+};
+use crate::domain::{OrderPlaced, PaymentSucceeded};
 
 pub const TOPIC: &str = "orders.order-placed.v1";
 pub const EVENT_TYPE: &str = "OrderPlaced";
@@ -35,13 +38,21 @@ impl<R> OrderPlacedHandler<R> {
 
 /// Parses `data` without ever echoing its values (they may hold PII) into the error.
 fn parse_data(data: &serde_json::Value) -> Result<OrderPlaced, MalformedEvent> {
+    parse_as(data, "an OrderPlaced")
+}
+
+/// Generic form of [`parse_data`]: `what` names the event, with its article (`an OrderPlaced`).
+fn parse_as<T: serde::de::DeserializeOwned>(
+    data: &serde_json::Value,
+    what: &str,
+) -> Result<T, MalformedEvent> {
     serde_path_to_error::deserialize(data).map_err(|e| {
         let inner = e.inner().to_string();
         let path = e.path().to_string();
         if inner.starts_with("missing field") {
             MalformedEvent::new(format!("data: {inner}"))
         } else if path.is_empty() || path == "." {
-            MalformedEvent::new("data is not an OrderPlaced object")
+            MalformedEvent::new(format!("data is not {what} object"))
         } else {
             MalformedEvent::new(format!("data.{path} has an invalid value"))
         }
@@ -112,6 +123,53 @@ impl<R: NotificationRepositoryPort + 'static> EventHandler for OrderPlacedHandle
                 None => Err(anyhow::Error::new(AppError::Repository(e))),
             },
             Err(e) => Err(anyhow::Error::new(e)),
+        }
+    }
+}
+
+pub const PAYMENTS_TOPIC: &str = "payments.payment-succeeded.v1";
+pub const PAYMENT_EVENT_TYPE: &str = "PaymentSucceeded";
+/// Idempotency namespace and default consumer group of the payments consumer.
+pub const PAYMENTS_CONSUMER_NAME: &str = "notify-svc-payments";
+
+/// Records each `PaymentSucceeded` top-up (revenue) and queues its Telegram message when recent.
+///
+/// Same error policy as [`OrderPlacedHandler`]: invalid data is a [`MalformedEvent`] (logged, skipped), a database
+/// rejection of the data too, other repository errors are retried. Only ids are logged, never the amount or package.
+pub struct PaymentSucceededHandler<P> {
+    service: Arc<TopUpService<P>>,
+}
+
+impl<P> PaymentSucceededHandler<P> {
+    pub fn new(service: Arc<TopUpService<P>>) -> Self {
+        Self { service }
+    }
+}
+
+#[async_trait]
+impl<P: PaymentRepositoryPort + 'static> EventHandler for PaymentSucceededHandler<P> {
+    fn event_type(&self) -> &'static str {
+        PAYMENT_EVENT_TYPE
+    }
+
+    async fn handle(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        event: &Envelope,
+    ) -> anyhow::Result<()> {
+        let data: PaymentSucceeded = parse_as(&event.data, "a PaymentSucceeded")?;
+        match self.service.record(tx, &data).await {
+            Ok(outcome) => {
+                info!(event_id = %event.event_id, order_id = %data.order_id, outcome = ?outcome, "top-up recorded");
+                Ok(())
+            }
+            Err(TelegramError::TopUp(e)) => {
+                Err(MalformedEvent::new(format!("data rejected: {e}")).into())
+            }
+            Err(TelegramError::Repository(e)) => match rejected_by_database(&e) {
+                Some(m) => Err(m.into()),
+                None => Err(anyhow::Error::new(TelegramError::Repository(e))),
+            },
         }
     }
 }
@@ -224,5 +282,35 @@ mod tests {
         assert!(rejected_by_database(&repo_error("08006", None)).is_none());
         assert!(rejected_by_database(&anyhow::Error::new(sqlx::Error::PoolTimedOut)).is_none());
         assert!(rejected_by_database(&anyhow::anyhow!("db down")).is_none());
+    }
+
+    #[test]
+    fn parses_payment_data_and_never_echoes_values() {
+        let d = json!({"order_id": "9a7d5c3e-6b1f-4e2a-8c0d-3f5e7a9b1c2d", "order_code": "TV123",
+                       "account_id": "1a7d5c3e-6b1f-4e2a-8c0d-3f5e7a9b1c2d", "product_code": "CREDIT_5", "site": "tuvi",
+                       "amount": "50000.00", "currency": "VND", "provider": "SEPAY",
+                       "paid_at": "2026-11-28T07:05:09Z", "chart_profile_id": null, "future_field": 1});
+        let p: PaymentSucceeded = parse_as(&d, "a PaymentSucceeded").unwrap();
+        assert_eq!(
+            (p.product_code.as_str(), p.amount.as_str()),
+            ("CREDIT_5", "50000.00")
+        );
+
+        let bad = json!({"order_id": "9a7d5c3e-6b1f-4e2a-8c0d-3f5e7a9b1c2d", "product_code": "CREDIT_5",
+                         "amount": "50000.00", "currency": "VND", "paid_at": "secret-value"});
+        let reason = parse_as::<PaymentSucceeded>(&bad, "a PaymentSucceeded")
+            .unwrap_err()
+            .reason()
+            .to_owned();
+        assert!(
+            reason.contains("paid_at") && !reason.contains("secret-value"),
+            "{reason}"
+        );
+        assert_eq!(
+            parse_as::<PaymentSucceeded>(&json!("x"), "a PaymentSucceeded")
+                .unwrap_err()
+                .reason(),
+            "data is not a PaymentSucceeded object"
+        );
     }
 }
