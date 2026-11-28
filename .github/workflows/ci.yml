@@ -130,11 +130,23 @@ jobs:
               - 'rust-toolchain.toml'
               - 'Cargo.toml'
               - 'Cargo.lock'
+            # What the bootstrap job actually exercises: the host scripts, Argo CD apps, and the slices it syncs in CI
+            # mode (prod-sealed, prod-platform). prod-apps and prod-tunnel stay unsynced there (GITOPS_CI_MODE=1), so
+            # overlays/prod/{apps,tunnel,domain} only render, which k8s-manifests already checks; main runs it anyway.
             infra:
               - 'infra/**'
               - 'deploy/argocd/**'
-              - 'deploy/k8s/overlays/prod/**'
+              - 'deploy/k8s/platform/**'
+              - 'deploy/k8s/overlays/prod/kustomization.yaml'
+              - 'deploy/k8s/overlays/prod/sealed/**'
+              - 'deploy/k8s/overlays/prod/platform/**'
+              - 'deploy/k8s/overlays/prod/secrets.tsv'
+              - 'deploy/k8s/overlays/e2e/secrets/**'
+              - 'scripts/seal-secrets.sh'
+              - 'scripts/verify-deploy.sh'
+              - 'scripts/e2e-edge.sh'
               - '.github/workflows/_bootstrap.yml'
+              - '.github/workflows/ci.yml'
             root:
               - '.mvn/**'
               - 'pom.xml'
@@ -401,10 +413,11 @@ jobs:
         run: bash scripts/alerts-promtool.sh
 
   # Host bootstrap on x86 + ARM runners (k3s, firewall, Sealed Secrets, Argo CD syncing this commit): every push to
-  # main, and PRs that touch infra, Argo CD apps, the prod overlay or workflows.
+  # main, and PRs that touch what it exercises (the `infra` filter above). Not on every workflow or pom change: it
+  # costs 15-20 min and those changes cannot alter what a fresh host does.
   bootstrap:
     needs: changes
-    if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.root == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: needs.changes.outputs.infra == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     permissions:
       contents: read
     uses: ./.github/workflows/_bootstrap.yml
