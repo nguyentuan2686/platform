@@ -5,6 +5,7 @@
 export const XEM_SO_PATH = "/vi/xem-so";
 export const DAILY_LIMIT_NOTE = "Ta không lưu dãy số của con. Con được xem 2 số mỗi ngày.";
 export const QUOTA_MESSAGE = "Hôm nay con xem đủ 2 số rồi, mai quay lại với ta nhé.";
+export const IP_QUOTA_MESSAGE = "Hôm nay mạng của con đã xem nhiều số rồi, con quay lại sau nhé.";
 export const BANK_WARNING = "Chỉ nhập số tài khoản. Không bao giờ nhập mật khẩu, mã OTP hay số thẻ.";
 
 export type XemSoSlug = "sim" | "so-tai-khoan" | "bien-so-xe";

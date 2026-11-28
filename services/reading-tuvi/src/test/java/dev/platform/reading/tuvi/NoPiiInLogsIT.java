@@ -99,6 +99,8 @@ class NoPiiInLogsIT extends QaItSupport {
         .doesNotContain("0912345678")
         .doesNotContain("912345678")
         .doesNotContain("0987654321")
+        .doesNotContain("0911222333")
+        .doesNotContain("911222333")
         .doesNotContain("203.0.113.77");
     // a standalone 1990 (hex trace ids may contain the digits by chance)
     assertThat(Pattern.compile("(?<![0-9A-Za-z])1990(?![0-9A-Za-z])").matcher(logs).find())

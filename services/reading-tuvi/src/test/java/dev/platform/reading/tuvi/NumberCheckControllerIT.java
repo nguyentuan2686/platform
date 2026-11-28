@@ -88,6 +88,8 @@ class NumberCheckControllerIT extends QaItSupport {
         .startsWith("application/problem+json");
     JsonNode p = JSON.readTree(third.body());
     assertThat(p.get("reason").asString()).isEqualTo("number_quota");
+    assertThat(ContractSupport.componentSchema("NumberQuotaReason").validate(p.get("reason")))
+        .isEmpty();
     assertThat(p.get("quota").get("remaining").asInt()).isZero();
     assertThat(p.get("trace_id")).isNotNull();
     assertThat(ContractSupport.componentSchema("Problem").validate(p)).isEmpty();

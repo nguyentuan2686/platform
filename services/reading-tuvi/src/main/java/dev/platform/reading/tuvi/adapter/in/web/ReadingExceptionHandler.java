@@ -128,7 +128,7 @@ public class ReadingExceptionHandler {
     ProblemDetail detail =
         ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Daily number checks used up");
     detail.setType(CONFLICT);
-    detail.setProperty("reason", "number_quota");
+    detail.setProperty("reason", ex.reason());
     detail.setProperty(
         "quota",
         Map.of(

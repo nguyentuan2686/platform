@@ -194,6 +194,8 @@ class NumberScorerTest {
     assertThat(s.numberElement()).isEqualTo(Element.THO);
     assertThat(s.goodPairs()).isEqualTo(List.of("78"));
     assertThat(s.avoidPairs()).isEmpty();
+    assertThat(s.toString()).doesNotContain("78").contains("7.0");
+    assertThat(THO_KHAM.toString()).doesNotContain("1990").doesNotContain("Canh Ngọ");
   }
 
   @Test

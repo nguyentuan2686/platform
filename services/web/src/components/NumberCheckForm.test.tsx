@@ -88,6 +88,14 @@ describe("NumberCheckForm", () => {
     expect(screen.getByRole("link", { name: /Xem lá số/ }).getAttribute("href")).toBe("/vi");
   });
 
+  it("on 409 number_quota_ip shows the shared-network message instead", async () => {
+    post = () => json(409, { reason: "number_quota_ip", quota: null });
+    render(<NumberCheckForm kind="sim" numberLabel="Số điện thoại" placeholder="" />);
+    fill("0911111111");
+    await waitFor(() => expect(document.body.textContent).toContain("Hôm nay mạng của con đã xem nhiều số rồi, con quay lại sau nhé."));
+    expect(document.body.textContent).not.toContain("Hôm nay con xem đủ 2 số rồi");
+  });
+
   it("explains an invalid number and an upstream failure", async () => {
     post = () => json(400, { reason: "invalid", field: "number" });
     render(<NumberCheckForm kind="sim" numberLabel="Số điện thoại" placeholder="" />);

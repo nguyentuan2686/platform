@@ -64,7 +64,7 @@ public class HmacNumberHasher implements NumberHasherPort {
       mac.init(key);
       return mac.doFinal(text.getBytes(StandardCharsets.UTF_8));
     } catch (GeneralSecurityException e) {
-      throw new IllegalStateException("Could not compute the number-check HMAC");
+      throw new IllegalStateException("Could not compute the number-check HMAC", e);
     }
   }
 }

@@ -91,7 +91,9 @@ class JdbcNumberUsageIT {
     usage.recordOrReuse(other, DAY, bytes("n2"), IP, 2, 2);
     IdentitySubject third = new IdentitySubject("guest", UUID.randomUUID());
     assertThatThrownBy(() -> usage.recordOrReuse(third, DAY, bytes("n3"), IP, 2, 2))
-        .isInstanceOf(NumberQuotaExceededException.class);
+        .isInstanceOf(NumberQuotaExceededException.class)
+        .extracting(e -> ((NumberQuotaExceededException) e).reason())
+        .isEqualTo("number_quota_ip");
     // a number already seen on that IP by the same subject is still free; without an IP no limit
     assertThat(usage.recordOrReuse(other, DAY, bytes("n2"), IP, 2, 2).used()).isEqualTo(2);
     assertThat(usage.recordOrReuse(third, DAY, bytes("n3"), null, 2, 2).used()).isEqualTo(1);
@@ -127,6 +129,53 @@ class JdbcNumberUsageIT {
       pool.shutdownNow();
     }
     assertThat(usage.quota(subject, DAY, 2).used()).isEqualTo(2);
+  }
+
+  @Test
+  void two_subjects_on_one_ip_with_one_ip_slot_left_let_exactly_one_through() throws Exception {
+    // perIp 2, one distinct number already on the IP: one slot left for two fresh subjects
+    usage.recordOrReuse(subject, DAY, bytes("n0"), IP, 2, 2);
+    List<IdentitySubject> subjects =
+        List.of(
+            new IdentitySubject("guest", UUID.randomUUID()),
+            new IdentitySubject("guest", UUID.randomUUID()));
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    CountDownLatch go = new CountDownLatch(1);
+    List<String> refusals = new java.util.concurrent.CopyOnWriteArrayList<>();
+    try {
+      List<Future<Boolean>> results = new ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        IdentitySubject s = subjects.get(i);
+        String n = "ip-" + i;
+        results.add(
+            pool.submit(
+                () -> {
+                  go.await();
+                  try {
+                    usage.recordOrReuse(s, DAY, bytes(n), IP, 2, 2);
+                    return true;
+                  } catch (NumberQuotaExceededException e) {
+                    refusals.add(e.reason());
+                    return false;
+                  }
+                }));
+      }
+      go.countDown();
+      int ok = 0;
+      for (Future<Boolean> f : results) {
+        ok += f.get(30, TimeUnit.SECONDS) ? 1 : 0;
+      }
+      assertThat(ok).isEqualTo(1);
+      assertThat(refusals).containsExactly("number_quota_ip");
+    } finally {
+      pool.shutdownNow();
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "select count(distinct check_hash) from number_check_usage where ip_hash = ?",
+                Integer.class,
+                (Object) IP))
+        .isEqualTo(2);
   }
 
   @Test

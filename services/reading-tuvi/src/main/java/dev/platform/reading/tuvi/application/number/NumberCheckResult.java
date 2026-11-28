@@ -11,4 +11,9 @@ public record NumberCheckResult(
   public NumberCheckResult {
     reading = List.copyOf(reading);
   }
+
+  @Override
+  public String toString() {
+    return "NumberCheckResult[redacted]";
+  }
 }

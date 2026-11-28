@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
-import { BANK_WARNING, DAILY_LIMIT_NOTE, QUOTA_MESSAGE } from "@/content/xemSo";
+import { BANK_WARNING, DAILY_LIMIT_NOTE, IP_QUOTA_MESSAGE, QUOTA_MESSAGE } from "@/content/xemSo";
 
 type Kind = "sim" | "bank" | "plate";
 type Quota = { limit: number; used: number; remaining: number };
@@ -20,7 +20,7 @@ type State =
   | { s: "idle" }
   | { s: "busy" }
   | { s: "done"; r: Result }
-  | { s: "quota" }
+  | { s: "quota"; ip: boolean }
   | { s: "invalid"; field: string }
   | { s: "error" };
 
@@ -79,8 +79,10 @@ export function NumberCheckForm({ kind, numberLabel, placeholder }: { kind: Kind
         setQuota(r.quota);
         setState({ s: "done", r });
       } else if (res.status === 409) {
-        setQuota((q) => (q ? { ...q, used: q.limit, remaining: 0 } : q));
-        setState({ s: "quota" });
+        const p = (await res.json().catch(() => ({}))) as { reason?: string };
+        const ip = p.reason === "number_quota_ip";
+        if (!ip) setQuota((q) => (q ? { ...q, used: q.limit, remaining: 0 } : q));
+        setState({ s: "quota", ip });
       } else if (res.status === 400) {
         const p = (await res.json().catch(() => ({}))) as { field?: string };
         setState({ s: "invalid", field: p.field ?? "number" });
@@ -135,7 +137,7 @@ export function NumberCheckForm({ kind, numberLabel, placeholder }: { kind: Kind
       <div aria-live="polite">
         {state.s === "quota" && (
           <div className="notice" role="status">
-            <p>{QUOTA_MESSAGE}</p>
+            <p>{state.ip ? IP_QUOTA_MESSAGE : QUOTA_MESSAGE}</p>
             <Link href="/vi" className="btn btn-ghost">
               Xem lá số tử vi của con
             </Link>

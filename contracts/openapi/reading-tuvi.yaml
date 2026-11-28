@@ -391,8 +391,9 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '409':
           description: >-
-            `reason` is `number_quota`; the problem carries `quota` (a NumberCheckQuota with
-            `remaining` 0).
+            `reason` (a NumberQuotaReason) is `number_quota` (the caller used today's checks) or
+            `number_quota_ip` (the client IP did); the problem carries `quota` (a NumberCheckQuota
+            with `remaining` 0).
           content:
             application/problem+json:
               schema:
@@ -872,6 +873,10 @@ components:
         gender:
           type: string
           enum: [male, female]
+    NumberQuotaReason:
+      type: string
+      description: The `reason` of a 409 from POST /tuvi/number-check.
+      enum: [number_quota, number_quota_ip]
     NumberCheckQuota:
       type: object
       required: [limit, used, remaining]

@@ -36,4 +36,10 @@ public record Profile(
         CungPhi.name(cung),
         CungPhi.isEast(cung));
   }
+
+  /** Redacted: the lunar year and can chi reveal the birth year. */
+  @Override
+  public String toString() {
+    return "Profile[redacted]";
+  }
 }

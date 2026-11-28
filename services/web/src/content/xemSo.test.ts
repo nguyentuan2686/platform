@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BANK_WARNING, DAILY_LIMIT_NOTE, HUB_DESCRIPTION, HUB_INTRO, KINDS, QUOTA_MESSAGE, findKind } from "@/content/xemSo";
+import { BANK_WARNING, DAILY_LIMIT_NOTE, HUB_DESCRIPTION, HUB_INTRO, IP_QUOTA_MESSAGE, KINDS, QUOTA_MESSAGE, findKind } from "@/content/xemSo";
 
 // knowledge/tuvi/STYLE.md §2, same list as reading-tuvi SafetyLexicon.BANNED (and tuvi2027.test.ts).
 const BANNED = [
@@ -15,6 +15,7 @@ const paragraphs = (): [string, string][] => [
   ...KINDS.flatMap((k) => [...k.intro, ...k.method].map((t, i): [string, string] => [`${k.slug} ${i}`, t])),
   ["limit note", DAILY_LIMIT_NOTE],
   ["quota", QUOTA_MESSAGE],
+  ["ip quota", IP_QUOTA_MESSAGE],
 ];
 
 describe("Xem số content", () => {

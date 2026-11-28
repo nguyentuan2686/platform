@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const session = vi.hoisted(() => ({ ensureSession: vi.fn(), readSessionToken: vi.fn() }));
+const session = vi.hoisted(() => ({ ensureSession: vi.fn(), readSessionToken: vi.fn(), clearSessionCookie: vi.fn() }));
 vi.mock("@/lib/session", () => session);
 const hdrs = vi.hoisted(() => ({ values: new Map<string, string>() }));
 vi.mock("next/headers", () => ({ headers: async () => ({ get: (n: string) => hdrs.values.get(n) ?? null }) }));
@@ -48,6 +48,7 @@ beforeEach(() => {
   hdrs.values.clear();
   session.ensureSession.mockReset().mockResolvedValue("guest-token");
   session.readSessionToken.mockReset().mockResolvedValue("guest-token");
+  session.clearSessionCookie.mockReset().mockResolvedValue(undefined);
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init: RequestInit) => {
@@ -116,6 +117,35 @@ describe("POST /api/xem-so", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ reason: "number_quota", quota: { limit: 2, used: 2, remaining: 0 } });
     expect(logged()).toBe("");
+  });
+
+  it("maps 409 number_quota_ip to 409 with that reason", async () => {
+    responses = [
+      () => json(409, { reason: "number_quota_ip", quota: { limit: 2, used: 0, remaining: 0 } }, "application/problem+json"),
+      () => json(200, { limit: 2, used: 0, remaining: 2 }),
+    ];
+    const res = await POST(post(body()));
+    expect(res.status).toBe(409);
+    expect((await res.json()).reason).toBe("number_quota_ip");
+    expect(logged()).toBe("");
+  });
+
+  it("renews a session reading-tuvi rejects (401) once and retries", async () => {
+    session.ensureSession.mockImplementation(async (o?: { renew?: boolean }) => (o?.renew ? "fresh-token" : "stale-token"));
+    responses = [() => json(401, { status: 401 }, "application/problem+json"), () => json(200, RESULT)];
+    const res = await POST(post(body()));
+    expect(res.status).toBe(200);
+    expect(session.clearSessionCookie).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(2);
+    expect((calls[0]!.init.headers as Headers).get("authorization")).toBe("Bearer stale-token");
+    expect((calls[1]!.init.headers as Headers).get("authorization")).toBe("Bearer fresh-token");
+  });
+
+  it("does not loop when the renewed session is rejected too", async () => {
+    responses = [() => json(401, { status: 401 }, "application/problem+json")];
+    const res = await POST(post(body()));
+    expect(res.status).toBe(401);
+    expect(calls).toHaveLength(2);
   });
 
   it("maps an upstream invalid number to 400 quietly", async () => {

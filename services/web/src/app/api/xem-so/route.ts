@@ -2,7 +2,7 @@ import { clientIp } from "@/lib/clientIp";
 import { UpstreamProblem, UpstreamValidation } from "@/lib/http";
 import { checkNumber, numberQuota, type NumberCheckInput, type NumberQuota } from "@/lib/numberCheck";
 import { csrfRefusal, readObject, reply, upstreamFailure } from "@/lib/qaRoute";
-import { ensureSession } from "@/lib/session";
+import { clearSessionCookie, ensureSession } from "@/lib/session";
 import { logRefusalOrThrow } from "@/lib/degrade";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +42,20 @@ export async function POST(req: Request): Promise<Response> {
 
   let token: string | undefined;
   try {
+    const ip = await clientIp();
     token = await ensureSession();
-    return reply(200, await checkNumber(input, token, await clientIp()));
+    try {
+      return reply(200, await checkNumber(input, token, ip));
+    } catch (e) {
+      // A cookie identity no longer accepts (expired or revoked): renew the guest once, as actions.ts does.
+      if (!(e instanceof UpstreamProblem && e.status === 401)) throw e;
+      await clearSessionCookie();
+      token = await ensureSession({ renew: true });
+      return reply(200, await checkNumber(input, token, ip));
+    }
   } catch (e) {
-    if (e instanceof UpstreamProblem && e.status === 409 && e.reason === "number_quota") {
-      return reply(409, { reason: "number_quota", quota: await quotaOrNull(token) });
+    if (e instanceof UpstreamProblem && e.status === 409 && (e.reason === "number_quota" || e.reason === "number_quota_ip")) {
+      return reply(409, { reason: e.reason, quota: await quotaOrNull(token) });
     }
     if (e instanceof UpstreamValidation) {
       const field = Object.keys(e.fields).find((f) => USER_FIELDS.has(f));

@@ -36,6 +36,13 @@ public class JdbcNumberUsage implements NumberUsagePort {
               "select pg_advisory_xact_lock(hashtext(?))",
               (RowCallbackHandler) rs -> {},
               "number-check:" + s.kind() + ":" + s.id());
+          if (ip != null) {
+            // always after the subject lock (fixed order, no deadlock): serializes the IP count
+            jdbc.query(
+                "select pg_advisory_xact_lock(hashtext('number-check-ip:' || encode(?, 'hex')))",
+                (RowCallbackHandler) rs -> {},
+                (Object) ip);
+          }
           int used = used(s, day);
           Integer seen =
               jdbc.queryForObject(
@@ -61,7 +68,8 @@ public class JdbcNumberUsage implements NumberUsagePort {
                     day,
                     ip);
             if (byIp != null && byIp >= perIp) {
-              throw new NumberQuotaExceededException(new NumberQuota(perSubject, used, 0));
+              throw new NumberQuotaExceededException(
+                  new NumberQuota(perSubject, used, 0), NumberQuotaExceededException.IP_REASON);
             }
           }
           jdbc.update(

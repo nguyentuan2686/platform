@@ -17,4 +17,10 @@ public record NumberScore(
     goodPairs = List.copyOf(goodPairs);
     avoidPairs = List.copyOf(avoidPairs);
   }
+
+  /** Redacted: criteria details and pairs carry digits of the number. */
+  @Override
+  public String toString() {
+    return "NumberScore[total=" + total + ", band=" + band + ", redacted]";
+  }
 }

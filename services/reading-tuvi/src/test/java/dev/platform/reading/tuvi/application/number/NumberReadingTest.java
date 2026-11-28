@@ -34,4 +34,10 @@ class NumberReadingTest {
     assertThat(reading.render(List.of("so:intro=sim", "so:que=4", "so:menh=kim", "so:closing")))
         .containsExactly("A", "Q", "Z");
   }
+
+  @Test
+  void a_missing_key_is_logged_by_prefix_only() {
+    assertThat(NumberReading.prefix("so:pair=6789")).isEqualTo("so:pair");
+    assertThat(NumberReading.prefix("so:closing")).isEqualTo("so:closing");
+  }
 }

@@ -75,7 +75,8 @@ class NumberCheckServiceTest {
             .filter(r -> r.day.equals(day) && hex(ip).equals(r.ip))
             .forEach(r -> distinct.add(r.check));
         if (distinct.size() >= perIp) {
-          throw new NumberQuotaExceededException(new NumberQuota(perSubject, used, 0));
+          throw new NumberQuotaExceededException(
+              new NumberQuota(perSubject, used, 0), NumberQuotaExceededException.IP_REASON);
         }
       }
       rows.add(new Row(key(s), day, c, hex(ip)));
@@ -196,14 +197,18 @@ class NumberCheckServiceTest {
     assertThat(first.score().total()).isEqualTo(7.0);
     assertThat(first.profile().napAm()).isEqualTo("Lộ Bàng Thổ");
     assertThat(first.reading()).containsExactly("Lời kết.");
+    assertThat(first.toString()).isEqualTo("NumberCheckResult[redacted]");
 
     assertThat(service.check(sim(BEARER, "0987654321", "1.2.3.4")).quota())
         .isEqualTo(new NumberQuota(2, 2, 0));
 
     assertThatThrownBy(() -> service.check(sim(BEARER, "0911111111", "1.2.3.4")))
         .isInstanceOf(NumberQuotaExceededException.class)
-        .extracting(e -> ((NumberQuotaExceededException) e).quota().remaining())
-        .isEqualTo(0);
+        .satisfies(
+            e -> {
+              assertThat(((NumberQuotaExceededException) e).quota().remaining()).isZero();
+              assertThat(((NumberQuotaExceededException) e).reason()).isEqualTo("number_quota");
+            });
 
     // the same number in another spelling costs nothing
     assertThat(service.check(sim(BEARER, "+84 912 345 678", "1.2.3.4")).quota())
@@ -229,7 +234,9 @@ class NumberCheckServiceTest {
             new NumberCheckSettings(2, 1));
     service.check(sim(BEARER, "0912345678", "1.2.3.4"));
     assertThatThrownBy(() -> service.check(sim(OTHER, "0987654321", "1.2.3.4")))
-        .isInstanceOf(NumberQuotaExceededException.class);
+        .isInstanceOf(NumberQuotaExceededException.class)
+        .extracting(e -> ((NumberQuotaExceededException) e).reason())
+        .isEqualTo("number_quota_ip");
     // another IP is fine
     assertThat(service.check(sim(OTHER, "0987654321", "5.6.7.8")).quota().used()).isEqualTo(1);
   }
