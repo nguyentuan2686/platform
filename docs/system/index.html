@@ -184,7 +184,7 @@ flowchart LR
       LGTM["otel-lgtm<br/>Grafana Prom Loki Tempo"]
     end
   end
-  LLM["Claude / Groq / Gemini / paid"]
+  LLM["Claude / Gemini / Groq / OpenRouter / Cerebras / paid"]
   U --> CF
   SP --> CF
   CF -- "tunnel outbound" --> CFD --> TR
@@ -336,7 +336,7 @@ sequenceDiagram
     <li>web kiểm tra CSRF, kiểm tra cookie đồng ý gửi dữ liệu cho nhà cung cấp AI (<code>tv_ai_ok</code>), tạo session khách nếu cần, rồi mở stream SSE tới reading-tuvi.</li>
     <li>reading-tuvi chạy phần chuẩn bị theo thứ tự: <b>guard câu hỏi</b> (<code>QuestionGuard</code>: che PII, từ chối tự hại, cờ bạc, y tế, giải hạn...), đọc hồ sơ, gọi chart-svc, ghi hàng <code>qa_reading</code>, và với PAID thì <b>trừ lượt</b> qua identity <code>/internal/credits/consume</code>.</li>
     <li>Prompt chỉ gồm persona, chủ đề, dữ kiện cung và các đoạn kho được chọn theo khóa, cùng câu hỏi đã che PII. Không bao giờ có tên, email, ngày sinh hay chart_hash.</li>
-    <li>LLM gateway thử lần lượt theo <code>LLM_PROVIDERS</code> (prod: <code>claude,gemini,groq</code>; Claude dùng model <code>claude-haiku-5-5</code>, có ngân sách tháng riêng <code>ANTHROPIC_MONTHLY_BUDGET_USD</code>, chưa có key nên đang bị bỏ qua; Gemini trả lời trước, hết lượt hoặc 429 thì Groq; PAID còn có thể rơi xuống <code>paid</code>). Có đủ câu trả lời mới chạy <code>AnswerFilter</code>; bị chặn thì sinh lại một lần. Sau đó trả về dạng SSE theo từng câu và nối disclaimer phía server.</li>
+    <li>LLM gateway thử lần lượt theo <code>LLM_PROVIDERS</code> (prod: <code>claude,gemini,groq,openrouter,cerebras</code>; Claude dùng model <code>claude-haiku-5-5</code>, có ngân sách tháng riêng <code>ANTHROPIC_MONTHLY_BUDGET_USD</code>, chưa có key nên đang bị bỏ qua; Gemini trả lời trước, hết lượt hoặc 429 thì Groq, rồi OpenRouter (model free <code>google/gemma-4-31b-it:free</code>, đổi sang model trả phí như DeepSeek chỉ bằng env <code>OPENROUTER_*</code>), rồi Cerebras (chưa có key nên bị bỏ qua); PAID còn có thể rơi xuống <code>paid</code>). Có đủ câu trả lời mới chạy <code>AnswerFilter</code>; bị chặn thì sinh lại một lần. Sau đó trả về dạng SSE theo từng câu và nối disclaimer phía server.</li>
     <li>Câu hỏi và trả lời được lưu mã hóa AES-GCM (<code>QA_ENC_KEY</code>). Log chỉ có id, trạng thái, provider, độ trễ và số token.</li>
   </ol>
   <div class="diagram"><pre class="mermaid">
@@ -359,7 +359,7 @@ stateDiagram-v2
     <p>Mỗi lần trừ khóa hàng account. Thứ tự ưu tiên: thẻ năm còn hạn → thẻ tháng sắp hết hạn nhất → credits lẻ. Thẻ năm không giới hạn nhưng có trần ngầm 30 câu/ngày. Lần trừ đầu tiên khóa ngày giờ sinh của hồ sơ, để một tài khoản không xem hộ nhiều người.</p>
     <p>Trừ và hoàn đều idempotent theo <code>reading_id</code>. Khi lời gọi trừ bị timeout (có thể đã trừ), hệ thống lên lịch hoàn sau <code>QA_CONSUME_REFUND_GRACE</code> (2 phút).</p>
   </details>
-  <div class="note"><b>Cần kiểm tra trên prod:</b> <code>ANTHROPIC_API_KEY</code> (tùy chọn, hiện chưa dùng: Hỏi thầy chạy trên Gemini/Groq miễn phí; muốn bật Claude thì xem runbook llm-gateway §2a), <code>GROQ_API_KEY</code>, <code>GEMINI_API_KEY</code> và <code>OPENROUTER_API_KEY</code> (đã seal, provider OpenRouter đang làm) là khóa tùy chọn trong <code>reading-tuvi-secrets</code>. Provider không có key sẽ bị bỏ qua. Nếu chưa seal key thật, câu hỏi PAID rơi vào nhánh RETRYING rồi được hoàn lượt sau 24h. Em chưa kiểm tra giá trị trên cluster.</div>
+  <div class="note"><b>Cần kiểm tra trên prod:</b> <code>ANTHROPIC_API_KEY</code> (tùy chọn, hiện chưa dùng: Hỏi thầy chạy trên Gemini/Groq miễn phí; muốn bật Claude thì xem runbook llm-gateway §2a), <code>GROQ_API_KEY</code>, <code>GEMINI_API_KEY</code> và <code>OPENROUTER_API_KEY</code> (đã seal) là khóa tùy chọn trong <code>reading-tuvi-secrets</code>. Provider không có key sẽ bị bỏ qua. Nếu chưa seal key thật, câu hỏi PAID rơi vào nhánh RETRYING rồi được hoàn lượt sau 24h. Em chưa kiểm tra giá trị trên cluster.</div>
 
   <h3 id="nap-tien">2.4 Nạp tiền qua SePay / VietQR</h3>
   <div class="tbl"><table>
@@ -588,6 +588,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>Thêm provider LLM OpenRouter (model free <code>google/gemma-4-31b-it:free</code>, cờ <code>OPENROUTER_PAID</code> và giá theo env để đổi sang model trả phí) và Cerebras (<code>gpt-oss-120b</code>, chưa có key) vào cuối danh sách: prod <code>LLM_PROVIDERS=claude,gemini,groq,openrouter,cerebras</code>.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Seal key thật <code>OPENROUTER_API_KEY</code> (tùy chọn) trong <code>reading-tuvi-secrets</code>, chờ provider OpenRouter. Sửa <code>scripts/seal-secrets.sh</code> chết im lặng exit 141 (SIGPIPE ở <code>tr | sed q</code>).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Tin cảnh báo Telegram ngắn gọn, tiếng Việt: 🔴 Lỗi / ✅ Đã ổn, một dòng lỗi gì, dịch vụ, giờ Việt Nam; bỏ danh sách nhãn và link. Sửa lỗi <code>$$labels</code> làm tin hiện nguyên mẫu. Đổi luật hoặc mẫu tin thì lgtm tự restart (ConfigMap có hash).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>PR #62: service mới <code>astro-chart-svc</code> (Rust, :8086, stateless): <code>POST /astro/chart</code> (bản đồ sao natal) và <code>POST /astro/transits</code> (dữ kiện "Hôm nay"), contract <code>contracts/openapi/astro-chart-svc.yaml</code>; có job CI, image, kind e2e (smoke + RED metric); chưa có Ingress và chưa vào prod.</div></li>

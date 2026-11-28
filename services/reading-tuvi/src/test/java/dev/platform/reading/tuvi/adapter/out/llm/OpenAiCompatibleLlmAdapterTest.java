@@ -104,6 +104,21 @@ class OpenAiCompatibleLlmAdapterTest {
   }
 
   @Test
+  void free_tier_follows_paid_unless_set() {
+    var base = stub.baseUrl();
+    var timeout = Duration.ofSeconds(5);
+    assertThat(adapter(base, timeout, false).servesFreeTier()).isTrue();
+    assertThat(adapter(base, timeout, true).servesFreeTier()).isFalse();
+    var paidServingFree =
+        new OpenAiCompatibleLlmAdapter(
+            new OpenAiCompatibleSettings(
+                "openrouter", base, KEY, "m", 900, true, timeout, "", true),
+            RestClient.builder());
+    assertThat(paidServingFree.paid()).isTrue();
+    assertThat(paidServingFree.servesFreeTier()).isTrue();
+  }
+
+  @Test
   void parses_content_and_usage() throws Exception {
     stub.body = fixture("completion-ok.json");
 
