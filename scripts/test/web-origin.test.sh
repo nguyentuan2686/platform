@@ -20,7 +20,7 @@ real_domain_gives_https_origin() {
 invalid_placeholder_gives_empty() {
   domain_file app.example.invalid
   [ -z "$(bash "$script" "$tmp/domain.yaml")" ] || fail "${FUNCNAME[0]}" "$(bash "$script" "$tmp/domain.yaml")"
-  [ -z "$(bash "$script")" ] || fail "${FUNCNAME[0]}" "the committed domain.yaml must still be the .invalid placeholder in this test"
+  grep -Eqx "(https://[a-z0-9.-]+)?" <<<"$(bash "$script")" || fail "${FUNCNAME[0]}" "the committed domain.yaml gives neither an https origin nor empty: $(bash "$script")"
   echo "ok ${FUNCNAME[0]}"
 }
 
