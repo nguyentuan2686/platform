@@ -1,0 +1,302 @@
+# Platform alert rules as code (Grafana alerting provisioning). Each rule's query A holds the full PromQL including
+# its comparison, so it returns a series only while the condition holds; threshold B (A > 0) then fires.
+# scripts/alerts-promtool.sh turns these same expressions into Prometheus rules for the promtool unit tests
+# (scripts/testdata/alerts), so edit the expr here and the tests there together.
+# Annotations are Vietnamese (they are the Telegram text, see contact-point.tmpl.yaml): `summary` says what is wrong,
+# `service` names the service. Write `$labels` with ONE `$`: Grafana does not unescape `$$` in alerting provisioning
+# files, so `{{ $$labels.x }}` reaches the message as raw template text (k8s-validate.sh rejects `$$`).
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: platform
+    folder: Platform
+    interval: 1m
+    rules:
+      - uid: error-rate-high
+        title: Error rate high
+        condition: B
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nhiều yêu cầu bị lỗi (hơn 5% trả lỗi 5xx)"
+          service: "{{ $$labels.job }}"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#error-rate-high
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: '(sum by (job) (rate(http_server_request_duration_seconds_count{http_route!~"/health/.*|/tuvi/qa/readings.*", http_response_status_code=~"5.."}[5m])) / sum by (job) (rate(http_server_request_duration_seconds_count{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m])) > 0.05) and sum by (job) (rate(http_server_request_duration_seconds_count{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m])) > 0.01'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: latency-p95-high
+        title: Latency p95 high
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Phản hồi chậm (5% yêu cầu chậm hơn 1 giây)"
+          service: "{{ $labels.job }}"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#latency-p95-high
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'histogram_quantile(0.95, sum by (job, le) (rate(http_server_request_duration_seconds_bucket{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m]))) > 1 and on (job) sum by (job) (rate(http_server_request_duration_seconds_count{http_route!~"/health/.*|/tuvi/qa/readings.*"}[5m])) > 0.05'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: pod-restart-loop
+        title: Pod restart loop
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Khởi động lại liên tục (3 lần trở lên trong 15 phút)"
+          service: '{{ reReplaceAll "-[a-z0-9]{6,10}-[a-z0-9]{5}$" "" $labels.k8s_pod_name }}'
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#pod-restart-loop
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'max by (k8s_namespace_name, k8s_pod_name) (delta(k8s_container_restarts[15m])) >= 3'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: consumer-lag-rising
+        title: Consumer lag rising
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hàng đợi sự kiện bị dồn (chậm hơn 100 tin và vẫn tăng)"
+          service: "{{ $labels.redpanda_group }}"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#consumer-lag-rising
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'max by (redpanda_group) (redpanda_kafka_consumer_group_lag_max) > 100 and max by (redpanda_group) (deriv(redpanda_kafka_consumer_group_lag_max[10m])) > 0'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: disk-usage-high
+        title: Disk usage high
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ổ đĩa máy chủ đầy hơn 80%"
+          service: "máy chủ {{ $labels.k8s_node_name }}"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#disk-usage-high
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'max by (k8s_node_name) (k8s_node_filesystem_usage_bytes) / max by (k8s_node_name) (k8s_node_filesystem_capacity_bytes) > 0.8'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: deploy-failed
+        title: Deploy failed
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bản deploy bị lỗi (Argo CD báo Degraded hoặc Missing)"
+          service: "{{ $labels.name }}"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#deploy-failed
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'max by (name) (argocd_app_info{health_status=~"Degraded|Missing"}) > 0'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: backup-skipped
+        title: Backup skipped
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sao lưu database hằng ngày bị bỏ qua: chưa cấu hình nơi lưu (R2), dữ liệu chưa có bản sao ngoài máy chủ"
+          service: "pg-backup"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#backup-skipped
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'max by (job) (max_over_time(platform_backup_skipped[26h])) > 0'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: mail-cap-reached
+        title: Magic-link mail cap reached
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hết hạn mức email đăng nhập trong ngày: người dùng không nhận được link đăng nhập"
+          service: "identity-svc"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#mail-cap-reached
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'sum by (job) (increase(identity_magic_link_daily_cap_reached_total[15m])) > 0'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      - uid: mail-client-cap-hits
+        title: Magic-link requests dropped by the per-client cap
+        condition: B
+        for: 0m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hơn 10 email đăng nhập bị chặn trong 1 giờ (có thể bị tấn công, hoặc nhiều người dùng chung một IP)"
+          service: "identity-svc"
+          runbook_url: https://github.com/nguyentuan2686/platform/blob/main/docs/runbooks/alerts.md#mail-client-cap-hits
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              datasource: {type: prometheus, uid: prometheus}
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              expr: 'sum by (job) (increase(identity_magic_link_client_cap_reached_total[1h])) > 10'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              datasource: {type: __expr__, uid: __expr__}
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}

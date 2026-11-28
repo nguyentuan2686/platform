@@ -424,6 +424,13 @@ check_alerts() {
     | "POLICY: alerts \($r.uid): query \(.refId) datasourceUid \"\(.datasourceUid // "")\" must be prometheus or __expr__"' <<<"$json" | tr -d '\r') \
     || { echo "POLICY: alerts $f: datasource check failed"; return 1; }
   if [ -n "$res" ]; then echo "$res"; rc=1; fi
+  # The annotations are the Telegram text (contact-point.tmpl.yaml): each rule needs summary + service, and Grafana does
+  # not unescape `$$` in provisioning files, so `$$labels` would reach the phone as raw template text.
+  res=$(jq -r '.groups[]?.rules[]? | . as $r | (.annotations // {}) as $a
+    | (["summary", "service"][] | select(($a[.] // "") == "") | "POLICY: alerts \($r.uid): annotation \(.) missing or empty"),
+      ($a | to_entries[] | select(.value | tostring | contains("$$")) | "POLICY: alerts \($r.uid): annotation \(.key) contains $$ (write $labels: Grafana does not unescape $$)")' <<<"$json" | tr -d '\r') \
+    || { echo "POLICY: alerts $f: annotation check failed"; return 1; }
+  if [ -n "$res" ]; then echo "$res"; rc=1; fi
   res=$(jq -r --arg re "$METRIC_RE|[a-z_][a-z0-9_]*(?=\[)|[a-z_][a-z0-9_]*_bytes\b" '.groups[]?.rules[]? | . as $r | .data[]? | select(.refId == "A") | .model.expr // empty
     | scan($re) | "\($r.uid)\t\(.)"' <<<"$json" | tr -d '\r' | sort -u) \
     || { echo "POLICY: alerts $f: metric extraction failed"; return 1; }
