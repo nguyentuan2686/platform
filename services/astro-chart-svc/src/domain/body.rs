@@ -33,6 +33,24 @@ impl Body {
         Body::NorthNode,
         Body::Chiron,
     ];
+
+    /// The stable ASCII wire key.
+    pub fn key(self) -> &'static str {
+        match self {
+            Body::Sun => "Sun",
+            Body::Moon => "Moon",
+            Body::Mercury => "Mercury",
+            Body::Venus => "Venus",
+            Body::Mars => "Mars",
+            Body::Jupiter => "Jupiter",
+            Body::Saturn => "Saturn",
+            Body::Uranus => "Uranus",
+            Body::Neptune => "Neptune",
+            Body::Pluto => "Pluto",
+            Body::NorthNode => "NorthNode",
+            Body::Chiron => "Chiron",
+        }
+    }
 }
 
 /// Geocentric ecliptic coordinates of date, in degrees: `lon` in [0, 360), `lat` in [−90, 90].

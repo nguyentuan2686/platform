@@ -65,6 +65,25 @@ impl Sign {
         (Sign::ALL[i], deg)
     }
 
+    /// The stable ASCII wire key.
+    pub fn key(self) -> &'static str {
+        const KEYS: [&str; 12] = [
+            "Aries",
+            "Taurus",
+            "Gemini",
+            "Cancer",
+            "Leo",
+            "Virgo",
+            "Libra",
+            "Scorpio",
+            "Sagittarius",
+            "Capricorn",
+            "Aquarius",
+            "Pisces",
+        ];
+        KEYS[self.index()]
+    }
+
     /// Zero-based position in zodiac order (Aries = 0).
     pub fn index(self) -> usize {
         self as usize
