@@ -258,7 +258,7 @@ Ghi chú (Tuấn, 2026-11-28): tên miền và các việc build/go-live để s
 Mỗi plan là một PR hoặc một loạt PR, test độc lập:
 
 1. **F2.1 — astro-chart-svc**: engine, `/astro/chart`, `/astro/transits`, golden so với JPL Horizons và bộ tham chiếu nhà, base k8s và overlay e2e. Không phụ thuộc gì, làm được ngay.
-2. **F2.2 — tách theo trang**:
+2. **F2.2 — tách theo trang** (2 plan độc lập: F2.2a identity + payment theo site, `docs/superpowers/plans/2026-11-28-plan-f2-2a-site-aware-identity-payment.md`; F2.2b `reading-core`, `docs/superpowers/plans/2026-11-28-plan-f2-2b-reading-core.md`):
    - `libs/java/reading-core`, chỉ làm sau khi `feat/xem-so-hop-menh` đã merge;
    - identity `account.site`, hồ sơ chiêm tinh, mail theo site;
    - payment giá theo site.
