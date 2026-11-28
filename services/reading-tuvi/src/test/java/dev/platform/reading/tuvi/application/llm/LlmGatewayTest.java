@@ -87,7 +87,7 @@ class LlmGatewayTest {
     }
   }
 
-  static final class StubProvider implements LlmProviderPort {
+  static class StubProvider implements LlmProviderPort {
     final String id;
     final boolean paid;
     final int limit;
@@ -247,6 +247,66 @@ class LlmGatewayTest {
     gateway(paid).complete(REQ);
 
     assertThat(usage.spendMicroUsd("paid", YearMonth.of(2026, 11))).isEqualTo(590_000L);
+  }
+
+  @Test
+  void provider_specific_pricing_and_cache_tokens_are_costed() {
+    var claude =
+        new StubProvider("claude", true, 100) {
+          @Override
+          public LlmCompletion complete(LlmRequest request) {
+            calls++;
+            // 1M total input: 600K uncached, 300K cache write, 100K cache read; 1M output.
+            return new LlmCompletion("ok", "claude", 1_000_000, 1_000_000, 300_000, 100_000);
+          }
+        };
+    var claudePricing =
+        new PaidPricing(
+            new BigDecimal("0.10"),
+            new BigDecimal("0.50"),
+            new BigDecimal("0.125"),
+            new BigDecimal("0.01"),
+            new BigDecimal("2"));
+    var gw =
+        new LlmGateway(List.of(claude), usage, Map.of("claude", claudePricing), PRICING, clock);
+
+    gw.complete(REQ);
+
+    // 0.6*0.10 + 0.3*0.125 + 0.1*0.01 + 1*0.50 = 0.5985 USD
+    assertThat(usage.spendMicroUsd("claude", YearMonth.of(2026, 11))).isEqualTo(598_500L);
+  }
+
+  @Test
+  void provider_budget_exhausted_falls_back_to_free() {
+    var claude = new StubProvider("claude", true, 100);
+    var groq = new StubProvider("groq", false, 100);
+    var claudePricing =
+        new PaidPricing(new BigDecimal("0.10"), new BigDecimal("0.50"), new BigDecimal("2"));
+    usage.recordTokens("claude", LocalDate.of(2026, 11, 3), 0, 0, 2_000_000L);
+    var gw =
+        new LlmGateway(
+            List.of(claude, groq), usage, Map.of("claude", claudePricing), PRICING, clock);
+
+    var out = gw.complete(REQ);
+
+    assertThat(out.provider()).isEqualTo("groq");
+    assertThat(claude.calls).isZero();
+  }
+
+  @Test
+  void paid_provider_serving_free_tier_is_used_for_free_questions() {
+    var claude =
+        new StubProvider("claude", true, 100) {
+          @Override
+          public boolean servesFreeTier() {
+            return true;
+          }
+        };
+    var req = new LlmRequest(REQ.messages(), 100, 0.3, LlmTier.FREE_ONLY);
+
+    var out = gateway(claude).complete(req);
+
+    assertThat(out.provider()).isEqualTo("claude");
   }
 
   @Test
