@@ -63,6 +63,7 @@ public final class QaContextBuilder {
         List.copyOf(chains),
         List.copyOf(facts),
         layer.map(l -> yearlyFact(chart, l, yearLabel)),
+        currentYear,
         timing);
   }
 

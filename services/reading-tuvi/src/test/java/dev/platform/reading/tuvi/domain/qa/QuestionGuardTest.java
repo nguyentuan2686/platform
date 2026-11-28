@@ -16,6 +16,17 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class QuestionGuardTest {
 
+  /** Prod 2026-11-28: users address the thầy as "con"; these must reach the model. */
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "Sự nghiệp của con năm 2027 thế nào ạ?",
+        "Năm tới con có nên chuyển việc không ạ?"
+      })
+  void self_address_con_questions_pass_the_guard(String q) {
+    assertThat(QuestionGuard.check(q)).isInstanceOf(Ok.class);
+  }
+
   @Test
   void too_short_invalid() {
     assertThat(QuestionGuard.check("  sao?  ")).isEqualTo(new Invalid("question"));
