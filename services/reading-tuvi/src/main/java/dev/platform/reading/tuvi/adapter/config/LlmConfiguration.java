@@ -86,10 +86,13 @@ class LlmConfiguration {
   }
 
   /**
-   * Defaults re-checked against the providers' docs at implementation time: Groq
-   * https://console.groq.com/docs/models and https://groq.com/pricing (llama-3.3-70b-versatile,
-   * $0.59 in / $0.79 out per MTok); Gemini https://ai.google.dev/gemini-api/docs/openai
-   * (gemini-2.5-flash-lite via the OpenAI-compatible endpoint). Verify before enabling in prod.
+   * Defaults probed with the prod keys on 2026-11-28 (chat completion 200, Vietnamese answer within
+   * the FREE token budget): Gemini gemini-3.5-flash-lite via the OpenAI-compatible endpoint, Groq
+   * openai/gpt-oss-120b (a reasoning model: its reasoning tokens count toward max_tokens). The
+   * earlier defaults gemini-2.5-flash-lite and llama-3.3-70b-versatile were retired (HTTP 404).
+   * Model ids are retired without notice: list them with GET {base}/models and override with
+   * GEMINI_MODEL / GROQ_MODEL. The paid defaults (LLM_PAID_*) were priced for the old Groq model;
+   * re-check https://groq.com/pricing before enabling paid.
    */
   private static LlmProviderPort openAi(Environment env, String id, String key) {
     URI base;
@@ -99,7 +102,7 @@ class LlmConfiguration {
     switch (id) {
       case "groq" -> {
         base = URI.create(env.getProperty("GROQ_BASE_URL", "https://api.groq.com/openai/v1"));
-        model = env.getProperty("GROQ_MODEL", "llama-3.3-70b-versatile");
+        model = env.getProperty("GROQ_MODEL", "openai/gpt-oss-120b");
         limit = Integer.parseInt(env.getProperty("GROQ_DAILY_REQUEST_LIMIT", "900"));
       }
       case "gemini" -> {
@@ -107,12 +110,12 @@ class LlmConfiguration {
             URI.create(
                 env.getProperty(
                     "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"));
-        model = env.getProperty("GEMINI_MODEL", "gemini-2.5-flash-lite");
+        model = env.getProperty("GEMINI_MODEL", "gemini-3.5-flash-lite");
         limit = Integer.parseInt(env.getProperty("GEMINI_DAILY_REQUEST_LIMIT", "450"));
       }
       default -> {
         base = URI.create(env.getProperty("LLM_PAID_BASE_URL", "https://api.groq.com/openai/v1"));
-        model = env.getProperty("LLM_PAID_MODEL", "llama-3.3-70b-versatile");
+        model = env.getProperty("LLM_PAID_MODEL", "openai/gpt-oss-120b");
         limit = Integer.MAX_VALUE;
         paid = true;
       }
