@@ -11,9 +11,18 @@ pub fn jd_from_unix(secs: i64) -> f64 {
     JD_UNIX_EPOCH + s / SECONDS_PER_DAY
 }
 
-/// ΔT = TT − UT in seconds for a decimal year (Espenak–Meeus 2006 polynomials,
-/// NASA "Polynomial expressions for Delta T"). Outside 1860–2150 the long-term
-/// parabola is used.
+/// ΔT = TT − UT in seconds for a decimal year.
+///
+/// - Before 2005: Espenak–Meeus 2006 polynomials (NASA "Polynomial expressions for Delta T");
+///   before 1860 their long-term parabola.
+/// - 2005–2024: piecewise-linear through the observed annual values (USNO/IERS, 1 January).
+///   The table starts in 2005 rather than 2016 because that is where the observation-fitted
+///   1986–2005 polynomial ends and agrees with observation (64.72 s vs 64.69 s). The
+///   2005–2050 polynomial is a prediction that overestimates today's ΔT (69.5 s at 2016 vs
+///   68.1 s observed, a 1.4 s jump).
+/// - From 2024: constant 69.18 s. Future ΔT is unpredictable and Espenak–Meeus diverges to
+///   about 203 s by 2100. JPL Horizons, the golden reference, holds ΔT at its latest value
+///   for future dates, and we match that convention.
 #[allow(clippy::unreadable_literal)] // coefficients transcribed verbatim from the source
 pub fn delta_t_seconds(y: f64) -> f64 {
     if y < 1860.0 {
@@ -34,20 +43,42 @@ pub fn delta_t_seconds(y: f64) -> f64 {
     } else if y < 1986.0 {
         let t = y - 1975.0;
         45.45 + 1.067 * t - t.powi(2) / 260.0 - t.powi(3) / 718.0
-    } else if y < 2005.0 {
+    } else if y < OBSERVED_START {
         let t = y - 2000.0;
         63.86 + 0.3345 * t - 0.060374 * t.powi(2)
             + 0.0017275 * t.powi(3)
             + 0.000651814 * t.powi(4)
             + 0.00002373599 * t.powi(5)
-    } else if y < 2050.0 {
-        let t = y - 2000.0;
-        62.92 + 0.32217 * t + 0.005589 * t.powi(2)
-    } else if y < 2150.0 {
-        long_term(y) - 0.5628 * (2150.0 - y)
+    } else if y < OBSERVED_END {
+        observed(y)
     } else {
-        long_term(y)
+        FUTURE_DELTA_T
     }
+}
+
+/// Year of the first [`OBSERVED`] value.
+const OBSERVED_START: f64 = 2005.0;
+/// Year of the last [`OBSERVED`] value; [`FUTURE_DELTA_T`] from here on.
+const OBSERVED_END: f64 = 2024.0;
+/// ΔT held from 2024 on, in seconds (the JPL Horizons convention for future dates).
+const FUTURE_DELTA_T: f64 = 69.18;
+/// Observed ΔT on 1 January of each year 2005..=2024, in seconds (USNO/IERS `deltat.data`).
+#[rustfmt::skip]
+const OBSERVED: [f64; 20] = [
+    64.69, 64.85, 65.15, 65.46, 65.78, 66.07, 66.32, 66.60, 66.91, 67.28, // 2005–2014
+    67.64, 68.10, 68.59, 68.97, 69.22, 69.36, 69.36, 69.29, 69.20, 69.18, // 2015–2024
+];
+
+/// Linear interpolation in [`OBSERVED`], for `OBSERVED_START <= y < OBSERVED_END`.
+fn observed(y: f64) -> f64 {
+    let x = (y - OBSERVED_START).max(0.0);
+    let whole = x.floor();
+    // 0 <= whole < 19 for the caller's range; `min` keeps k + 1 in bounds regardless.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let k = (whole as usize).min(OBSERVED.len() - 2);
+    #[allow(clippy::cast_precision_loss)] // k < 20
+    let frac = x - k as f64;
+    OBSERVED[k] + (OBSERVED[k + 1] - OBSERVED[k]) * frac
 }
 
 fn long_term(y: f64) -> f64 {
@@ -87,6 +118,26 @@ mod tests {
     fn delta_t_matches_espenak_meeus_at_segment_starts() {
         assert!((delta_t_seconds(2000.0) - 63.86).abs() < 0.1);
         assert!((delta_t_seconds(1900.0) - -2.79).abs() < 0.1);
+    }
+
+    #[test]
+    fn delta_t_follows_the_observed_values() {
+        assert!((delta_t_seconds(2020.0) - 69.36).abs() < 0.01);
+        assert!((delta_t_seconds(2016.5) - 68.345).abs() < 0.01);
+    }
+
+    #[test]
+    fn delta_t_is_continuous_at_2005_and_2016() {
+        for y in [OBSERVED_START, 2016.0, OBSERVED_END] {
+            let jump = delta_t_seconds(y - 0.001) - delta_t_seconds(y);
+            assert!(jump.abs() < 0.5, "jump at {y}: {jump} s");
+        }
+    }
+
+    #[test]
+    fn delta_t_is_held_constant_for_future_dates() {
+        assert!((delta_t_seconds(2050.0) - 69.18).abs() < 1e-9);
+        assert!((delta_t_seconds(2100.0) - 69.18).abs() < 1e-9);
     }
 
     #[test]

@@ -68,6 +68,16 @@ fn assert_close(body: Body, case: &Value, got: Ecliptic, want: Ecliptic) {
 
 #[test]
 fn sun_and_planets_match_horizons_within_one_arcminute() {
+    check_bodies(&SUN_AND_PLANETS);
+}
+
+#[test]
+fn moon_matches_horizons_within_one_arcminute() {
+    check_bodies(&[Body::Moon]);
+}
+
+/// Every golden case for `bodies`: prints the max errors, then asserts each within the gate.
+fn check_bodies(bodies: &[Body]) {
     let cases = golden_cases();
     assert!(!cases.is_empty(), "no golden cases");
     let eph = EphemerisAdapter::new();
@@ -75,14 +85,14 @@ fn sun_and_planets_match_horizons_within_one_arcminute() {
     let mut results = vec![];
     for case in &cases {
         let m = moment_of(case["utc"].as_str().unwrap());
-        for body in SUN_AND_PLANETS {
+        for &body in bodies {
             let got = eph.apparent(body, m).unwrap();
             results.push((body, case, got, want_of(case, body)));
         }
     }
 
     println!("max error vs Horizons over {} cases (arcsec):", cases.len());
-    for body in SUN_AND_PLANETS {
+    for &body in bodies {
         let (mut lon, mut lat) = (0.0_f64, 0.0_f64);
         for (b, _, got, want) in &results {
             if *b == body {
