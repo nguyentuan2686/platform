@@ -50,7 +50,7 @@ images:
   - {name: ghcr.io/nguyentuan2686/order-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
   - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
   - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: sha-d9110b38ebcd935a3bdfc0f4f23b8364b6be200a}
-  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: sha-1e676660fe440d7d4b28cf22d828eafb0826fbb8}
+  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: sha-341577e79784b7ab6566040866c5a020881b46ea}
   - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
   - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
   - {name: ghcr.io/nguyentuan2686/web, newTag: sha-4587ac4c9c3732068dba2a62247f2c19b104e517}
