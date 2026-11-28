@@ -28,16 +28,58 @@ render_argocd_cm() {
   fi
 }
 
+# prepull_images <manifest>: pull (through the CRI) every image the manifest names before the pods need them, retrying
+# with backoff. Anonymous registries (public.ecr.aws for argocd-redis) answer 429 to busy shared IPs such as CI
+# runners, and kubelet's own ImagePullBackOff alone outlasted the 600 s readiness deadline (lesson 2026-11-28); ECR kept
+# answering 429 for over 5 minutes, so a Docker official image (public.ecr.aws/docker/library/<name>) falls back to the
+# same official image on Google's Docker Hub mirror, tagged back to the manifest's name so the pod finds it locally.
+pull_image() {
+  local img="$1" err mirror
+  err="$("$K3S_BIN" crictl pull "$img" 2>&1 >/dev/null)" && return 0
+  note "pull $img: ${err##*$'\n'}"
+  case "$img" in
+    public.ecr.aws/docker/library/*) mirror="mirror.gcr.io/library/${img#public.ecr.aws/docker/library/}" ;;
+    *) return 1 ;;
+  esac
+  err="$("$K3S_BIN" crictl pull "$mirror" 2>&1 >/dev/null)" || { note "pull $mirror: ${err##*$'\n'}"; return 1; }
+  "$K3S_BIN" ctr -n k8s.io images tag --force "$mirror" "$img" >/dev/null || return 1
+  "$K3S_BIN" crictl inspecti "$img" >/dev/null 2>&1 || return 1
+  note "$img taken from $mirror"
+}
+
+prepull_images() {
+  local manifest="$1" images img out delay
+  out="$(grep -E '^[[:space:]]+image:[[:space:]]' "$manifest")" || return 0
+  images="$(awk '{print $2}' <<<"$out" | tr -d '"'"'" | sort -u)"
+  for img in $images; do
+    "$K3S_BIN" crictl inspecti "$img" >/dev/null 2>&1 && continue
+    delay=10
+    until pull_image "$img"; do
+      [ "$delay" -le 160 ] || die "cannot pull $img (gave up after backoff up to 160s)"
+      note "pull $img failed, retrying in ${delay}s"
+      sleep "$delay"
+      delay=$((delay * 2))
+    done
+    note "pulled $img"
+  done
+}
+
 step_argocd() {
-  local file="$CACHE_DIR/argocd-$ARGOCD_VERSION/install.yaml" what=() ns_file cm_file
+  local file="$CACHE_DIR/argocd-$ARGOCD_VERSION/install.yaml" what=() ns_file cm_file install_file
   fetch_verified "https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_COMMIT/manifests/install.yaml" \
     "$(pin_sha ARGOCD)" "$file"
+  prepull_images "$file"
+  # Every image in the pinned install.yaml has a fixed tag, so IfNotPresent keeps the pre-pulled copy: with Always a pod
+  # restart asks the registry again and fails on a 429 even with the image on the node.
+  install_file="$(mktemp)"
+  sed "s/imagePullPolicy: Always$/imagePullPolicy: IfNotPresent/" "$file" >"$install_file"
 
   ns_file="$(mktemp)"
   argocd_ns_manifest >"$ns_file"
   if kube_sync "$ns_file" bootstrap-argocd; then what+=("namespace"); fi
   rm -f "$ns_file"
-  if kube_sync "$file" bootstrap-argocd "$ARGOCD_NS"; then what+=("Argo CD $ARGOCD_VERSION"); fi
+  if kube_sync "$install_file" bootstrap-argocd "$ARGOCD_NS"; then what+=("Argo CD $ARGOCD_VERSION"); fi
+  rm -f "$install_file"
   cm_file="$(mktemp)"
   render_argocd_cm >"$cm_file"
   if kube_sync "$cm_file" bootstrap-argocd-cm; then what+=("Application health customization"); fi

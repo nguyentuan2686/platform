@@ -36,12 +36,21 @@ fetch_verified() {
 
 # kube_sync <file> <field-manager> [namespace]: server-side diff, then server-side apply only when the diff reports a
 # change (exit 1). Returns 0 when it applied, 1 when unchanged; a diff error (exit > 1) or apply error ends the script.
+# kubectl diff reads the live object and the dry-run result in two requests, so a controller writing the object in
+# between (Argo CD updates an Application's status every few seconds after a sync) shows a spurious diff: only a diff
+# seen on three reads in a row counts as a change. The diff itself is never printed: some files are sealing-key Secrets.
 kube_sync() {
-  local file="$1" fm="$2" ns_args=() rc=0
+  local file="$1" fm="$2" ns_args=() rc attempt
   [ -n "${3:-}" ] && ns_args=(-n "$3")
-  kc diff --server-side --force-conflicts --field-manager="$fm" "${ns_args[@]}" -f "$file" >/dev/null || rc=$?
+  for attempt in 1 2 3; do
+    rc=0
+    kc diff --server-side --force-conflicts --field-manager="$fm" "${ns_args[@]}" -f "$file" >/dev/null || rc=$?
+    [ "$rc" = 1 ] || break
+    [ "$attempt" = 3 ] || sleep 2
+  done
   case "$rc" in
-    0) return 1 ;;
+    0) [ "$attempt" = 1 ] || note "$fm: diff on read $((attempt - 1)) was spurious (gone on read $attempt)"
+       return 1 ;;
     1) kc apply --server-side --force-conflicts --field-manager="$fm" "${ns_args[@]}" -f "$file" >&2 \
          || die "kubectl apply failed for $file"
        return 0 ;;
