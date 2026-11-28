@@ -448,7 +448,7 @@ flowchart TD
       <tr><td>Node (<code>_node-service.yml</code>)</td><td>lint, typecheck, test (≥ 80% <code>src/lib</code>), build, <code>check:bundle</code> (bundle client không chứa secret hay URL nội bộ), Playwright e2e</td><td>web bị đổi</td></tr>
       <tr><td><code>k8s-manifests</code></td><td>kustomize + kubeconform + chính sách jq của <code>k8s-validate.sh</code> + Trivy config</td><td>deploy/** bị đổi</td></tr>
       <tr><td><code>k8s-e2e</code></td><td>dựng cluster kind, deploy overlay e2e, chạy mọi smoke script, kiểm trace, metrics, log, backup và restore</td><td>mọi push lên main + PR đổi hạ tầng</td></tr>
-      <tr><td><code>bootstrap</code></td><td>chạy <code>bootstrap.sh</code> hai lần trên runner x86 và ARM, kiểm firewall, khôi phục khóa seal, kiểm rate limit qua Traefik thật</td><td>mọi push lên main + PR đổi infra</td></tr>
+      <tr><td><code>bootstrap</code></td><td>chạy <code>bootstrap.sh</code> hai lần trên runner x86 và ARM, kiểm firewall, khôi phục khóa seal, kiểm rate limit qua Traefik thật</td><td>mọi push lên main + PR đổi thứ nó thật sự chạy: <code>infra/</code>, Argo CD apps, <code>platform/</code>, slice <code>sealed</code>/<code>platform</code> của prod, <code>secrets.tsv</code>, <code>ci.yml</code>/<code>_bootstrap.yml</code></td></tr>
       <tr><td><code>ops-scripts</code>, <code>scaffold</code>, CodeQL</td><td>shellcheck, actionlint, action phải ghim SHA, test script, promtool; render service mẫu từ template; CodeQL (chỉ Java)</td><td>theo path / hằng tuần</td></tr>
       <tr><td><code>ci-gate</code></td><td>gom kết quả: fail nếu có job failure/cancelled, skipped tính là đạt</td><td>luôn chạy</td></tr>
     </tbody>
@@ -588,6 +588,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>Job CI <code>bootstrap</code> (15–20 phút) chỉ chạy cho PR đổi những gì nó thật sự kiểm (infra, Argo, platform, secret prod, workflow CI), không chạy cho PR chỉ đổi app/domain/tunnel hay workflow khác; push lên main vẫn luôn chạy.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Cảnh báo Telegram bật: <code>alerting-secrets</code> đã seal (bot riêng, chat của chủ dự án). lgtm chờ secret rồi tự restart (annotation <code>platform.dev/alerting-secrets-rev</code>), không cần lệnh tay.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Seal key thật <code>GEMINI_API_KEY</code> và <code>GROQ_API_KEY</code> trong <code>reading-tuvi-secrets</code>: Hỏi thầy dùng LLM thật: prod <code>LLM_PROVIDERS=gemini,groq</code> (Gemini trước, hết lượt hoặc 429 thì Groq).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>CD: bước verify ghi lại mã thoát kể cả khi verify-deploy lỗi, nên deploy hỏng được rollback thật (trước đây báo rc=none, issue #53).</div></li>
