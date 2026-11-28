@@ -1,0 +1,81 @@
+# Off-host copy of the logs (spec 2026-11-28-logs-payments-telegram §1c): at 00:30 local time, every Loki line of the
+# previous day as gzipped jsonl to <bucket>/logs/<day>.jsonl.gz (kept 90d), on the same S3 target as pg-backup
+# (ops-secrets). Without S3 it skips (BACKUP_REQUIRED=1 fails it, like pg-backup). Script: log-export.sh.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-export
+  labels: {app: log-export}
+spec:
+  schedule: "30 0 * * *"
+  timeZone: Asia/Ho_Chi_Minh
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels: {app: log-export}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile: {type: RuntimeDefault}
+            runAsNonRoot: true
+            runAsUser: 65532
+          initContainers:
+            - name: export
+              image: grafana/logcli:3.7.10@sha256:5cbaeae992f978540c781ffb1a89da3d35a9bcf8b0679fd9d7808c6047ffdc7e
+              command: [/busybox/sh, /scripts/log-export.sh, export]
+              env:
+                # BACKUP_REQUIRED=1: a missing S3 config fails the job. Prod sets 0 until go-live (overlays/prod/platform).
+                - {name: BACKUP_REQUIRED, value: "0"}
+                - {name: HOME, value: /tmp}
+                - {name: LOKI_ADDR, value: "http://lgtm.observability.svc.cluster.local:3100"}
+                # Only the two keys the "S3 configured?" check reads; the S3 access keys go to the upload container alone.
+                - name: S3_ENDPOINT
+                  valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_ENDPOINT, optional: true}}
+                - name: S3_BUCKET
+                  valueFrom: {secretKeyRef: {name: ops-secrets, key: S3_BUCKET, optional: true}}
+              resources:
+                requests: {cpu: 50m, memory: 256Mi}
+                limits: {memory: 256Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - {name: export, mountPath: /export}
+                - {name: tmp, mountPath: /tmp}
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+          containers:
+            - name: upload
+              image: rclone/rclone:1.70.3@sha256:34c729127386abec1c610b2aa024e39b4498dc2b4a72a0798ae21fbdc1b0493b
+              command: [/bin/sh, /scripts/log-export.sh, upload]
+              env:
+                - {name: BACKUP_REQUIRED, value: "0"}
+                - {name: HOME, value: /tmp}
+                - {name: LOG_EXPORT_KEEP, value: 90d}
+              envFrom:
+                - secretRef: {name: ops-secrets, optional: true}
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {memory: 128Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - {name: export, mountPath: /export}
+                - {name: tmp, mountPath: /tmp}
+                - {name: scripts, mountPath: /scripts, readOnly: true}
+          volumes:
+            - name: export
+              emptyDir: {sizeLimit: 1Gi}
+            - name: tmp
+              emptyDir: {sizeLimit: 64Mi}
+            - name: scripts
+              configMap: {name: ops-scripts, defaultMode: 0555}

@@ -25,7 +25,7 @@ spec:
       labels: {app: lgtm}
     spec:
       # Retention (spec §10) and alerting are wired into the stock image without rebuilding it. Option (a), env vars the
-      # image run scripts already honour (*_EXTRA_ARGS), covers all three: Prometheus 15d, Loki 168h (compactor retention),
+      # image run scripts already honour (*_EXTRA_ARGS), covers all three: Prometheus 15d, Loki 30d (compactor retention),
       # Tempo 168h (3.x: backend-scheduler + backend-worker block retention). No config files are overridden, so nothing
       # drifts from the image on a tag bump. Alert rules and the optional Telegram contact point are rendered into an
       # emptyDir by the init container below.
@@ -57,7 +57,7 @@ spec:
             limits: {memory: 1024Mi}
           env:
             - {name: PROMETHEUS_EXTRA_ARGS, value: --storage.tsdb.retention.time=15d}
-            - {name: LOKI_EXTRA_ARGS, value: "-store.retention=168h -compactor.retention-enabled=true -compactor.working-directory=/data/loki/retention -compactor.delete-request-store=filesystem"}
+            - {name: LOKI_EXTRA_ARGS, value: "-store.retention=720h -compactor.retention-enabled=true -compactor.working-directory=/data/loki/retention -compactor.delete-request-store=filesystem"}
             - {name: TEMPO_EXTRA_ARGS, value: "-backend-scheduler.provider.work.compaction.block-retention=168h -backend-worker.compaction.block-retention=168h"}
           readinessProbe:
             httpGet: {path: /api/health, port: grafana}

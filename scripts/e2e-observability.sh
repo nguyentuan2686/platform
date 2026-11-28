@@ -94,7 +94,7 @@ probe_dashboards() {
 
 
 # Alert rules as code (deploy/k8s/platform/grafana/alerting), Grafana basic auth admin:admin (otel-lgtm image default).
-ALERT_UIDS="error-rate-high latency-p95-high pod-restart-loop consumer-lag-rising disk-usage-high deploy-failed backup-skipped mail-cap-reached"
+ALERT_UIDS="error-rate-high latency-p95-high pod-restart-loop consumer-lag-rising disk-usage-high deploy-failed backup-skipped mail-cap-reached mail-client-cap-hits log-pipeline-down"
 gget() { get "$1" -u admin:admin; }
 
 probe_alert_rules_loaded() {
@@ -124,17 +124,17 @@ probe_contact_point() {
   has "$r" '"name" *: *"telegram"'
 }
 
-# Spec §10: Prometheus 15d, Loki 168h (shown as 1w), Tempo 168h.
+# Spec §10: Prometheus 15d, Loki 720h (shown as 30d), Tempo 168h.
 probe_retention() {
   local r
   r=$(get "$PROM/api/v1/status/flags") || { printf '%s' "$r"; return 1; }
   has "$r" '"storage.tsdb.retention.time" *: *"15d"' || { printf 'prometheus retention: %s' "$(printf '%s' "$r" | grep -Eo '"storage.tsdb.retention[a-z.]*" *: *"[^"]*"' | tr '\n' ' ')"; return 1; }
   r=$(get "$LOKI/config") || { printf '%s' "$r"; return 1; }
-  has "$r" 'retention_period: *(1w|168h)' || { printf 'loki retention_period not 1w/168h'; return 1; }
+  has "$r" 'retention_period: *(30d|720h)' || { printf 'loki retention_period not 30d/720h'; return 1; }
   has "$r" 'retention_enabled: *true' || { printf 'loki compactor retention_enabled not true'; return 1; }
   r=$(get "$TEMPO/status/config") || { printf '%s' "$r"; return 1; }
   has "$r" 'block_retention: *(168h0m0s|1w)' || { printf 'tempo block_retention not 168h'; return 1; }
-  printf 'prometheus 15d, loki 1w, tempo 168h'
+  printf 'prometheus 15d, loki 30d, tempo 168h'
 }
 
 
@@ -153,6 +153,15 @@ probe_metric_present_disk() {
     printf '%s: %s ' "$m" "$(printf '%s' "$r" | cut -c1-150)"
     has "$r" '"k8s_node_name" *: *"[^"]+"' || return 1
   done
+}
+
+# log-pipeline-down reads the collector's own counter (job otelcol self-scrape): it must exist and have grown, i.e. the
+# filelog -> otlphttp -> Loki path delivered records (exporter label: the logs exporter).
+probe_metric_present_log_export() {
+  local r
+  r=$(prom 'sum by (exporter) (otelcol_exporter_sent_log_records_total)') || { printf '%s' "$r"; return 1; }
+  printf '%s' "$r" | cut -c1-300
+  has "$r" '"exporter" *: *"otlphttp' && has "$r" '"value" *: *\[[0-9.]+, *"[1-9]'
 }
 
 # check NAME PROBE -> polls PROBE until it passes or the deadline passes
@@ -185,4 +194,5 @@ check contact-point probe_contact_point || failed=1
 check retention probe_retention || failed=1
 check metric-present-restarts probe_metric_present_restarts || failed=1
 check metric-present-disk probe_metric_present_disk || failed=1
+check metric-present-log-export probe_metric_present_log_export || failed=1
 exit "$failed"

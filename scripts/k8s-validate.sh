@@ -58,9 +58,12 @@ def eff($c; $ps; $k): if $c.securityContext[$k] != null then $c.securityContext[
     | if $nr != true or ($uid | type) != "number" or $uid < 1 then fail("nonroot"; $o; $c; "effective runAsNonRoot must be true and runAsUser a numeric id > 0 (got runAsNonRoot=\($nr), runAsUser=\($uid))") else empty end
     else empty end),
   # hostpath-root: a hostPath volume may only be the pod log directories, mounted read-only by every container that
-  # mounts it (any other host path, e.g. /, /var, /etc or k3s state, with an API token could read every Secret)
+  # mounts it (any other host path, e.g. /, /var, /etc or k3s state, with an API token could read every Secret).
+  # One exception: DaemonSet otel-collector may write exactly /var/lib/otelcol (filelog checkpoints + persistent export
+  # queue, so a collector restart neither loses nor re-sends logs).
   (if ($ps | type) == "object" then ($ps.volumes // [])[] | select(.hostPath != null) | . as $v | ($v.hostPath.path // "") as $p
-    | if ([("/var/log/pods", "/var/log/containers") as $ok | ($p == $ok or ($p | startswith($ok + "/")))] | any) | not
+    | if $o.kind == "DaemonSet" and $o.metadata.name == "otel-collector" and $p == "/var/lib/otelcol" then empty
+    elif ([("/var/log/pods", "/var/log/containers") as $ok | ($p == $ok or ($p | startswith($ok + "/")))] | any) | not
       then "POLICY: hostpath-root \($o|id): volume \($v.name) mounts host path \"\($p)\" (allowed: /var/log/pods, /var/log/containers, read-only)"
       else ($all[] | . as $c | ($c.volumeMounts // [])[] | select(.name == $v.name and .readOnly != true)
         | fail("hostpath-root"; $o; $c; "mounts hostPath volume \($v.name) (\($p)) without readOnly: true")) end
@@ -407,10 +410,10 @@ check_dashboards() {
 
 
 # alerts: Grafana alert rules as code. $1 = dir holding alerting/rules.yaml and metric-names.txt. rules.yaml parses, its
-# uids are exactly the six of the spec (§10) plus backup-skipped, mail-cap-reached and mail-client-cap-hits, every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
+# uids are exactly the six of the spec (§10) plus backup-skipped, log-pipeline-down, mail-cap-reached and mail-client-cap-hits, every data[].datasourceUid is `prometheus` or `__expr__`, and every metric
 # identifier in an A query is listed in metric-names.txt (same extraction as the dashboards, plus names followed by `[` and `_bytes` names).
 # Fails closed: missing files or parse errors fail.
-ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high mail-cap-reached mail-client-cap-hits pod-restart-loop"
+ALERT_UIDS="backup-skipped consumer-lag-rising deploy-failed disk-usage-high error-rate-high latency-p95-high log-pipeline-down mail-cap-reached mail-client-cap-hits pod-restart-loop"
 check_alerts() {
   local dir="$1" f="$1/alerting/rules.yaml" rc=0 res m names json uids
   echo "== $dir (alerts)"

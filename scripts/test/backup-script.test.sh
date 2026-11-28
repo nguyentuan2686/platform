@@ -182,6 +182,17 @@ heartbeat_failure_propagates() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+# Every run prints one line, so the heartbeat pods are a steady log source for the log-pipeline-down alert; the
+# secret URL itself is never printed.
+heartbeat_success_prints_a_line_without_the_url() {
+  setup
+  env HEALTHCHECKS_URL=https://hc.example/ping/abc bash -c "$(declare -f runner); tmp='$tmp'; ALL_DBS='$ALL_DBS'; rc=0; runner '$heartbeat'; echo \$rc >'$tmp/rc'"
+  [ "$(cat "$tmp/rc")" -eq 0 ] || fail "${FUNCNAME[0]}" "expected exit 0, got $(cat "$tmp/rc")"
+  grep -q '^heartbeat: ok$' "$tmp/out" || fail "${FUNCNAME[0]}" "no ok line: $(cat "$tmp/out")"
+  ! grep -q hc.example "$tmp/out" || fail "${FUNCNAME[0]}" "URL printed"
+  echo "ok ${FUNCNAME[0]}"
+}
+
 
 # Final review I8: a skipped backup reports platform.backup.skipped=1 (alert backup-skipped), once, from `upload`.
 skip_reports_metric_from_upload() {
@@ -220,6 +231,7 @@ upload_uses_stamp_prefix_and_prunes
 upload_pings_backup_heartbeat_when_set
 heartbeat_unset_skips
 heartbeat_failure_propagates
+heartbeat_success_prints_a_line_without_the_url
 dump_failure_exits_1_without_stamp
 copy_failure_does_not_prune_or_ping
 restore_refuses_production_target

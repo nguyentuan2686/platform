@@ -1,0 +1,17 @@
+# Self-test fixture: the otel-collector DaemonSet writing a host path other than exactly /var/lib/otelcol.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: {name: otel-collector, namespace: observability}
+spec:
+  selector: {matchLabels: {app: fixture}}
+  template:
+    metadata: {labels: {app: fixture}}
+    spec:
+      containers:
+        - name: c
+          image: busybox:1.37
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 32Mi}}
+          volumeMounts: [{name: state, mountPath: /state}]
+      volumes:
+        - name: state
+          hostPath: {path: /var/lib, type: Directory}

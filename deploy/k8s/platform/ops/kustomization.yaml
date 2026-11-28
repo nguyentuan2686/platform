@@ -1,16 +1,19 @@
-# Operational CronJobs in ns data: pg-backup (daily pg_dump -> S3-compatible storage) and heartbeat (external dead-man's
-# switch). Both read the optional secret `ops-secrets`; without it they skip and exit 0 (BACKUP_REQUIRED=1 makes the
-# backup fail instead). Scripts are shipped as the ConfigMap ops-scripts, mounted 0555.
+# Operational CronJobs in ns data: pg-backup (daily pg_dump -> S3-compatible storage), log-export (daily Loki export to
+# the same storage) and heartbeat (external dead-man's switch). All read the optional secret `ops-secrets`; without it
+# they skip and exit 0 (BACKUP_REQUIRED=1 makes pg-backup and log-export fail instead). Scripts are shipped as the
+# ConfigMap ops-scripts, mounted 0555.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: data
 resources:
   - pg-backup-cronjob.yaml
   - heartbeat-cronjob.yaml
+  - log-export-cronjob.yaml
 configMapGenerator:
   - name: ops-scripts
     files:
       - backup.sh
       - heartbeat.sh
+      - log-export.sh
 generatorOptions:
   disableNameSuffixHash: true

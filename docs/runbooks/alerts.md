@@ -27,7 +27,7 @@ Severity warning. A Redpanda consumer group has lag above 100 messages and growi
 ## disk-usage-high
 Severity critical. A node's filesystem is more than 80% used for 10m (`k8s_node_filesystem_usage_bytes / k8s_node_filesystem_capacity_bytes`, from the collector's kubeletstats receiver, i.e. the kubelet's own filesystem stats; no pod mounts the host root).
 - First queries: `max by (k8s_node_name) (k8s_node_filesystem_usage_bytes) / max by (k8s_node_name) (k8s_node_filesystem_capacity_bytes)`; on the node `df -h /` and `du -xh --max-depth=2 / | sort -h | tail`.
-- Likely fixes: prune unused images (`k3s crictl rmi --prune`), shrink container logs, check that Prometheus, Loki and Tempo retention is in effect (15d, 168h, 168h) and the telemetry volume `lgtm-data` is not the culprit, remove old files in `/var/lib/rancher`; if the disk is simply too small, grow it.
+- Likely fixes: prune unused images (`k3s crictl rmi --prune`), shrink container logs, check that Prometheus, Loki and Tempo retention is in effect (Prometheus 15d, Loki 30d, Tempo 168h) and the telemetry volume `lgtm-data` is not the culprit, remove old files in `/var/lib/rancher`; if the disk is simply too small, grow it.
 
 ## deploy-failed
 Severity critical. An Argo CD application has been `Degraded` or `Missing` for 10m (`argocd_app_info{health_status=~"Degraded|Missing"}`, scraped from `argocd-metrics.argocd.svc.cluster.local:8082`).

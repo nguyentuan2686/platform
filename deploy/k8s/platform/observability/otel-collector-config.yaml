@@ -1,4 +1,9 @@
 extensions:
+  # Checkpoints of the filelog receiver and the persistent export queue, on the host (/var/lib/otelcol): a collector
+  # restart resumes each log file where it stopped and re-sends what lgtm had not accepted yet.
+  file_storage:
+    directory: /var/lib/otelcol
+    create_directory: true
   health_check:
     endpoint: 0.0.0.0:13133
 
@@ -17,6 +22,11 @@ receivers:
           metrics_path: /public_metrics
           static_configs:
             - targets: ['redpanda.data.svc.cluster.local:9644']
+        # The collector itself (log-pipeline-down alert): its own telemetry on 127.0.0.1:8888 (same pod).
+        - job_name: otelcol
+          scrape_interval: 30s
+          static_configs:
+            - targets: ['127.0.0.1:8888']
         # Argo CD application controller metrics (deploy-failed alert). No target in the kind e2e cluster: the alert stays NoData -> OK.
         - job_name: argocd
           scrape_interval: 30s
@@ -42,8 +52,12 @@ receivers:
 
   # Service logs are JSON lines on stdout (CLAUDE.md logging contract).
   filelog:
-    include: [/var/log/pods/apps_*/*/*.log]
-    start_at: end
+    # Apps, plus the heartbeat CronJob (one line every 5 min): the log-pipeline-down alert relies on a steady source.
+    include: [/var/log/pods/apps_*/*/*.log, /var/log/pods/data_heartbeat-*/*/*.log]
+    # Only for files without a checkpoint (new since the last run): read them whole, so nothing written while the
+    # collector was down is skipped. Files already seen resume from the stored offset.
+    start_at: beginning
+    storage: file_storage
     include_file_path: true
     operators:
       - type: container
@@ -81,9 +95,19 @@ processors:
 exporters:
   otlphttp:
     endpoint: http://lgtm.observability.svc.cluster.local:4318
+    sending_queue:
+      storage: file_storage
 
 service:
-  extensions: [health_check]
+  extensions: [health_check, file_storage]
+  # Own metrics (otelcol_exporter_sent_log_records_total ...) for the log-pipeline-down alert, scraped by job otelcol.
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus: {host: 127.0.0.1, port: 8888}
   pipelines:
     traces:
       receivers: [otlp]
