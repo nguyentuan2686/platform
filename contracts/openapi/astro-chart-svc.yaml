@@ -11,7 +11,9 @@ info:
     a time in a DST gap is rejected, an overlap takes the earlier instant. With
     timeKnown=false the chart is cast at 12:00 local and has no angles, houses or body
     houses; moonSignUncertain says whether the Moon changes sign during that local day.
-    Placidus is undefined near the poles; the response then uses whole-sign houses and says
+    Clients still send an HH:MM in birth (any time; it is ignored), and school and
+    houseSystem still name the requested house system. Longitudes are rounded to 4 decimals
+    and then reduced to [0, 360); sign and deg are taken from the rounded value. Placidus is undefined near the poles; the response then uses whole-sign houses and says
     so in houseFallback (school names the system actually used).
 paths:
   /health/live:
@@ -193,7 +195,7 @@ components:
         lon:
           type: number
           minimum: 0
-          maximum: 360
+          exclusiveMaximum: 360
         lat:
           type: number
           minimum: -90
@@ -203,7 +205,7 @@ components:
         deg:
           type: number
           minimum: 0
-          maximum: 30
+          exclusiveMaximum: 30
           description: Degrees within the sign.
         speed:
           type: number
@@ -233,13 +235,13 @@ components:
         lon:
           type: number
           minimum: 0
-          maximum: 360
+          exclusiveMaximum: 360
         sign:
           $ref: '#/components/schemas/SignKey'
         deg:
           type: number
           minimum: 0
-          maximum: 30
+          exclusiveMaximum: 30
     House:
       type: object
       required: [house, cusp, sign]
@@ -252,7 +254,7 @@ components:
         cusp:
           type: number
           minimum: 0
-          maximum: 360
+          exclusiveMaximum: 360
         sign:
           $ref: '#/components/schemas/SignKey'
     Aspect:
@@ -389,7 +391,7 @@ components:
         deg:
           type: number
           minimum: 0
-          maximum: 30
+          exclusiveMaximum: 30
         house:
           type: integer
           minimum: 1

@@ -30,7 +30,7 @@ pub enum BirthError {
     BadLongitude,
 }
 
-const NOON: Time = match Time::from_hms(12, 0, 0) {
+pub(crate) const NOON: Time = match Time::from_hms(12, 0, 0) {
     Ok(t) => t,
     Err(_) => Time::MIDNIGHT,
 };
@@ -70,16 +70,34 @@ pub fn birth_instant(b: &Birth) -> Result<i64, BirthError> {
 pub fn local_day_bounds(date: Date, zone: &str) -> Result<(i64, i64), BirthError> {
     let tz = TimeZone::get(zone).map_err(|_| BirthError::UnknownZone)?;
     check_year(date)?;
-    let edge = |t: Time| -> Result<i64, BirthError> {
-        let civil = to_civil(PrimitiveDateTime::new(date, t))?;
-        let z = tz
-            .to_ambiguous_zoned_datetime(civil)
-            .compatible()
-            .map_err(|_| BirthError::OutOfRange)?;
-        Ok(z.timestamp().as_second())
-    };
     let last = Time::from_hms(23, 59, 59).map_err(|_| BirthError::OutOfRange)?;
-    Ok((edge(Time::MIDNIGHT)?, edge(last)?))
+    Ok((
+        local_edge(&tz, date, Time::MIDNIGHT)?,
+        local_edge(&tz, date, last)?,
+    ))
+}
+
+/// Unix seconds of 00:00:00 local on `date` and of 00:00:00 local on the next day: the day
+/// as the half-open interval [start, next start). Only `date` must be in 1900-2100 (the
+/// next day of 2100-12-31 is 2101-01-01). Gaps and overlaps as in [`local_day_bounds`].
+pub fn local_day_span(date: Date, zone: &str) -> Result<(i64, i64), BirthError> {
+    let tz = TimeZone::get(zone).map_err(|_| BirthError::UnknownZone)?;
+    check_year(date)?;
+    let next = date.next_day().ok_or(BirthError::OutOfRange)?;
+    Ok((
+        local_edge(&tz, date, Time::MIDNIGHT)?,
+        local_edge(&tz, next, Time::MIDNIGHT)?,
+    ))
+}
+
+/// Unix seconds of `date` at `t` on the wall clock of `tz` (compatible disambiguation).
+fn local_edge(tz: &TimeZone, date: Date, t: Time) -> Result<i64, BirthError> {
+    let civil = to_civil(PrimitiveDateTime::new(date, t))?;
+    let z = tz
+        .to_ambiguous_zoned_datetime(civil)
+        .compatible()
+        .map_err(|_| BirthError::OutOfRange)?;
+    Ok(z.timestamp().as_second())
 }
 
 /// `HH:MM` of a unix instant on the wall clock of `zone`, seconds truncated.
@@ -241,5 +259,24 @@ mod tests {
             local_day_bounds(d, "Mars/Base"),
             Err(BirthError::UnknownZone)
         );
+    }
+
+    #[test]
+    fn day_span_ends_at_the_next_local_midnight() {
+        let d = Date::from_calendar_date(2021, Month::March, 14).unwrap();
+        // New York spring-forward day: 23 hours long.
+        assert_eq!(
+            local_day_span(d, "America/New_York"),
+            Ok((utc(2021, 3, 14, 5, 0), utc(2021, 3, 15, 4, 0)))
+        );
+        // The last supported day ends at 2101-01-01 00:00 local.
+        let d = Date::from_calendar_date(2100, Month::December, 31).unwrap();
+        assert_eq!(
+            local_day_span(d, "UTC"),
+            Ok((utc(2100, 12, 31, 0, 0), utc(2101, 1, 1, 0, 0)))
+        );
+        let d = Date::from_calendar_date(2101, Month::January, 1).unwrap();
+        assert_eq!(local_day_span(d, "UTC"), Err(BirthError::OutOfRange));
+        assert_eq!(local_day_span(d, "Mars/Base"), Err(BirthError::UnknownZone));
     }
 }

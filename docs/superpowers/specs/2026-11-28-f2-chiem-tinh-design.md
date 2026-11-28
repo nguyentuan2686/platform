@@ -155,7 +155,7 @@ web-astro (Next.js, next-intl)  ─────────────►  astr
 - Thuần hàm: trên cùng một kiến trúc CPU, cùng input cho ra JSON giống nhau từng byte. Số làm tròn cố định 4 chữ số thập phân độ.
   - Giữa amd64 và arm64 không đòi giống từng byte, vì `vsop87` dùng `sin`/`cos` của nền tảng.
   - Golden so theo ngưỡng (1′), nên không phụ thuộc kiến trúc. Snapshot byte-exact chỉ chạy trên CI amd64.
-- **Transit**: `POST /astro/transits {birth (như request /astro/chart), date (YYYY-MM-DD), zone (múi giờ người xem)}`.
+- **Transit**: `POST /astro/transits {natal (như request /astro/chart), date (YYYY-MM-DD), viewerZone (múi giờ người xem)}`.
   - Service tự tính lại bản đồ gốc từ dữ liệu sinh, không tin bản đồ do client gửi.
   - Trả dữ kiện tại **12:00 trưa của `date` theo `zone`**:
     - cung của Mặt Trăng transit,

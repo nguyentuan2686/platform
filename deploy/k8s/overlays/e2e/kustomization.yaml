@@ -23,6 +23,7 @@ patches:
   - path: patches/identity-svc.yaml
   - path: patches/payment-svc.yaml
   - path: patches/web.yaml
+  - path: patches/astro-chart-svc.yaml
   - path: patches/otel-collector.yaml
   - path: patches/pg-backup.yaml
   - target: {kind: Deployment, namespace: apps}

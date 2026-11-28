@@ -2,9 +2,12 @@
 //! `not-found` fallbacks (unknown path, wrong method).
 //!
 //! The request DTO keeps each field as raw JSON and denies unknown fields; the fields are
-//! validated by hand so that every bad input names its field (`birth`, `zone`, `lat`, `lon`,
-//! `timeKnown`, `houseSystem`; `body` for malformed JSON, a non-object body or an unknown
-//! field) in a 400 problem. The response DTOs live in `domain::chart` (serde, camelCase).
+//! validated by hand so that every bad input names its field in a 400 problem. Chart:
+//! `birth`, `zone`, `lat`, `lon`, `timeKnown`, `houseSystem`. Transits: the same fields of
+//! the `natal` object as `natal.birth`, `natal.zone`, `natal.lat`, `natal.lon`,
+//! `natal.timeKnown`, `natal.houseSystem`, plus `date` and `viewerZone`. Both use `body` for
+//! malformed JSON, a non-object body, an unknown field or a missing or malformed `natal`.
+//! The response DTOs live in `domain::chart` (serde, camelCase).
 //! Neither the body nor the birth data is ever logged.
 
 use axum::extract::{FromRequest, Request, State};
@@ -319,7 +322,11 @@ fn chart_failure(e: ChartError, prefix: &str) -> ApiError {
             BirthError::BadLatitude => natal("lat", "must be within [-90, 90]"),
             BirthError::BadLongitude => natal("lon", "must be within [-180, 180]"),
         },
-        ChartError::Date => field_error("date", "must fall in the years 1900-2100"),
+        ChartError::DateOutOfRange => field_error("date", "must fall in the years 1900-2100"),
+        ChartError::DateNonexistent => field_error(
+            "date",
+            "12:00 of this date does not exist in the zone viewerZone (DST gap or skipped day)",
+        ),
         ChartError::ViewerZone => field_error("viewerZone", "unknown IANA time zone"),
         ChartError::Ephemeris(cause) => ApiError::Internal(cause.context("ephemeris failed")),
     }

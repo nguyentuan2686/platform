@@ -10,7 +10,14 @@
 
 - Data credit: Solar System Dynamics Group, JPL Horizons, <https://ssd.jpl.nasa.gov/horizons/>.
 - Used as the reference for the accuracy tests and as the source of the Pluto and Chiron
-  position tables held as fixture data. No JPL code is linked.
+  position tables (`data/pluto.csv`, `data/chiron.csv`), which are compiled into the
+  service binary (`include_str!`) and interpolated at runtime. No JPL code is linked.
+
+## USNO / IERS (observed ΔT)
+
+- Data credit: U.S. Naval Observatory and the International Earth Rotation and Reference
+  Systems Service (IERS), observed ΔT (`deltat.data`), <https://maia.usno.navy.mil/>.
+- The observed 1 January values 2005-2024 are compiled into `src/domain/time.rs`.
 
 ## Formula sources
 

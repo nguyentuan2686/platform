@@ -74,13 +74,17 @@ pub fn cusps(
 ) -> Result<[f64; 12], HouseError> {
     match sys {
         HouseSystem::Placidus => placidus(ramc, eps, lat, a),
-        HouseSystem::WholeSign => {
-            #[allow(clippy::cast_precision_loss)] // sign index <= 11
-            let start = 30.0 * Sign::of(a.asc).0.index() as f64;
-            Ok(from_first(start))
-        }
+        HouseSystem::WholeSign => Ok(whole_sign_cusps(a.asc)),
         HouseSystem::Equal => Ok(from_first(a.asc)),
     }
+}
+
+/// Whole-sign cusps: house 1 is the whole sign containing `first_point` (the Ascendant, or
+/// the Sun for the solar basis). Defined everywhere, so it cannot fail.
+pub fn whole_sign_cusps(first_point: f64) -> [f64; 12] {
+    #[allow(clippy::cast_precision_loss)] // sign index <= 11
+    let start = 30.0 * Sign::of(first_point).0.index() as f64;
+    from_first(start)
 }
 
 /// Twelve cusps 30° apart starting at `first`.

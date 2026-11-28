@@ -194,6 +194,21 @@ async fn years_outside_1900_2100_are_birth_errors() {
     }
 }
 
+/// The extreme instants of the supported range: the speed window reaches past them, and
+/// the Pluto/Chiron tables must still serve them (within their data).
+#[tokio::test]
+async fn the_first_and_last_minutes_of_the_range_are_charts() {
+    for (birth, zone) in [
+        ("2100-12-31T23:59", "Etc/GMT+12"),
+        ("1900-01-01T00:00", "Etc/GMT-14"),
+    ] {
+        let body = valid_with(&json!({ "birth": birth, "zone": zone }));
+        let (status, _, chart) = post(&body).await;
+        assert_eq!(status, StatusCode::OK, "{birth} {zone}: {chart}");
+        assert_eq!(chart["bodies"].as_array().unwrap().len(), 12, "{chart}");
+    }
+}
+
 #[tokio::test]
 async fn unknown_zone_is_a_zone_error() {
     assert_invalid(&valid_with(&json!({"zone": "Mars/Base"})), "zone").await;
@@ -410,6 +425,37 @@ async fn bad_date_and_viewer_zone_name_their_fields() {
     let bad_zone = transit_with(&json!({"viewerZone": "Mars/Base"}));
     assert_transit_invalid(&bad_zone, "viewerZone").await;
     assert_transit_invalid(&transit_with(&json!({"viewerZone": null})), "viewerZone").await;
+}
+
+#[tokio::test]
+async fn the_last_day_of_the_range_is_a_transit_day() {
+    let natal = valid_with(&json!({"birth": "2100-12-31T23:59", "zone": "Etc/GMT+12"}));
+    let body = transit_with(&json!({
+        "natal": natal,
+        "date": "2100-12-31",
+        "viewerZone": "Etc/GMT+12",
+    }));
+    let (status, _, t) = post_transits(&body).await;
+    assert_eq!(status, StatusCode::OK, "{t}");
+    assert_eq!(t["date"], "2100-12-31");
+}
+
+#[tokio::test]
+async fn a_date_whose_noon_does_not_exist_is_a_date_error() {
+    // Samoa skipped 2011-12-30 entirely (UTC-10 -> UTC+14).
+    let body = transit_with(&json!({"date": "2011-12-30", "viewerZone": "Pacific/Apia"}));
+    let (status, _, problem) = post_transits(&body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{problem}");
+    assert_eq!(problem["errors"][0]["field"], "date", "{problem}");
+    let message = problem["errors"][0]["message"].as_str().unwrap();
+    assert!(message.contains("does not exist in the zone"), "{message}");
+    // The out-of-range message stays for a year outside 1900-2100.
+    let body = transit_with(&json!({"date": "2101-01-01"}));
+    let (_, _, problem) = post_transits(&body).await;
+    assert_eq!(
+        problem["errors"][0]["message"],
+        "must fall in the years 1900-2100"
+    );
 }
 
 #[tokio::test]

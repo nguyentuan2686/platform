@@ -2,18 +2,20 @@
 
 use std::sync::Arc;
 
-use time::{Date, OffsetDateTime, PrimitiveDateTime, Time};
+use time::{Date, OffsetDateTime, PrimitiveDateTime};
 
-use crate::application::birth::{birth_instant, local_day_bounds, local_hhmm, Birth, BirthError};
+use crate::application::birth::{
+    birth_instant, local_day_bounds, local_day_span, local_hhmm, Birth, BirthError, NOON,
+};
 use crate::application::ports::EphemerisPort;
 use crate::domain::angles::{angle_diff, norm360, Sign};
 use crate::domain::aspects::{natal_aspects, transit_aspects, Aspect, Point, PointPos};
 use crate::domain::body::{Body, Ecliptic};
 use crate::domain::chart::{
-    house_of, moon_phase_key, round4, AngleOut, AnglesOut, AspectOut, BodyOut, Chart, HouseOut,
-    MoonIngress, TransitMoon, Transits,
+    house_of, moon_phase_key, round4, round_lon, AngleOut, AnglesOut, AspectOut, BodyOut, Chart,
+    HouseOut, MoonIngress, TransitMoon, Transits,
 };
-use crate::domain::houses::{angles, cusps, Angles, HouseError, HouseSystem};
+use crate::domain::houses::{angles, cusps, whole_sign_cusps, Angles, HouseError, HouseSystem};
 use crate::domain::nutation::{apparent_sidereal_deg, true_obliquity};
 use crate::domain::time::Moment;
 
@@ -39,9 +41,12 @@ pub enum ChartError {
     Birth(#[source] BirthError),
     #[error("ephemeris failure")]
     Ephemeris(#[source] anyhow::Error),
-    /// The transit day is outside 1900-2100 or its noon does not exist in the viewer zone.
-    #[error("invalid transit date")]
-    Date,
+    /// The transit day is outside 1900-2100.
+    #[error("transit date outside the supported years 1900-2100")]
+    DateOutOfRange,
+    /// Noon of the transit day does not exist in the viewer zone (a DST gap or a skipped day).
+    #[error("transit noon does not exist in the viewer zone")]
+    DateNonexistent,
     #[error("unknown viewer time zone")]
     ViewerZone,
 }
@@ -140,15 +145,17 @@ impl ChartService {
         let bodies = states
             .iter()
             .map(|(b, (pos, speed))| {
-                let (sign, deg) = Sign::of(pos.lon);
+                let (lon, sign, deg) = round_lon(pos.lon);
+                // retrograde agrees with the speed on the wire: a speed of 0.0 is direct.
+                let speed = round4(*speed);
                 BodyOut {
                     key: b.key(),
-                    lon: round4(pos.lon),
+                    lon,
                     lat: round4(pos.lat),
                     sign: sign.key(),
-                    deg: round4(deg),
-                    speed: round4(*speed),
-                    retrograde: *speed < 0.0,
+                    deg,
+                    speed,
+                    retrograde: speed < 0.0,
                     house: cusps_ref.map(|c| house_of(pos.lon, c)),
                 }
             })
@@ -171,11 +178,14 @@ impl ChartService {
             houses: cusps_ref.map(|c| {
                 c.iter()
                     .enumerate()
-                    .map(|(i, cusp)| HouseOut {
-                        #[allow(clippy::cast_possible_truncation)] // i <= 11
-                        house: i as u8 + 1,
-                        cusp: round4(*cusp),
-                        sign: Sign::of(*cusp).0.key(),
+                    .map(|(i, cusp)| {
+                        let (cusp, sign, _) = round_lon(*cusp);
+                        HouseOut {
+                            #[allow(clippy::cast_possible_truncation)] // i <= 11
+                            house: i as u8 + 1,
+                            cusp,
+                            sign: sign.key(),
+                        }
                     })
                     .collect()
             }),
@@ -190,13 +200,14 @@ impl ChartService {
         let natal_m = Moment::from_unix(birth_instant(birth)?);
         let tm = Moment::from_unix(transit_instant(req.date, &req.viewer_zone)?);
 
+        // A natal point is fixed in the sky of the transit day: speed 0, so `applying`
+        // follows the transiting body alone (not the natal body's speed at birth).
         let mut natal = Vec::with_capacity(NATAL_TARGETS + 2);
         for body in Body::ALL.into_iter().take(NATAL_TARGETS) {
-            let (pos, speed) = self.body_state(body, natal_m)?;
             natal.push(PointPos {
                 point: Point::Body(body),
-                lon: pos.lon,
-                speed,
+                lon: self.at(body, natal_m)?.lon,
+                speed: 0.0,
             });
         }
         let natal_sun = natal[0].lon;
@@ -223,18 +234,14 @@ impl ChartService {
                 speed,
             });
         }
-        let lon_of = |b: Body| transiting.iter().find(|p| p.point == Point::Body(b));
-        let (sun, moon) = match (lon_of(Body::Sun), lon_of(Body::Moon)) {
-            (Some(s), Some(m)) => (s.lon, m.lon),
-            // TRANSITING always holds the Sun and the Moon.
-            _ => (0.0, 0.0),
-        };
-        let (sign, deg) = Sign::of(moon);
+        // TRANSITING starts with the Sun and the Moon (checked at compile time below).
+        let (sun, moon) = (transiting[0].lon, transiting[1].lon);
+        let (_, sign, deg) = round_lon(moon);
         Ok(Transits {
             date: req.date.to_string(),
             moon: TransitMoon {
                 sign: sign.key(),
-                deg: round4(deg),
+                deg,
                 house: house_of(moon, &cusps),
                 house_basis: if birth.time_known { "natal" } else { "solar" },
                 phase: moon_phase_key(angle_diff(moon, sun)),
@@ -247,19 +254,25 @@ impl ChartService {
         })
     }
 
-    /// The first moment of the viewer's local day when the Moon is in a new sign, found by
-    /// bisection to the second and shown truncated to the minute; `None` when it stays put.
+    /// The first whole second of the viewer's local day at which the Moon is in a new sign,
+    /// found by bisection and shown truncated to the minute; `None` when it stays put.
+    ///
+    /// The day is the half-open interval [00:00, next day's 00:00), with next day's 00:00
+    /// as the upper bound of the search: a sign change inside the day's last second, or
+    /// exactly at the next 00:00, first shows at the next 00:00 and so belongs to the next
+    /// day (reported there as `00:00`). The search starts one second before the day so that
+    /// such an ingress is found on the day it belongs to.
     fn moon_ingress(&self, date: Date, zone: &str) -> Result<Option<MoonIngress>, ChartError> {
-        let (start, end) = local_day_bounds(date, zone)?;
+        let (start, next_start) = local_day_span(date, zone)?;
         let sign_at = |t: i64| -> Result<Sign, ChartError> {
             Ok(Sign::of(self.at(Body::Moon, Moment::from_unix(t))?.lon).0)
         };
-        let before = sign_at(start)?;
-        if sign_at(end)? == before {
+        let (mut lo, mut hi) = (start - 1, next_start);
+        let before = sign_at(lo)?;
+        if sign_at(hi)? == before {
             return Ok(None);
         }
         // The Moon stays under 15 degrees a day, so one change of sign at most.
-        let (mut lo, mut hi) = (start, end);
         while hi - lo > 1 {
             let mid = lo + (hi - lo) / 2;
             if sign_at(mid)? == before {
@@ -267,6 +280,9 @@ impl ChartService {
             } else {
                 hi = mid;
             }
+        }
+        if hi >= next_start {
+            return Ok(None);
         }
         Ok(Some(MoonIngress {
             at: local_hhmm(hi, zone)?,
@@ -286,15 +302,17 @@ const TRANSITING: [Body; 5] = [
     Body::Venus,
     Body::Mars,
 ];
+const _: () = assert!(
+    matches!(TRANSITING[0], Body::Sun) && matches!(TRANSITING[1], Body::Moon),
+    "transits() reads the Sun and the Moon at indices 0 and 1"
+);
 
-/// 12:00 of `date` on the wall clock of `zone`, as a unix instant. A noon in a DST gap or a
-/// year outside 1900-2100 is a bad date, an unknown zone a bad viewer zone.
+/// 12:00 of `date` on the wall clock of `zone`, as a unix instant. A noon in a DST gap
+/// (or a day the zone skipped) is a nonexistent date, a year outside 1900-2100 an
+/// out-of-range date, an unknown zone a bad viewer zone.
 fn transit_instant(date: Date, zone: &str) -> Result<i64, ChartError> {
     let noon = Birth {
-        local: PrimitiveDateTime::new(
-            date,
-            Time::from_hms(12, 0, 0).map_err(|_| ChartError::Date)?,
-        ),
+        local: PrimitiveDateTime::new(date, NOON),
         zone: zone.to_owned(),
         lat: 0.0,
         lon: 0.0,
@@ -302,15 +320,17 @@ fn transit_instant(date: Date, zone: &str) -> Result<i64, ChartError> {
     };
     birth_instant(&noon).map_err(|e| match e {
         BirthError::UnknownZone => ChartError::ViewerZone,
-        _ => ChartError::Date,
+        BirthError::Nonexistent => ChartError::DateNonexistent,
+        // lat and lon are 0 here, so only the year can be out of range.
+        BirthError::OutOfRange | BirthError::BadLatitude | BirthError::BadLongitude => {
+            ChartError::DateOutOfRange
+        }
     })
 }
 
 /// Whole-sign cusps starting at the sign of the natal Sun (the house basis without a birth time).
-#[allow(clippy::cast_precision_loss)] // indices <= 11
 fn solar_cusps(natal_sun: f64) -> [f64; 12] {
-    let first = 30.0 * Sign::of(natal_sun).0.index() as f64;
-    std::array::from_fn(|i| norm360(first + 30.0 * i as f64))
+    whole_sign_cusps(natal_sun)
 }
 
 fn aspect_out(a: &Aspect) -> AspectOut {
@@ -324,11 +344,11 @@ fn aspect_out(a: &Aspect) -> AspectOut {
 }
 
 fn angle_out(lon: f64) -> AngleOut {
-    let (sign, deg) = Sign::of(lon);
+    let (lon, sign, deg) = round_lon(lon);
     AngleOut {
-        lon: round4(lon),
+        lon,
         sign: sign.key(),
-        deg: round4(deg),
+        deg,
     }
 }
 
@@ -346,9 +366,7 @@ fn place_houses(
         Ok(c) => (requested, None, a, c),
         Err(HouseError::Undefined) => {
             let ws = HouseSystem::WholeSign;
-            // Whole sign is defined at every latitude.
-            let c = cusps(ws, ramc, eps, birth.lat, a).unwrap_or([0.0; 12]);
-            (ws, Some(ws.as_key()), a, c)
+            (ws, Some(ws.as_key()), a, whole_sign_cusps(a.asc))
         }
     }
 }
@@ -540,6 +558,39 @@ mod chart_tests {
         assert!((c.bodies[0].lon - 10.1235).abs() < 1e-12);
         assert!(c.bodies[0].lat.abs() < 1e-12);
     }
+
+    fn chart_at(lon: f64) -> Chart {
+        let eph = FakeEphemeris(Box::new(move |_, _| Ok(Ecliptic { lon, lat: 0.0 })));
+        ChartService::new(Arc::new(eph))
+            .chart(&req(birth(true, 50.0)))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_longitude_rounding_up_to_a_sign_boundary_is_in_the_next_sign() {
+        let c = chart_at(89.999_96);
+        let b = &c.bodies[0];
+        assert_eq!((b.sign, b.deg, b.lon), ("Cancer", 0.0, 90.0));
+        let c = chart_at(359.999_96);
+        let b = &c.bodies[0];
+        assert_eq!((b.sign, b.deg, b.lon), ("Aries", 0.0, 0.0));
+    }
+
+    #[test]
+    fn a_speed_rounding_to_zero_is_not_retrograde() {
+        let base = Moment::from_unix(946_728_000).jd_ut;
+        let eph = FakeEphemeris(Box::new(move |_, m| {
+            Ok(Ecliptic {
+                lon: 100.0 - 0.000_04 * (m.jd_ut - base),
+                lat: 0.0,
+            })
+        }));
+        let c = ChartService::new(Arc::new(eph))
+            .chart(&req(birth(false, 0.0)))
+            .unwrap();
+        assert!(c.bodies[0].speed == 0.0 && c.bodies[0].speed.is_sign_positive());
+        assert!(!c.bodies[0].retrograde);
+    }
 }
 
 #[cfg(test)]
@@ -639,6 +690,86 @@ mod transit_tests {
         );
     }
 
+    /// The Moon at 0 Cancer `secs` seconds after 2026-03-11 00:00:00Z, moving 13 degrees a day.
+    fn ingress_near_midnight(secs: f64) -> (Option<MoonIngress>, Option<MoonIngress>) {
+        let cross =
+            Moment::from_unix(1_773_187_200 /* 2026-03-11 00:00:00Z */).jd_ut + secs / 86_400.0;
+        let s = service(move |b, m| match b {
+            Body::Moon => at_lon(90.0 + 13.0 * (m.jd_ut - cross)),
+            _ => at_lon(300.0),
+        });
+        let day = |d| s.transits(&req(false, "UTC", d)).unwrap().moon_ingress;
+        (day(date!(2026 - 03 - 10)), day(date!(2026 - 03 - 11)))
+    }
+
+    #[test]
+    fn an_ingress_in_the_last_second_of_the_day_is_not_lost() {
+        // Inside 23:59:59..24:00:00: the first second in Cancer is 00:00:00 of the next
+        // day, so the ingress belongs to that day, shown as 00:00.
+        let (d10, d11) = ingress_near_midnight(-0.5);
+        assert!(d10.is_none(), "{d10:?}");
+        let d11 = d11.expect("the next day reports it");
+        assert_eq!((d11.at.as_str(), d11.sign), ("00:00", "Cancer"));
+    }
+
+    #[test]
+    fn an_ingress_exactly_at_midnight_belongs_to_the_next_day() {
+        let (d10, d11) = ingress_near_midnight(0.0);
+        assert!(d10.is_none(), "{d10:?}");
+        assert_eq!(d11.unwrap().at, "00:00");
+        // One second earlier it is the last second of the day before.
+        let (d10, d11) = ingress_near_midnight(-1.5);
+        assert_eq!(d10.unwrap().at, "23:59");
+        assert!(d11.is_none(), "{d11:?}");
+    }
+
+    /// Natal Moon at 100 moving 13 degrees a day at birth; transiting Mars at `mars` on the
+    /// transit day, moving 0.5 degrees a day.
+    fn natal_moon_vs_transiting_mars(mars: f64) -> AspectOut {
+        let nj = natal_jd();
+        let tj = Moment::from_unix(1_773_144_000 /* 2026-03-10 12:00:00Z */).jd_ut;
+        let s = service(move |b, m| {
+            let natal = (m.jd_ut - nj).abs() < 1.0;
+            match b {
+                Body::Moon if natal => at_lon(100.0 + 13.0 * (m.jd_ut - nj)),
+                Body::Moon => at_lon(330.0),
+                Body::Mars if !natal => at_lon(mars + 0.5 * (m.jd_ut - tj)),
+                _ => at_lon(200.0 + 7.0 * (b as usize) as f64),
+            }
+        });
+        let t = s
+            .transits(&req(false, "UTC", date!(2026 - 03 - 10)))
+            .unwrap();
+        t.aspects
+            .iter()
+            .find(|x| x.a == "Mars" && x.b == "Moon")
+            .cloned()
+            .expect("Mars conjunct the natal Moon")
+    }
+
+    #[test]
+    fn a_natal_point_is_fixed_so_applying_follows_the_transiting_body() {
+        // Mars behind the natal Moon and moving towards it: applying, although the natal
+        // Moon moved faster at birth.
+        let a = natal_moon_vs_transiting_mars(98.5);
+        assert_eq!(a.kind, "conjunction");
+        assert!(a.applying, "{a:?}");
+        // Mars past the natal Moon and moving away: separating.
+        assert!(!natal_moon_vs_transiting_mars(101.5).applying);
+    }
+
+    #[test]
+    fn the_transiting_moon_rounding_up_to_a_sign_boundary_is_in_the_next_sign() {
+        let s = service(|b, _| match b {
+            Body::Moon => at_lon(89.999_96),
+            _ => at_lon(300.0),
+        });
+        let t = s
+            .transits(&req(false, "UTC", date!(2026 - 03 - 10)))
+            .unwrap();
+        assert_eq!((t.moon.sign, t.moon.deg), ("Cancer", 0.0));
+    }
+
     #[test]
     fn no_ingress_when_the_sign_holds_all_day() {
         let s = service(|_, _| at_lon(100.0));
@@ -730,7 +861,7 @@ mod transit_tests {
         let e = s
             .transits(&req(false, "UTC", date!(2101 - 01 - 01)))
             .unwrap_err();
-        assert!(matches!(e, ChartError::Date));
+        assert!(matches!(e, ChartError::DateOutOfRange));
     }
 
     #[test]

@@ -65,7 +65,11 @@ impl Table {
         })
     }
 
-    /// 4-point Lagrange interpolation (two rows each side) at `jde` (TT).
+    /// 4-point Lagrange interpolation at `jde` (TT), anywhere from the first row to the last.
+    ///
+    /// Inside the table the window is two rows each side; in the first and last cells it
+    /// is the edge four rows, so the value is always interpolated within the data, never
+    /// extrapolated beyond it. Outside [first row, last row] or non-finite is `OutOfRange`.
     // Row indices are < 2^20, so the usize/f64 casts are exact; x is range-checked first.
     #[allow(
         clippy::cast_precision_loss,
@@ -74,13 +78,13 @@ impl Table {
     )]
     pub fn at(&self, jde: f64) -> Result<Ecliptic, TableError> {
         let x = (jde - self.jde_start) / self.step;
-        if !x.is_finite() || x < 1.0 || x > (self.rows.len() - 2) as f64 {
+        if !x.is_finite() || x < 0.0 || x > (self.rows.len() - 1) as f64 {
             return Err(TableError::OutOfRange);
         }
-        // x is in [1, len-2], so floor(x) in [1, len-2] and floor(x)+2 may equal len:
-        // the last valid cell is [len-3, len-2], so clamp the base row.
-        let i = (x.floor() as usize).min(self.rows.len() - 3);
-        let t = x - i as f64; // in [0, 1] relative to row i; nodes at -1, 0, 1, 2
+        // The window is rows i-1..=i+2, so i is clamped to [1, len-3] (len >= 4): in the
+        // first cell t is in [-1, 0], in the last in [1, 2], elsewhere in [0, 1].
+        let i = (x.floor() as usize).clamp(1, self.rows.len() - 3);
+        let t = x - i as f64; // relative to row i; nodes at -1, 0, 1, 2
         let nodes = [-1.0, 0.0, 1.0, 2.0];
 
         let mut lons = [0.0; 4];
@@ -165,12 +169,30 @@ mod tests {
     }
 
     #[test]
-    fn out_of_range_outside_the_four_point_window() {
+    fn out_of_range_outside_the_first_and_last_rows() {
         let t = synthetic();
-        assert_eq!(t.at(100.0 + 4.9).unwrap_err(), TableError::OutOfRange);
-        assert!(t.at(100.0 + 5.0).is_ok());
-        assert!(t.at(100.0 + 20.0).is_ok());
-        assert_eq!(t.at(100.0 + 20.1).unwrap_err(), TableError::OutOfRange);
+        assert_eq!(t.at(100.0 - 0.1).unwrap_err(), TableError::OutOfRange);
+        assert!(t.at(100.0).is_ok());
+        assert!(t.at(100.0 + 4.9).is_ok());
+        assert!(t.at(100.0 + 20.1).is_ok());
+        assert!(t.at(100.0 + 25.0).is_ok());
+        assert_eq!(t.at(100.0 + 25.1).unwrap_err(), TableError::OutOfRange);
         assert_eq!(t.at(f64::NAN).unwrap_err(), TableError::OutOfRange);
+        assert_eq!(t.at(f64::INFINITY).unwrap_err(), TableError::OutOfRange);
+    }
+
+    #[test]
+    fn the_edge_cells_reproduce_their_grid_rows() {
+        let t = synthetic();
+        let first = t.at(100.0).unwrap();
+        assert!((first.lon - 356.0).abs() < 1e-9, "{}", first.lon);
+        assert!(first.lat.abs() < 1e-9);
+        let last = t.at(100.0 + 25.0).unwrap();
+        assert!((last.lon - 4.0).abs() < 1e-9, "{}", last.lon);
+        assert!((last.lat - 2.5).abs() < 1e-9);
+        // The latitudes are linear, so the cubic through the edge four rows is too: halfway
+        // into the first cell (0 -> 0.5) and into the last (2 -> 2.5).
+        assert!((t.at(100.0 + 2.5).unwrap().lat - 0.25).abs() < 1e-9);
+        assert!((t.at(100.0 + 22.5).unwrap().lat - 2.25).abs() < 1e-9);
     }
 }

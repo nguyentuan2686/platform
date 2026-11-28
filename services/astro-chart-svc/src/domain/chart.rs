@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use super::angles::norm360;
+use super::angles::{norm360, Sign};
 
 /// Decimals kept on every angle, speed and orb.
 const SCALE: f64 = 10_000.0;
@@ -11,6 +11,15 @@ const SCALE: f64 = 10_000.0;
 /// `x` rounded to 4 decimals (never `-0.0`).
 pub fn round4(x: f64) -> f64 {
     (x * SCALE).round() / SCALE + 0.0
+}
+
+/// A longitude as it goes on the wire: rounded to 4 decimals first and reduced to [0, 360)
+/// (so 359.99996 is 0.0), then the sign and the degrees within it taken from that rounded
+/// value, so `lon`, `sign` and `deg` always agree and `deg` stays below 30.
+pub fn round_lon(lon: f64) -> (f64, Sign, f64) {
+    let lon = norm360(round4(norm360(lon)));
+    let (sign, deg) = Sign::of(lon);
+    (lon, sign, round4(deg))
 }
 
 /// The house (1..=12) whose cusp interval contains `lon`; intervals may cross 360°.
@@ -162,6 +171,21 @@ mod tests {
         assert!((round4(12.345_678) - 12.3457).abs() < 1e-12);
         assert!(round4(-0.000_01).is_sign_positive());
         assert!((round4(-1.234_56) - -1.2346).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_longitude_is_rounded_before_its_sign_is_taken() {
+        assert_eq!(round_lon(89.999_96), (90.0, Sign::Cancer, 0.0));
+        assert_eq!(round_lon(359.999_96), (0.0, Sign::Aries, 0.0));
+        assert_eq!(round_lon(-0.000_01), (0.0, Sign::Aries, 0.0));
+        let (lon, sign, deg) = round_lon(123.456_789);
+        assert_eq!((lon, sign), (123.4568, Sign::Leo));
+        assert!((deg - 3.4568).abs() < 1e-9, "{deg}");
+        for x in [29.999_95, 29.999_949, 59.999_999, 329.999_96] {
+            let (lon, sign, deg) = round_lon(x);
+            assert!(lon < 360.0 && deg < 30.0, "{x}: {lon} {deg}");
+            assert_eq!(Sign::of(lon).0, sign, "{x}");
+        }
     }
 
     #[test]
