@@ -588,6 +588,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>CD: bước verify ghi lại mã thoát kể cả khi verify-deploy lỗi, nên deploy hỏng được rollback thật (trước đây báo rc=none, issue #53).</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Argo CD coi Ingress là Healthy khi có rule (Traefik ClusterIP không bao giờ ghi status LoadBalancer, nên prod-apps kẹt Progressing, issue #53); verify-deploy in ra resource chưa Healthy khi lỗi. Cần chạy lại bootstrap trên host.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>PR #52: quyền chỉ đọc <code>ops-reader</code> qua tailnet (kubectl, log, Grafana từ laptop qua Docker); job bootstrap seal cả secret optional mà prod đã seal.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>PR #48: xem số hợp mệnh lên prod (route <code>/api/xem-so</code>, endpoint <code>/tuvi/number-check</code>, bảng <code>number_check_usage</code>, secret <code>NUMBER_CHECK_HMAC_KEY</code> đã seal, lý do 409 <code>number_quota_ip</code>).</div></li>
