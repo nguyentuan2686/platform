@@ -144,6 +144,8 @@ argocd_cm_ci_branch_only_in_ci_mode() {
   ci=$(grep -v '^[[:space:]]*#' "$tmp/ci.yaml")
   if grep -q 'ci-manual-sync\|ci-mode-' <<<"$prod"; then fail "${FUNCNAME[0]}" "prod argocd-cm carries the CI-only branch"; fi
   grep -q 'hs.status = obj.status.health.status' <<<"$prod" || fail "${FUNCNAME[0]}" "prod lost the health passthrough"
+  grep -q '^  resource.customizations.health.networking.k8s.io_Ingress: |' <<<"$prod" \
+    || fail "${FUNCNAME[0]}" "prod lost the Ingress health check (ClusterIP Traefik never sets Ingress status)"
   if grep -q 'ci-mode-' <<<"$ci"; then fail "${FUNCNAME[0]}" "markers left in the CI render"; fi
   echo "ok ${FUNCNAME[0]}"
 }

@@ -2,13 +2,16 @@ package dev.platform.reading.tuvi.domain;
 
 import java.util.regex.Pattern;
 
-/** Knowledge lookup key (spec 6.4); the grammar is enforced on construction. */
+/**
+ * Knowledge lookup key (spec 6.4); the grammar is enforced on construction. {@code so:} keys are
+ * the number-check readings (xem số spec §6), e.g. {@code so:que=11}, {@code so:closing}.
+ */
 public record KnowledgeKey(String value) {
 
   private static final Pattern GRAMMAR =
       Pattern.compile(
-          "^tuvi:(frame=[a-z_]+|daily:area=(CongViec|DiLai|TienBac|SucKhoe):level=(Thuan|Binh|LuuY)"
-              + "|[a-z]+=[A-Za-z]+(:[a-z]+=[A-Za-z]+)*)$");
+          "^(tuvi:(frame=[a-z_]+|daily:area=(CongViec|DiLai|TienBac|SucKhoe):level=(Thuan|Binh|LuuY)"
+              + "|[a-z]+=[A-Za-z]+(:[a-z]+=[A-Za-z]+)*)|so:(closing|[a-z]+=[a-z0-9_]+))$");
 
   public KnowledgeKey {
     if (value == null || !GRAMMAR.matcher(value).matches()) {
@@ -52,5 +55,14 @@ public record KnowledgeKey(String value) {
 
   public static KnowledgeKey frame(String id) {
     return new KnowledgeKey("tuvi:frame=" + id);
+  }
+
+  /** Number-check reading key {@code so:<facet>=<value>}. */
+  public static KnowledgeKey number(String facet, String value) {
+    return new KnowledgeKey("so:" + facet + "=" + value);
+  }
+
+  public static KnowledgeKey numberClosing() {
+    return new KnowledgeKey("so:closing");
   }
 }

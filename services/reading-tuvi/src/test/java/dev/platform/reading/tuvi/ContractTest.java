@@ -51,7 +51,12 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-@WebMvcTest({ReadingController.class, QaController.class, QaMergeController.class})
+@WebMvcTest({
+  ReadingController.class,
+  QaController.class,
+  QaMergeController.class,
+  dev.platform.reading.tuvi.adapter.in.web.NumberCheckController.class
+})
 @Import({
   PlatformWebAutoConfiguration.class,
   dev.platform.reading.tuvi.adapter.in.web.ReadingExceptionHandler.class,
@@ -64,6 +69,8 @@ class ContractTest {
 
   @MockitoBean QaService qa;
   @MockitoBean QaMergeUseCase qaMerge;
+
+  @MockitoBean dev.platform.reading.tuvi.application.number.NumberCheckService numberCheck;
 
   private ResultActions qaGet(String path) throws Exception {
     return mvc.perform(
@@ -235,7 +242,9 @@ class ContractTest {
             "GET /tuvi/qa/readings/{id}",
             "POST /tuvi/qa/readings/{id}/follow-ups",
             "GET /tuvi/qa/free-quota",
-            "POST /internal/qa/merge");
+            "POST /internal/qa/merge",
+            "POST /tuvi/number-check",
+            "GET /tuvi/number-check/quota");
     assertThat(served).containsAll(declared);
   }
 

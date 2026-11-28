@@ -96,7 +96,7 @@ sudo k3s kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-s
 Save the output as `deploy/k8s/overlays/prod/sealed/sealing-cert.crt` in your checkout. With kubectl access over the tailnet, `kubeseal --fetch-cert > deploy/k8s/overlays/prod/sealed/sealing-cert.crt` does the same.
 
 Then fill one file per secret in `deploy/k8s/overlays/prod/secrets.local/<name>.env` (`KEY=value` lines). The names and keys are in `deploy/k8s/overlays/prod/secrets.tsv`:
-- The 7 required app/data secrets. Generate passwords and tokens with `openssl rand -hex 32`, and the AES keys (`QA_ENC_KEY`, `PROFILE_ENC_KEY`) with `openssl rand -base64 32`. `INTERNAL_API_TOKEN` must be the same value in every secret that has it, and the `*_DB_PASSWORD` values in `postgres-secrets` must match `DB_PASSWORD` of the matching service. A key ending in `?` may be empty. `identity-svc-secrets` also holds the SMTP relay login `MAIL_USERNAME` and `MAIL_PASSWORD` (from the provider; never in a manifest). Both may stay empty for the quick-tunnel preview: login mail then fails with 503 until a relay is set.
+- The 7 required app/data secrets. Generate passwords and tokens with `openssl rand -hex 32`, and the AES keys (`QA_ENC_KEY`, `PROFILE_ENC_KEY`) and the xem-số HMAC key `NUMBER_CHECK_HMAC_KEY` (in `reading-tuvi-secrets`) with `openssl rand -base64 32`. `INTERNAL_API_TOKEN` must be the same value in every secret that has it, and the `*_DB_PASSWORD` values in `postgres-secrets` must match `DB_PASSWORD` of the matching service. A key ending in `?` may be empty. `identity-svc-secrets` also holds the SMTP relay login `MAIL_USERNAME` and `MAIL_PASSWORD` (from the provider; never in a manifest). Both may stay empty for the quick-tunnel preview: login mail then fails with 503 until a relay is set.
 - `alerting-secrets`: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 - `ops-secrets`: the `S3_*` values and both Healthchecks URLs.
 - `cloudflared-secrets`: `TUNNEL_TOKEN`, only with a named tunnel.
@@ -230,6 +230,27 @@ Then delete every copy. Store the App private key in the password manager first.
 
 Each feature takes all of its secrets or none. A partial set fails the `cd` gate with `::error::`. CD alone (`CD_APP_ID` + `CD_APP_PRIVATE_KEY`) deploys without verification, and the run then shows `::warning::deployed without verification`.
 
+### 6a. Read-only access from your computer (kubectl, logs, Grafana) without installing Tailscale
+
+The ServiceAccount `ops-reader` (`deploy/k8s/overlays/prod/platform/ops-reader.yaml`, synced by `prod-platform`) can read pods, logs, events and workloads in every namespace and port-forward only in `observability`. It cannot read Secrets or ConfigMaps, exec or change anything. Its kubeconfig never goes to CI.
+
+1. On the host (browser SSH), once per 30 days: `cd ~/platform && git pull -q && sudo scripts/ops-kubeconfig.sh`. Download `/home/<your user>/ops-reader.kubeconfig` (gear menu -> Download file; it lands in Downloads, never the repo folder), then `shred -u ~/ops-reader.kubeconfig`. The token expires after 30 days (`--duration`); rerun to renew.
+2. In Tailscale -> Settings -> Keys, generate an auth key: **Ephemeral** on, pre-approved, no tag (the node belongs to you, so the ACL lets it reach `tag:prod`). It disappears from the tailnet when the container stops.
+3. On your computer (PowerShell), start Tailscale in a throwaway container (userspace networking; nothing installed on Windows). The key is read hidden and passed through the environment, never on the command line:
+   ```powershell
+   $s = Read-Host -AsSecureString "TS key"; $env:TS_AUTHKEY = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
+   docker run -d --name ts-prod -p 127.0.0.1:3000:3000 -e TS_AUTHKEY -e TS_USERSPACE=true -e TS_HOSTNAME=ops-docker -e TS_SOCKS5_SERVER=127.0.0.1:1055 tailscale/tailscale:v1.104.7
+   Remove-Item Env:TS_AUTHKEY
+   ```
+   The image tag is `TAILSCALE_VERSION` in `infra/bootstrap/versions.env`.
+4. kubectl runs in the pinned tools image inside the container's network, through its SOCKS5 proxy (which resolves `platform-prod`):
+   ```powershell
+   docker run --rm --network container:ts-prod -e HTTPS_PROXY=socks5://127.0.0.1:1055 -e KUBECONFIG=/k -v "$HOME\Downloads\ops-reader.kubeconfig:/k:ro" alpine/k8s:1.33.4 kubectl get pods -A
+   ```
+   Logs: the same command with `kubectl -n apps logs deploy/reading-tuvi --since=1h`.
+5. Grafana: `docker run --rm -d --name grafana-pf --network container:ts-prod -e HTTPS_PROXY=socks5://127.0.0.1:1055 -e KUBECONFIG=/k -v "$HOME\Downloads\ops-reader.kubeconfig:/k:ro" alpine/k8s:1.33.4 kubectl -n observability port-forward --address 0.0.0.0 svc/lgtm 3000:3000`, then open http://localhost:3000 (published on 127.0.0.1 only).
+6. Done: `docker rm -f grafana-pf ts-prod`.
+
 ## 7. First deploy
 
 `main` has the tags `main` until CD pins them. Publish every image for one commit, and let CD pin all 7:
@@ -257,7 +278,7 @@ sudo scripts/public-url                              # the URL; open it, the hom
 curl -fsS "$(sudo scripts/public-url)/" | grep -c 'Lão Thiên Cơ'   # >= 1: the tunnel (never run in CI) serves the site
 ```
 
-Alerts reach Telegram. The lgtm init container renders the `telegram` contact point **only at pod start**, and lgtm usually started before `alerting-secrets` existed (§4). So restart it once the go-live PR is synced, and after every Telegram token rotation (`docs/runbooks/alerts.md`):
+Alerts reach Telegram. The lgtm init container renders the `telegram` contact point **only at pod start**, and lgtm usually started before `alerting-secrets` existed (§4). In prod the restart is automatic: the init container waits for the Secret and the PR that seals or re-seals it bumps `platform.dev/alerting-secrets-rev` (`docs/runbooks/alerts.md`). To check, or to restart by hand:
 ```sh
 sudo kubectl -n observability rollout restart deployment/lgtm
 sudo kubectl -n observability rollout status deployment/lgtm --timeout=5m

@@ -42,6 +42,15 @@ qa:
   job-interval: ${QA_JOB_INTERVAL:PT1M}
   free-retention: ${QA_FREE_RETENTION:P90D}
 
+# Free number check (xem số): only HMACs of the number and IP are stored, for two days.
+number-check:
+  # HMAC-SHA256 key (at least 16 characters); startup fails when missing.
+  hmac-key: ${NUMBER_CHECK_HMAC_KEY:}
+  daily-per-subject: ${NUMBER_CHECK_DAILY_PER_SUBJECT:2}
+  daily-per-ip: ${NUMBER_CHECK_DAILY_PER_IP:20}
+  # daily purge of usage rows older than yesterday (one thread).
+  jobs-enabled: ${NUMBER_CHECK_JOBS_ENABLED:true}
+
 # OTLP export is configured by the OpenTelemetry agent from OTEL_EXPORTER_OTLP_ENDPOINT.
 
 # Directory of knowledge *.jsonl files, imported at startup (before readiness); unset = no import.

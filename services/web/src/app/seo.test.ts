@@ -19,16 +19,18 @@ const PRIVATE_PAGES = [
 ];
 
 describe("sitemap", () => {
-  it("lists exactly the 44 public absolute URLs", () => {
+  it("lists exactly the 48 public absolute URLs", () => {
     const urls = sitemap().map((e) => e.url);
-    expect(urls).toHaveLength(44);
-    expect(new Set(urls).size).toBe(44);
+    expect(urls).toHaveLength(48);
+    expect(new Set(urls).size).toBe(48);
     for (const u of urls) expect(u.startsWith(cfg().webOrigin)).toBe(true);
     expect(urls).toContain(`${cfg().webOrigin}/vi/kien-thuc/cung/menh`);
     expect(urls).toContain(`${cfg().webOrigin}/vi/kien-thuc/sao/thien-co`);
     expect(urls).toContain(`${cfg().webOrigin}/vi/dieu-khoan`);
     expect(urls).toContain(`${cfg().webOrigin}/vi/tu-vi-2027`);
     expect(urls).toContain(`${cfg().webOrigin}/vi/tu-vi-2027/tuoi-mui`);
+    expect(urls).toContain(`${cfg().webOrigin}/vi/xem-so`);
+    expect(urls).toContain(`${cfg().webOrigin}/vi/xem-so/bien-so-xe`);
     expect(urls.some((u) => /\/(la-so|hoi|tai-khoan|chia-se|quan-tri)(\/|$)/.test(u))).toBe(false);
   });
 });
@@ -78,6 +80,14 @@ describe("indexable pages", () => {
           params: Promise.resolve({ slug: "tuoi-ti" }),
         })) as Meta,
     ],
+    ["/vi/xem-so", async () => (await import("@/app/vi/xem-so/page")).metadata as Meta],
+    ...(["sim", "so-tai-khoan", "bien-so-xe"] as const).map(
+      (loai): [string, () => Promise<Meta>] => [
+        `/vi/xem-so/${loai}`,
+        async () =>
+          (await (await import("@/app/vi/xem-so/[loai]/page")).generateMetadata({ params: Promise.resolve({ loai }) })) as Meta,
+      ],
+    ),
     [
       "/vi/kien-thuc/cung/menh",
       async () =>
@@ -105,7 +115,7 @@ describe("indexable pages", () => {
   });
 
   it("every sitemap URL is one of the indexable pages' canonicals or a knowledge page", () => {
-    for (const { url } of sitemap()) expect(url).toMatch(new RegExp(`^${o}/vi(/kien-thuc(/(cung|sao)/[a-z-]+)?|/tu-vi-2027(/tuoi-[a-z]+)?|/dieu-khoan|/chinh-sach-rieng-tu|/hoan-tien)?$`));
+    for (const { url } of sitemap()) expect(url).toMatch(new RegExp(`^${o}/vi(/kien-thuc(/(cung|sao)/[a-z-]+)?|/tu-vi-2027(/tuoi-[a-z]+)?|/xem-so(/(sim|so-tai-khoan|bien-so-xe))?|/dieu-khoan|/chinh-sach-rieng-tu|/hoan-tien)?$`));
   });
 });
 

@@ -7,6 +7,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../../platform/namespaces
+  - alerting-secrets.sealedsecret.yaml
+  - cloudflared-secrets.sealedsecret.yaml
   - identity-svc-secrets.sealedsecret.yaml
   - namespace-edge.yaml
   - notify-svc-secrets.sealedsecret.yaml

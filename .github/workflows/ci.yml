@@ -432,6 +432,27 @@ jobs:
       contents: read
     uses: ./.github/workflows/_bootstrap.yml
 
+  # System docs stay current: a PR that changes contracts, deploy, infra, workflows, migrations or web API routes must
+  # also change docs/system/ (or say "docs-system: n/a <reason>" in its description). PRs only; Dependabot is exempt.
+  system-docs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: docs/system changed with the code it describes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          bash scripts/check-system-docs.sh <<<"$changed"
+
   # Single required status check. New services only need to be added to `needs` (scripts/new-service.sh does it).
   ci-gate:
     if: always()
@@ -451,6 +472,7 @@ jobs:
       - k8s-e2e
       - ops-scripts
       - bootstrap
+      - system-docs
     runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job failed or was cancelled

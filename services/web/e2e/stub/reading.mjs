@@ -33,9 +33,30 @@ const readings = new Map();
 /** subject id -> free chats used today */
 const freeUsed = new Map();
 
+/** Number check (xem số): subject id -> Set of "kind|digits" checked (2 distinct allowed). */
+const numberChecks = new Map();
+const NUMBER_LIMIT = 2;
+const NUMBER_RESULT = {
+  score: 7,
+  band: "kha_hop",
+  bandLabel: "Khá hợp",
+  menh: { canChi: "Canh Ngọ", napAm: "Lộ Bàng Thổ", element: "Thổ" },
+  cungPhi: { name: "Khảm", group: "Đông tứ mệnh" },
+  criteria: [
+    { key: "element", label: "Ngũ hành", detail: "Thổ hòa Thổ", points: 2.5, max: 3 },
+    { key: "hexagram", label: "Quẻ Kinh Dịch", detail: "Sơn Thủy Mông", points: 1.25, max: 2.5 },
+    { key: "yinyang", label: "Âm dương", detail: "5 chẵn / 5 lẻ", points: 1.5, max: 1.5 },
+    { key: "cungphi", label: "Cung phi", detail: "Hợp 1 quái", points: 0.75, max: 1.5 },
+    { key: "nut", label: "Số nút", detail: "5 nút", points: 0, max: 0.5 },
+    { key: "pairs", label: "Cặp số dân gian", detail: "78", points: 0.75, max: 1 },
+  ],
+  reading: ["Mệnh con thuộc hành Thổ, vững vàng và bao dung như đất mẹ.", "Dãy số khá hợp với con."],
+};
+
 export function reset() {
   readings.clear();
   freeUsed.clear();
+  numberChecks.clear();
 }
 
 const problem = (status, reason) => ({ type: "urn:problem:stub", title: "stub", status, trace_id: "", ...(reason ? { reason } : {}) });
@@ -245,6 +266,36 @@ export async function handle(req, res, body, send) {
       return true;
     }
     return false;
+  }
+
+  if (path === "/tuvi/number-check" || path === "/tuvi/number-check/quota") {
+    const want = process.env.STUB_INTERNAL_TOKEN;
+    const who = identity.subjectOf(bearer(req));
+    if ((want && req.headers["x-internal-token"] !== want) || !who) {
+      send(res, 401, problem(401), "application/problem+json");
+      return true;
+    }
+    const seen = numberChecks.get(who.id) ?? new Set();
+    const quota = () => ({ limit: NUMBER_LIMIT, used: seen.size, remaining: Math.max(0, NUMBER_LIMIT - seen.size) });
+    if (req.method === "GET" && path === "/tuvi/number-check/quota") {
+      send(res, 200, quota());
+      return true;
+    }
+    if (req.method !== "POST") return false;
+    const digits = typeof body?.number === "string" ? body.number.replace(/[^0-9]/g, "") : "";
+    if (digits.length < 4 || !["sim", "bank", "plate"].includes(body?.kind)) {
+      send(res, 400, { ...problem(400), reason: "invalid_number", errors: [{ field: "number", message: "number is invalid" }] }, "application/problem+json");
+      return true;
+    }
+    const key = `${body.kind}|${digits}`;
+    if (!seen.has(key) && seen.size >= NUMBER_LIMIT) {
+      send(res, 409, { ...problem(409, "number_quota"), quota: quota() }, "application/problem+json");
+      return true;
+    }
+    seen.add(key);
+    numberChecks.set(who.id, seen);
+    send(res, 200, { ...NUMBER_RESULT, quota: quota() });
+    return true;
   }
 
   const fixture = req.method === "POST" ? routes[path] : undefined;

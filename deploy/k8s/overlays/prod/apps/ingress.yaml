@@ -26,7 +26,8 @@ spec:
                 name: web
                 port: {number: 3000}
 ---
-# The abuse-prone web routes: login (each magic link is a real mail) and Q&A (each answer spends LLM quota).
+# The abuse-prone web routes: login (each magic link is a real mail), Q&A (each answer spends LLM quota) and the
+# number check (each new guest gets 2 checks a day).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -46,6 +47,7 @@ spec:
           - {path: /vi/dang-nhap, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
           - {path: /api/auth, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
           - {path: /api/qa, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
+          - {path: /api/xem-so, pathType: Prefix, backend: {service: {name: web, port: {number: 3000}}}}
 ---
 # SePay -> payment-svc. Authentication stays in payment-svc (SEPAY_WEBHOOK_AUTH=apikey). Needs a stable hostname (a
 # domain + the named tunnel): a quick-tunnel URL changes on every cloudflared restart (docs/runbooks/go-live.md).

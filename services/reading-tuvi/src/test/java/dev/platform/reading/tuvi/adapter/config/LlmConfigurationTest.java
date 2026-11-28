@@ -62,8 +62,16 @@ class LlmConfigurationTest {
   }
 
   @Test
-  void zero_providers_left_fails_startup() {
-    runner.withPropertyValues("LLM_PROVIDERS=groq").run(ctx -> assertThat(ctx).hasFailed());
+  void zero_providers_left_still_starts_with_an_error_log(CapturedOutput output) {
+    runner
+        .withPropertyValues("LLM_PROVIDERS=groq,gemini")
+        .run(
+            ctx -> {
+              assertThat(ctx).hasNotFailed();
+              assertThat(ids(ctx.getBean(LlmConfiguration.ConfiguredProviders.class))).isEmpty();
+              assertThat(ctx).hasSingleBean(LlmGateway.class);
+              assertThat(output.getAll()).contains("no llm provider enabled");
+            });
   }
 
   @Test

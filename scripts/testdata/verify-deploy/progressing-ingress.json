@@ -1,0 +1,6 @@
+{"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"name":"progressing-ingress","namespace":"argocd"},
+ "status":{"sync":{"status":"Synced","revision":"1111111111111111111111111111111111111111"},"health":{"status":"Progressing"},"conditions":[],
+  "resources":[
+   {"group":"apps","kind":"Deployment","namespace":"apps","name":"web","health":{"status":"Healthy"}},
+   {"group":"networking.k8s.io","kind":"Ingress","namespace":"apps","name":"web","health":{"status":"Progressing"}},
+   {"kind":"Service","namespace":"apps","name":"web"}]}}

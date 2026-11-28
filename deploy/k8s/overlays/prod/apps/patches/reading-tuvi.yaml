@@ -9,4 +9,4 @@ spec:
         - name: reading-tuvi
           env:
             # ADR 0003: ordered failover list; groq/gemini are enabled only when their API key is set.
-            - {name: LLM_PROVIDERS, value: "groq,gemini"}
+            - {name: LLM_PROVIDERS, value: "gemini,groq"}

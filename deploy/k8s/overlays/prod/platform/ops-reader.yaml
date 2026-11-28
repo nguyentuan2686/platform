@@ -1,0 +1,46 @@
+# Read-only operator access to prod (docs/runbooks/go-live.md §6a): the ServiceAccount `ops-reader` may read workload
+# state, events and pod logs in every namespace, and port-forward only in `observability` (Grafana). No Secrets, no
+# ConfigMaps, no exec, no writes. Its kubeconfig is made on the host by scripts/ops-kubeconfig.sh with a short-lived
+# token (TokenRequest, 30 days by default) and is used from the owner's machine over the tailnet only, never in CI.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: ops-reader, namespace: kube-system}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: ops-reader}
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events, services, endpoints, namespaces, nodes, persistentvolumeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: ops-reader}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: ops-reader}
+subjects: [{kind: ServiceAccount, name: ops-reader, namespace: kube-system}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: ops-reader-portforward, namespace: observability}
+rules:
+  - {apiGroups: [""], resources: [pods/portforward], verbs: [create]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: ops-reader-portforward, namespace: observability}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: ops-reader-portforward}
+subjects: [{kind: ServiceAccount, name: ops-reader, namespace: kube-system}]

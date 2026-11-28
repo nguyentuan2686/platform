@@ -9,6 +9,7 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 - Any failure (CI, unexpected test fail, prod bug, failed deploy) triggers a retro: write a lesson (see Lessons loop).
 - Never claim "done" without running the verification command and reading its output.
 - Before each commit read `git diff --stat`: no deletions or files outside the task's scope. Never call a failure "pre-existing" without reproducing it on the base commit.
+- System docs: `docs/system/index.html` (Vietnamese, for the owner) describes the end-to-end flows, deploy, domain and where every secret lives. A PR that changes contracts, deploy/k8s or argocd (except CD image tags), infra/bootstrap, workflows, DB migrations or web `app/api` routes updates that page in the same PR and adds one dated line to its "Lịch sử" section; if nothing it describes changed, put `docs-system: n/a <reason>` in the PR description. Hard check: CI job `system-docs` (`scripts/check-system-docs.sh`).
 - CI triage: read the failing log first. HTTP 429/5xx or "could not transfer artifact" from a package registry, or a `next/font` download error, is an external flake: `gh run rerun --failed` and record a lesson, no code change.
 
 ## Repo map
@@ -22,8 +23,8 @@ libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service, k8s, contracts, registration}   # rendered by scripts/new-service.sh (tokens __SERVICE__ etc.); registration/ snippets go in at `new-service: <point>` marker comments
 deploy/{local/docker-compose.yml, k8s/{base,platform,components/{cloudflared-quick,cloudflared-named},overlays/{e2e,prod/{platform,tunnel,apps,sealed,domain}}}, argocd/{root.yaml,apps/}}   # k8s: Kustomize; overlays/e2e = CI kind test values; overlays/prod = Argo CD slices (prod-sealed/-platform/-tunnel/-apps), secrets.tsv = prod secret inventory, domain/domain.yaml = APP_DOMAIN
 infra/bootstrap/   # idempotent prod host setup (x86/ARM): ufw, k3s, Tailscale, Sealed Secrets, Argo CD, gitops root; pins in versions.env
-scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh; tests in scripts/test/*.test.sh
-docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
+scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, ops-kubeconfig.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh, check-system-docs.sh; tests in scripts/test/*.test.sh
+docs/{system, adr, superpowers/{specs,plans}, runbooks, lessons}   # system/index.html = owner-facing system overview (kept current per PR)
 .github/{workflows, dependabot.yml}
 ```
 
@@ -58,7 +59,7 @@ See `.claude/skills/rust-service-conventions/SKILL.md`. No native Rust: all carg
 - `scripts/smoke-flow.sh http://localhost:8080 http://localhost:8081` - end-to-end: POST /orders -> notification appears
 - `scripts/smoke-chart.sh http://localhost:8082` - POST /tuvi/chart happy path: 12 palaces, lunar.month 2
 - `scripts/smoke-astro-chart.sh http://localhost:8086` - POST /astro/chart happy path: 12 bodies, 12 house cusps, school tropical/placidus
-- `scripts/smoke-reading.sh http://localhost:8083` - basic reading (17 sections, last `disclaimer`) + today (4 areas) via reading-tuvi -> chart-svc
+- `scripts/smoke-reading.sh http://localhost:8083 [IDENTITY_URL]` - basic reading (17 sections, last `disclaimer`) + today (4 areas) via reading-tuvi -> chart-svc, then one SIM number check (xem số: numeric `score`, 6 criteria) as a fresh identity-svc guest
 - `scripts/smoke-qa.sh` - paid/free tử vi Q&A end to end on the fake provider (needs `postgres redpanda mailpit chart-svc identity-svc reading-tuvi`; bring up with `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build --no-deps <those>`; each run uses a fresh birth time because the free quota is per chart)
 - `scripts/smoke-identity-payment.sh [IDENTITY_URL] [PAYMENT_URL] [MAILPIT_URL]` - guest -> magic link (read from Mailpit) -> login -> CREDIT_5 order -> simulated SePay transfer (`scripts/sepay-simulate.sh`) -> credits 6, duplicate delivery changes nothing; low-memory subset: `docker compose -f deploy/local/docker-compose.yml --profile app up -d postgres redpanda mailpit identity-svc payment-svc`
 - `scripts/smoke-web.sh http://localhost:3001` - web: /health/ready 200, /vi contains "Lão Thiên Cơ", /vi/kien-thuc and /robots.txt 200, prints `OK`; web e2e (Playwright + stub upstreams, in CI job `e2e`): `npm run e2e` in services/web. Full-stack e2e (local only, never CI; real stack, Mailpit magic link, fake LLM, dev payment simulator): bring up `docker compose -f deploy/local/docker-compose.yml --profile app up -d --build --no-deps postgres redpanda mailpit chart-svc reading-tuvi identity-svc payment-svc web`, then `docker run --rm --network host -v "$PWD/services/web:/w" -w /w mcr.microsoft.com/playwright:v1.65.1-noble sh -c "npm ci && npx playwright test -c playwright.stack.config.ts"`, then `down -v`. Web env and prod rules: `docs/runbooks/web.md`

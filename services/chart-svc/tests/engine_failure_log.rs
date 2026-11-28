@@ -77,7 +77,19 @@ async fn engine_failure_is_logged_once_without_the_birth() {
         .collect();
     assert_eq!(errors.len(), 1, "{logs}");
     assert!(errors[0].to_string().contains("engine broke"), "{logs}");
+    // The birth must not leak into any field. The log's own `timestamp` is left out: at 08:30 UTC (or with "1994" in
+    // its nanoseconds) the wall clock would match the needle.
+    let without_timestamps: Vec<String> = logs
+        .lines()
+        .map(|l| {
+            let mut v = serde_json::from_str::<Value>(l).unwrap();
+            v.as_object_mut().unwrap().remove("timestamp");
+            v.to_string()
+        })
+        .collect();
     for needle in ["1994", "08:30"] {
-        assert!(!logs.contains(needle), "logs contain {needle}: {logs}");
+        for line in &without_timestamps {
+            assert!(!line.contains(needle), "log line contains {needle}: {line}");
+        }
     }
 }

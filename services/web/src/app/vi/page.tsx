@@ -57,6 +57,9 @@ export default async function ViHome() {
       <p className="home-year">
         <Link href="/vi/tu-vi-2027" className="btn btn-ghost">
           Tử vi 2027 cho 12 con giáp
+        </Link>{" "}
+        <Link href="/vi/xem-so" className="btn btn-ghost">
+          Xem số hợp mệnh
         </Link>
       </p>
       <p className="home-knowledge">

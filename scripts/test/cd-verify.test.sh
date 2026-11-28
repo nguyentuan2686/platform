@@ -117,8 +117,27 @@ mark_failure_opens_an_issue() {
   echo "ok ${FUNCNAME[0]}"
 }
 
+verify_step_records_rc_under_bash_e() {
+  # GitHub runs `run:` as `bash -e {0}`: a failing verify-deploy must still write rc= (else the rollback sees no verdict).
+  local code d out rc
+  q '.jobs["verify-deploy"].steps[] | select(.id == "verify") | .run' >"$tmp/verify-step.sh"
+  for code in 0 1 4; do
+    d="$tmp/vs$code"; mkdir -p "$d/scripts"
+    printf 'echo "verify-deploy stub"; exit %s\n' "$code" >"$d/scripts/verify-deploy.sh"
+    : >"$d/out"
+    rc=0
+    (cd "$d" && BUMP_SHA="$bump" RUNNER_TEMP="$d" GITHUB_OUTPUT="$d/out" bash -e "$tmp/verify-step.sh" >/dev/null 2>&1) || rc=$?
+    [ "$rc" -eq "$code" ] || fail "${FUNCNAME[0]}" "verify-deploy exit $code: step exit $rc"
+    out=$(cat "$d/out")
+    [ "$out" = "rc=$code" ] || fail "${FUNCNAME[0]}" "verify-deploy exit $code: GITHUB_OUTPUT [$out]"
+    grep -q 'verify-deploy stub' "$d/verify.out" || fail "${FUNCNAME[0]}" "verify.out not written"
+  done
+  echo "ok ${FUNCNAME[0]}"
+}
+
 job_wiring
 unverified_deploy_warns
 issue_has_title_label_run_and_log_tail
 unreachable_opens_or_updates_unverified_issue
 mark_failure_opens_an_issue
+verify_step_records_rc_under_bash_e
