@@ -185,26 +185,54 @@ class LlmGatewayTest {
     assertThat(gw.complete(REQ).provider()).isEqualTo("a");
   }
 
+  /**
+   * A 429 without Retry-After backs off one hour, not until UTC midnight: Gemini's free quota
+   * resets at midnight Pacific (08:00 UTC), so a midnight retry hit 429 again and skipped Gemini
+   * for a whole extra day (prod, 2026-11-28).
+   */
   @Test
-  void rate_limit_without_retry_after_until_utc_midnight() {
+  void rate_limit_without_retry_after_backs_off_one_hour() {
     var a = new StubProvider("a", false, 100);
     a.script.add(new LlmRateLimitedException(Optional.empty()));
     var b = new StubProvider("b", false, 100);
 
     gateway(a, b).complete(REQ);
 
-    assertThat(usage.exhaustedUntil("a")).contains(Instant.parse("2026-11-26T00:00:00Z"));
+    assertThat(usage.exhaustedUntil("a")).contains(T0.plus(Duration.ofHours(1)));
   }
 
   @Test
-  void long_retry_after_also_until_utc_midnight() {
+  void configured_backoff_applies_without_retry_after() {
     var a = new StubProvider("a", false, 100);
-    a.script.add(new LlmRateLimitedException(Optional.of(Duration.ofSeconds(61))));
+    a.script.add(new LlmRateLimitedException(Optional.empty()));
+    var b = new StubProvider("b", false, 100);
+    var gw = new LlmGateway(List.of(a, b), usage, Map.of(), PRICING, clock, Duration.ofMinutes(15));
+
+    gw.complete(REQ);
+
+    assertThat(usage.exhaustedUntil("a")).contains(T0.plus(Duration.ofMinutes(15)));
+  }
+
+  @Test
+  void long_retry_after_is_honoured() {
+    var a = new StubProvider("a", false, 100);
+    a.script.add(new LlmRateLimitedException(Optional.of(Duration.ofMinutes(90))));
     var b = new StubProvider("b", false, 100);
 
     gateway(a, b).complete(REQ);
 
-    assertThat(usage.exhaustedUntil("a")).contains(Instant.parse("2026-11-26T00:00:00Z"));
+    assertThat(usage.exhaustedUntil("a")).contains(T0.plus(Duration.ofMinutes(90)));
+  }
+
+  @Test
+  void absurd_retry_after_is_capped_at_one_day() {
+    var a = new StubProvider("a", false, 100);
+    a.script.add(new LlmRateLimitedException(Optional.of(Duration.ofDays(30))));
+    var b = new StubProvider("b", false, 100);
+
+    gateway(a, b).complete(REQ);
+
+    assertThat(usage.exhaustedUntil("a")).contains(T0.plus(Duration.ofDays(1)));
   }
 
   @Test

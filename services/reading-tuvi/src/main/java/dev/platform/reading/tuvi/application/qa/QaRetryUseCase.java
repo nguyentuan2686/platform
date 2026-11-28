@@ -150,8 +150,14 @@ public class QaRetryUseCase {
               r.attempts() + 1,
               answered.provider());
       case Regeneration.Settled settled -> LOG.info("qa retry skipped reading_id={}", id);
-      case Regeneration.Declined declined ->
-          refundPending(id, claim, "declined:" + declined.reason());
+      case Regeneration.Declined declined -> {
+        LOG.info(
+            "qa retry declined reading_id={} reason={} provider={}",
+            id,
+            declined.reason(),
+            declined.provider());
+        refundPending(id, claim, "declined:" + declined.reason());
+      }
       case Regeneration.NoPrompt noPrompt -> refundPending(id, claim, "no_prompt");
       case Regeneration.Failed failed -> {
         int attempts = r.attempts() + 1;

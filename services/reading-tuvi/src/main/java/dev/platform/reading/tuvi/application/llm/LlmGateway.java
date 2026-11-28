@@ -22,7 +22,11 @@ import org.slf4j.LoggerFactory;
 public class LlmGateway {
 
   private static final Logger LOG = LoggerFactory.getLogger(LlmGateway.class);
-  private static final Duration SHORT_RETRY = Duration.ofSeconds(60);
+
+  /** Backoff after a 429 without Retry-After, unless configured otherwise. */
+  public static final Duration DEFAULT_RATE_LIMIT_BACKOFF = Duration.ofHours(1);
+
+  private static final Duration MAX_BACKOFF = Duration.ofDays(1);
   private static final BigDecimal MICRO = BigDecimal.valueOf(1_000_000L);
 
   private final List<LlmProviderPort> ordered;
@@ -30,25 +34,40 @@ public class LlmGateway {
   private final Map<String, PaidPricing> pricingById;
   private final PaidPricing defaultPricing;
   private final Clock clock;
+  private final Duration rateLimitBackoff;
   private final Set<String> warned = ConcurrentHashMap.newKeySet();
 
   public LlmGateway(
       List<LlmProviderPort> ordered, LlmUsagePort usage, PaidPricing pricing, Clock clock) {
-    this(ordered, usage, Map.of(), pricing, clock);
+    this(ordered, usage, Map.of(), pricing, clock, DEFAULT_RATE_LIMIT_BACKOFF);
   }
 
-  /** {@code pricingById} overrides {@code defaultPricing} for the paid providers it names. */
   public LlmGateway(
       List<LlmProviderPort> ordered,
       LlmUsagePort usage,
       Map<String, PaidPricing> pricingById,
       PaidPricing defaultPricing,
       Clock clock) {
+    this(ordered, usage, pricingById, defaultPricing, clock, DEFAULT_RATE_LIMIT_BACKOFF);
+  }
+
+  /**
+   * {@code pricingById} overrides {@code defaultPricing} for the paid providers it names; {@code
+   * rateLimitBackoff} is how long a provider is skipped after a 429 without Retry-After.
+   */
+  public LlmGateway(
+      List<LlmProviderPort> ordered,
+      LlmUsagePort usage,
+      Map<String, PaidPricing> pricingById,
+      PaidPricing defaultPricing,
+      Clock clock,
+      Duration rateLimitBackoff) {
     this.ordered = List.copyOf(ordered);
     this.usage = usage;
     this.pricingById = Map.copyOf(pricingById);
     this.defaultPricing = defaultPricing;
     this.clock = clock;
+    this.rateLimitBackoff = rateLimitBackoff;
   }
 
   public LlmCompletion complete(LlmRequest request) {
@@ -78,7 +97,7 @@ public class LlmGateway {
         }
         return out;
       } catch (LlmRateLimitedException e) {
-        Instant until = rateLimitUntil(e, now, today);
+        Instant until = rateLimitUntil(e, now);
         usage.markExhausted(provider.id(), until);
         LOG.warn("llm provider rate limited provider={} until={}", provider.id(), until);
       } catch (LlmUnavailableException e) {
@@ -134,11 +153,14 @@ public class LlmGateway {
         .longValueExact();
   }
 
-  private Instant rateLimitUntil(LlmRateLimitedException e, Instant now, LocalDate today) {
-    return e.retryAfter()
-        .filter(d -> d.compareTo(SHORT_RETRY) <= 0)
-        .map(now::plus)
-        .orElseGet(() -> today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
+  /**
+   * Honours the provider's Retry-After (capped at a day); without one, backs off an hour. Not
+   * "until UTC midnight": quotas reset on the provider's clock (Gemini: midnight Pacific), so a
+   * midnight retry can hit 429 again and lose a whole extra day.
+   */
+  private Instant rateLimitUntil(LlmRateLimitedException e, Instant now) {
+    Duration wait = e.retryAfter().orElse(rateLimitBackoff);
+    return now.plus(wait.compareTo(MAX_BACKOFF) > 0 ? MAX_BACKOFF : wait);
   }
 
   private void warnIfBudgetNear(LlmProviderPort provider, LocalDate today) {

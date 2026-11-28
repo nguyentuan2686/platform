@@ -428,7 +428,8 @@ public class QaService {
     }
     return switch (attempt(job)) {
       case Attempt.Text text -> answered(job, text.text(), text.provider(), job.usedKeys(), true);
-      case Attempt.Declined declined -> sentinelRefusal(job, declined.reason());
+      case Attempt.Declined declined ->
+          sentinelRefusal(job, declined.reason(), declined.provider());
       case Attempt.Failed failed -> failure(job, failed.code());
     };
   }
@@ -437,7 +438,7 @@ public class QaService {
   private sealed interface Attempt {
     record Text(String text, String provider) implements Attempt {}
 
-    record Declined(RefusalReason reason) implements Attempt {}
+    record Declined(RefusalReason reason, String provider) implements Attempt {}
 
     record Failed(String code) implements Attempt {}
   }
@@ -455,7 +456,7 @@ public class QaService {
       }
       Optional<RefusalReason> sentinel = Sentinel.detect(completion.text());
       if (sentinel.isPresent()) {
-        return new Attempt.Declined(sentinel.get());
+        return new Attempt.Declined(sentinel.get(), completion.provider());
       }
       FilterResult filtered = AnswerFilter.check(completion.text(), limits(job));
       if (filtered instanceof FilterResult.Pass pass) {
@@ -480,7 +481,7 @@ public class QaService {
     record Answered(String provider) implements Regeneration {}
 
     /** The model declined: the credit is refunded. */
-    record Declined(RefusalReason reason) implements Regeneration {}
+    record Declined(RefusalReason reason, String provider) implements Regeneration {}
 
     /** The model failed again; {@code code} is the error code. */
     record Failed(String code) implements Regeneration {}
@@ -527,7 +528,8 @@ public class QaService {
         }
         yield new Regeneration.Answered(text.provider());
       }
-      case Attempt.Declined declined -> new Regeneration.Declined(declined.reason());
+      case Attempt.Declined declined ->
+          new Regeneration.Declined(declined.reason(), declined.provider());
       case Attempt.Failed failed -> new Regeneration.Failed(failed.code());
     };
   }
@@ -569,9 +571,14 @@ public class QaService {
     return new Answered(id, job.seq(), text, disclaimer(), job.followUpsLeft());
   }
 
-  private QaOutcome sentinelRefusal(Prepared.Job job, RefusalReason reason) {
+  private QaOutcome sentinelRefusal(Prepared.Job job, RefusalReason reason, String provider) {
     UUID id = job.readingId();
-    LOG.info("qa model declined reading_id={} seq={} reason={}", id, job.seq(), reason);
+    LOG.info(
+        "qa model declined reading_id={} seq={} reason={} provider={}",
+        id,
+        job.seq(),
+        reason,
+        provider);
     if (job.followUp()) {
       if (!repo.deleteUnansweredMessage(id, job.seq())) {
         skipped(id, "follow-up refused");

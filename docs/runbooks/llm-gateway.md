@@ -43,7 +43,9 @@ Owner steps (Tuấn), only if Claude is wanted (today Hỏi thầy runs on the f
 Table `llm_usage` in the `reading_tuvi` database: one row per provider and day with `requests`, `prompt_tokens`, `completion_tokens` and `cost_micro_usd` (millionths of a USD; only the budgeted providers `claude` and `paid` have a cost). `llm_provider_state.exhausted_until` shows a provider currently skipped after a quota or rate-limit answer.
 - Today vs limit: `select provider, requests, prompt_tokens, completion_tokens from llm_usage where day = current_date;` compare `requests` with `*_DAILY_REQUEST_LIMIT`.
 - Paid spend this month: `select provider, sum(cost_micro_usd) / 1e6 as usd from llm_usage where provider in ('claude', 'paid') and day >= date_trunc('month', current_date) group by provider;` compare `claude` with `ANTHROPIC_MONTHLY_BUDGET_USD` and `paid` with `LLM_PAID_MONTHLY_BUDGET_USD`.
-- Skipped providers: `select * from llm_provider_state where exhausted_until > now();`
+- Skipped providers: `select * from llm_provider_state where exhausted_until > now();` A 429 marks the provider exhausted for its `Retry-After` (capped at one day), or for `LLM_RATE_LIMIT_BACKOFF` (default `PT1H`) when there is none; providers reset quotas on their own clock (Gemini free tier: midnight Pacific).
+- Which model answered or declined: logs `llm completed provider=...`, `qa answered ... provider=...`, `qa model declined ... reason=... provider=...` (retry job: `qa retry declined ... provider=...`).
+- Never probe or evaluate prompts with the prod keys: free tiers share one quota per key, and a probe session used up prod's Gemini daily quota once (lesson 2026-11-28). Use a separate dev key, a handful of calls, request bodies from a UTF-8 file.
 
 ## 4. Stuck RETRYING / REFUND_PENDING rows
 Status lives in `qa_reading.status`; the owner sees it at `GET /tuvi/qa/readings/{id}` (`status` plus the queued/refunded `notice`).
