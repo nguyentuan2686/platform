@@ -19,7 +19,7 @@ Swiss Ephemeris code, data or crate appears in `services/`, `Cargo.lock` or any 
 
 - `horizons-golden.json`: 65 epochs, apparent geocentric ecliptic lon/lat of date for the 11
   bodies (Sun, Moon, Mercury-Neptune, Pluto, Chiron). Epochs: 61 grid points (every 40 months
-  from 1900-01-15 to 2100-11-15, hour `(k*7) % 24`), `1990-07-15T07:30Z` (snapshot birth),
+  from 1900-01-15 to 2100-01-15, hour `(k*7) % 24`), `1990-07-15T07:30Z` (snapshot birth),
   `2023-04-21T08:00Z` (Mercury station), `2100-12-31T12:00Z`, and the Moon one hour before a
   sign ingress. That ingress is picked deterministically: `horizons.mjs` queries the Moon
   hourly (`STEP_SIZE='60 m'`) from 2000-01-01 00:00 UT for 4 days and takes the last hourly
@@ -48,7 +48,8 @@ docker run --rm -v "$PWD:/w" -w /w python:3.13-slim sh -c "apt-get update -qq &&
 `pyswisseph` has no wheel for Python 3.13, hence the compiler in the throwaway container.
 `horizons.mjs` sends one request per body and one per table, at most one per second.
 
-The `source` string of `swe-reference.json` carries `swe.__version__` (`20230604`, the Swiss
-Ephemeris library release bundled in pyswisseph 2.10.3.2). On a slow machine set
+The `source` string of `swe-reference.json` carries both versions: the Swiss Ephemeris library
+(`20230604`, bundled in the binding) and the Python binding (`2.10.3.2`), without the crate or
+binding name, so the repo-wide check for that name in `services/` stays empty. On a slow machine set
 `-e CFLAGS="-O0 -g0"` on the python `docker run` to compile the bundled sqlite quickly; it does
 not change the numbers.
