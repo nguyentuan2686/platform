@@ -54,7 +54,10 @@ install_kubeseal() {
 }
 
 # A cached kubeseal that is not the pinned version is replaced.
-cached_is_pinned() { [ -x "$bin_dir/kubeseal" ] && "$bin_dir/kubeseal" --version 2>/dev/null | grep -qF "$KUBESEAL_VERSION"; }
+cached_is_pinned() {
+  local v
+  [ -x "$bin_dir/kubeseal" ] && v="$("$bin_dir/kubeseal" --version 2>/dev/null)" && grep -qF "$KUBESEAL_VERSION" <<<"$v"
+}
 
 if [ "$install_only" = 1 ]; then
   cached_is_pinned || install_kubeseal
@@ -153,7 +156,9 @@ if [ -f "$kfile" ]; then
   [ "$(yq -r '[(.resources // [])[] | select(type != "!!str")] | length' "$kfile")" = 0 ] || die "$kfile: resources has non-string entries"
   mapfile -t old < <(yq -r '(.resources // [])[]' "$kfile" | tr -d '\r')
   for r in "${old[@]+"${old[@]}"}"; do [[ "$r" == *.sealedsecret.yaml ]] || keep+=("$r"); done
-  header=$(tr -d '\r' <"$kfile" | sed -n '/^[^#]/q; p')
+  # sed quits at the first non-comment line: feed it a captured string, never a live pipe (SIGPIPE, exit 141).
+  kraw=$(tr -d '\r' <"$kfile")
+  header=$(sed -n '/^[^#]/q; p' <<<"$kraw")
 fi
 
 # kubeseal binary (see the header).
@@ -188,7 +193,7 @@ mapfile -t resources < <({ printf '%s\n' "${keep[@]+"${keep[@]}"}" "${selected[@
 } >"$work/kustomization.yaml"
 mapfile -t new < <(yq -r '.resources[]' "$work/kustomization.yaml" | tr -d '\r')
 for r in "${old[@]+"${old[@]}"}"; do
-  printf '%s\n' "${new[@]}" | grep -qxF -- "$r" || die "internal: the rewrite would drop resource $r from $kfile (nothing written)"
+  grep -qxF -- "$r" <<<"$(printf '%s\n' "${new[@]}")" || die "internal: the rewrite would drop resource $r from $kfile (nothing written)"
 done
 
 for n in "${selected[@]}"; do
