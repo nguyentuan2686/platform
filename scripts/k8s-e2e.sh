@@ -90,7 +90,7 @@ run() {
 }
 run smoke-flow http://localhost:8080 http://localhost:8081
 run smoke-chart http://localhost:8082
-run smoke-reading http://localhost:8083
+run smoke-reading http://localhost:8083 http://localhost:8084
 run smoke-identity-payment http://localhost:8084 http://localhost:8085 http://localhost:8025 http://localhost:3001
 run smoke-qa http://localhost:8084 http://localhost:8083 http://localhost:8025
 run smoke-web http://localhost:3001
