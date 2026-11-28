@@ -17,9 +17,9 @@ Follow-ups (not blocking):
 
 ## 2. Enable a provider
 Set the key, put the provider in the ordered list, then roll reading-tuvi.
-- Claude (primary, Anthropic Messages API): `ANTHROPIC_API_KEY` in `reading-tuvi-secrets`, `LLM_PROVIDERS=claude,groq,gemini` (prod already lists `claude` first; it stays skipped with the WARN `llm provider claude disabled: no api key` until the key exists). See section 2a.
-- Free: `GROQ_API_KEY`, `GEMINI_API_KEY`, `LLM_PROVIDERS=groq,gemini` (order = failover order). A provider without a key is skipped.
-- Paid fallback: `LLM_PAID_API_KEY` (plus `LLM_PAID_BASE_URL`, `LLM_PAID_MODEL`, the two prices), `LLM_PROVIDERS=groq,gemini,paid`. Free chat never uses `paid`. When the month's spend reaches `LLM_PAID_MONTHLY_BUDGET_USD` the paid provider stops answering and paid questions fall into the retry path (section 4).
+- Claude (primary, Anthropic Messages API): `ANTHROPIC_API_KEY` in `reading-tuvi-secrets`, `LLM_PROVIDERS=claude,gemini,groq` (prod already lists `claude` first; it stays skipped with the WARN `llm provider claude disabled: no api key` until the key exists). See section 2a.
+- Free: `GROQ_API_KEY`, `GEMINI_API_KEY`, `LLM_PROVIDERS=gemini,groq` (order = failover order: when Gemini hits `GEMINI_DAILY_REQUEST_LIMIT` or answers 429, Groq answers). A provider without a key is skipped.
+- Paid fallback: `LLM_PAID_API_KEY` (plus `LLM_PAID_BASE_URL`, `LLM_PAID_MODEL`, the two prices), `LLM_PROVIDERS=gemini,groq,paid`. Free chat never uses `paid`. When the month's spend reaches `LLM_PAID_MONTHLY_BUDGET_USD` the paid provider stops answering and paid questions fall into the retry path (section 4).
 - Two deployments sharing one key count quota separately: set each `*_DAILY_REQUEST_LIMIT` to its share.
 Check: ask one question per provider and read `llm_usage` (section 3). Logs show provider id, outcome, latency and token counts, never text.
 
