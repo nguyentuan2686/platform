@@ -159,34 +159,38 @@ public class AnthropicLlmAdapter implements LlmProviderPort {
     } catch (JacksonException e) {
       throw new LlmUnavailableException("llm provider " + id() + " returned malformed json");
     }
-    String stop = root.path("stop_reason").asString("");
-    if (stop.equals("refusal")) {
-      LOG.warn(
-          "llm provider refused provider={} category={}",
-          id(),
-          root.path("stop_details").path("category").asString("unknown"));
-      throw new LlmUnavailableException("llm provider " + id() + " refused");
-    }
     StringBuilder text = new StringBuilder();
     for (JsonNode block : root.path("content")) {
       if (block.path("type").asString("").equals("text")) {
         text.append(block.path("text").asString(""));
       }
     }
-    if (text.toString().isBlank()) {
-      throw new LlmUnavailableException(
-          "llm provider " + id() + " returned no text (stop_reason " + stop + ")");
-    }
     JsonNode usage = root.path("usage");
     int write = usage.path("cache_creation_input_tokens").asInt(0);
     int read = usage.path("cache_read_input_tokens").asInt(0);
-    return new LlmCompletion(
-        text.toString(),
-        id(),
-        usage.path("input_tokens").asInt(0) + write + read,
-        usage.path("output_tokens").asInt(0),
-        write,
-        read);
+    LlmCompletion out =
+        new LlmCompletion(
+            text.toString(),
+            id(),
+            usage.path("input_tokens").asInt(0) + write + read,
+            usage.path("output_tokens").asInt(0),
+            write,
+            read);
+    String stop = root.path("stop_reason").asString("");
+    if (stop.equals("refusal")) {
+      LOG.warn(
+          "llm provider refused provider={} category={}",
+          id(),
+          root.path("stop_details").path("category").asString("unknown"));
+      throw new LlmUnavailableException("llm provider " + id() + " refused", out);
+    }
+    // Thinking shares max_tokens: a cut-off reply is never served as a complete answer.
+    if (stop.equals("max_tokens") || out.text().isBlank()) {
+      LOG.warn("llm provider reply unusable provider={} stop_reason={}", id(), stop);
+      throw new LlmUnavailableException(
+          "llm provider " + id() + " returned no complete text (stop_reason " + stop + ")", out);
+    }
+    return out;
   }
 
   private static Optional<Duration> parseRetryAfter(String header) {

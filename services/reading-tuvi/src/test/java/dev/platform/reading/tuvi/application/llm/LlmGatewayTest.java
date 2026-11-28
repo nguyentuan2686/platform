@@ -277,6 +277,25 @@ class LlmGatewayTest {
   }
 
   @Test
+  void billed_unusable_reply_is_costed_then_next_provider_answers() {
+    var claude = new StubProvider("claude", true, 100);
+    claude.script.add(
+        new LlmUnavailableException(
+            "cut off", new LlmCompletion("", "claude", 1_000_000, 1_000_000)));
+    var groq = new StubProvider("groq", false, 100);
+    var claudePricing =
+        new PaidPricing(new BigDecimal("0.10"), new BigDecimal("0.50"), new BigDecimal("2"));
+    var gw =
+        new LlmGateway(
+            List.of(claude, groq), usage, Map.of("claude", claudePricing), PRICING, clock);
+
+    var out = gw.complete(REQ);
+
+    assertThat(out.provider()).isEqualTo("groq");
+    assertThat(usage.spendMicroUsd("claude", YearMonth.of(2026, 11))).isEqualTo(600_000L);
+  }
+
+  @Test
   void provider_budget_exhausted_falls_back_to_free() {
     var claude = new StubProvider("claude", true, 100);
     var groq = new StubProvider("groq", false, 100);

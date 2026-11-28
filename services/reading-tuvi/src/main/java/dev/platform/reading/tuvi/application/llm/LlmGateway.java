@@ -83,6 +83,16 @@ public class LlmGateway {
         LOG.warn("llm provider rate limited provider={} until={}", provider.id(), until);
       } catch (LlmUnavailableException e) {
         LOG.warn("llm provider unavailable provider={}", provider.id());
+        // A refused or cut-off reply is still billed: count it toward the budget.
+        e.billed()
+            .ifPresent(
+                b ->
+                    usage.recordTokens(
+                        provider.id(),
+                        today,
+                        b.promptTokens(),
+                        b.completionTokens(),
+                        provider.paid() ? costMicroUsd(pricing(provider), b) : 0L));
       }
     }
     throw new AllProvidersExhaustedException();

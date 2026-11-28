@@ -243,6 +243,38 @@ class AnthropicLlmAdapterTest {
   }
 
   @Test
+  void truncated_reply_is_unavailable_and_carries_billed_usage() {
+    stub.body =
+        """
+        {"content":[{"type":"thinking","thinking":"","signature":"s"},
+                    {"type":"text","text":"Con à, ta thấy"}],
+         "stop_reason":"max_tokens","usage":{"input_tokens":10,"output_tokens":421}}
+        """;
+
+    assertThatThrownBy(() -> adapter().complete(REQ))
+        .isInstanceOfSatisfying(
+            LlmUnavailableException.class,
+            e -> {
+              assertThat(e.billed()).isPresent();
+              assertThat(e.billed().get().promptTokens()).isEqualTo(10);
+              assertThat(e.billed().get().completionTokens()).isEqualTo(421);
+            });
+  }
+
+  @Test
+  void refusal_carries_billed_usage() {
+    stub.body =
+        """
+        {"content":[],"stop_reason":"refusal","usage":{"input_tokens":7,"output_tokens":2}}
+        """;
+
+    assertThatThrownBy(() -> adapter().complete(REQ))
+        .isInstanceOfSatisfying(
+            LlmUnavailableException.class,
+            e -> assertThat(e.billed().map(b -> b.completionTokens())).contains(2));
+  }
+
+  @Test
   void malformed_json_is_unavailable() {
     stub.body = "not json";
 
