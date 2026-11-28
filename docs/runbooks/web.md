@@ -20,6 +20,7 @@ Local test values live in `deploy/local/.env.example`; real values only via Seal
 2. The prod overlay sets `DEPLOY_ENV=prod`, `COOKIE_SECURE=1`, and no `DEV_PAYMENT_SIMULATOR`.
 3. Google login: add `${WEB_ORIGIN}/vi/dang-nhap/google` to identity-svc `OIDC_REDIRECT_URIS`, set the client id and secret there, then `GOOGLE_LOGIN=1` on web.
 4. Admin: put your account id in `ADMIN_ACCOUNT_IDS`, open `/vi/quan-tri` ("chưa khớp"; see `payments.md`).
+5. Xem số (`/vi/xem-so/*`, route `/api/xem-so`): no web setting; the 2-a-day quota and per-IP cap live in reading-tuvi (`NUMBER_CHECK_*`, key `NUMBER_CHECK_HMAC_KEY` in `reading-tuvi-secrets`), `/api/xem-so` is behind `web-strict` (20/min/IP). The number is only in POST bodies, never logged.
 
 ## 3. Local full-stack run (weak machine)
 Heavy: one run at a time, no lgtm, order-svc or notify-svc.
