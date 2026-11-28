@@ -11,7 +11,7 @@ The paid and free tử vi Q&A needs an LLM that answers in persona, grounded in 
 Alternatives considered:
 - A separate gateway service: one more container and deploy for a single consumer.
 - Vector retrieval with pgvector and local ONNX embeddings: about 500 MB RAM; the 558-record corpus is already keyed and the chart selects the keys.
-- Claude at runtime: rejected, no Claude/Anthropic API at runtime.
+- Claude at runtime: rejected at first (no Claude/Anthropic API at runtime); reversed on 2026-11-28, see the amendment below.
 
 ## Decision
 - The gateway is a Java library inside `reading-tuvi` (packages under `dev.platform.reading.tuvi`), not a new service.
@@ -23,3 +23,6 @@ Alternatives considered:
 
 ## Consequences
 No new container and no new network hop. The cost is that LLM concerns (quotas, budget, retries) live in `reading-tuvi`; extract them only if a second consumer appears. Free-tier limits are tracked per deployment, so two deployments sharing a key must split `*_DAILY_REQUEST_LIMIT`. Keyed retrieval is more grounded than vector search at this corpus size but cannot answer topics the keys do not cover (those are refused as `insufficient` and refunded). The guard terms refuse some fair questions (for example a medical term inside a love question); that bias is deliberate. Real providers need keys, a terms/privacy review and a sample-answer read by the owner before launch (see `docs/runbooks/llm-gateway.md`).
+
+## Amendment 2026-11-28: Claude as the primary provider
+The owner reversed the "no Claude at runtime" alternative: free-tier answers read template-like, and the goal is natural Vietnamese answers grounded only in the prompt's blocks. A fifth adapter, `claude` (Anthropic Messages API, raw HTTP through the existing `RestClient`, no SDK), comes first in prod (`LLM_PROVIDERS=claude,gemini,groq`) and is skipped while `ANTHROPIC_API_KEY` is unset. It is budgeted like `paid` but with its own prices and monthly budget (`ANTHROPIC_*`), and by default also answers free questions. Over budget, rate-limited, refusing or down, it falls through to Groq/Gemini. The privacy rules above are unchanged: the prompt still carries no identity or birth data. Plan: `docs/superpowers/plans/2026-11-28-claude-llm-provider.md`; operations: `docs/runbooks/llm-gateway.md` §2a.
