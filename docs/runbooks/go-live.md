@@ -230,6 +230,27 @@ Then delete every copy. Store the App private key in the password manager first.
 
 Each feature takes all of its secrets or none. A partial set fails the `cd` gate with `::error::`. CD alone (`CD_APP_ID` + `CD_APP_PRIVATE_KEY`) deploys without verification, and the run then shows `::warning::deployed without verification`.
 
+### 6a. Read-only access from your computer (kubectl, logs, Grafana) without installing Tailscale
+
+The ServiceAccount `ops-reader` (`deploy/k8s/overlays/prod/platform/ops-reader.yaml`, synced by `prod-platform`) can read pods, logs, events and workloads in every namespace and port-forward only in `observability`. It cannot read Secrets or ConfigMaps, exec or change anything. Its kubeconfig never goes to CI.
+
+1. On the host (browser SSH), once per 30 days: `cd ~/platform && git pull -q && sudo scripts/ops-kubeconfig.sh`. Download `/home/<your user>/ops-reader.kubeconfig` (gear menu -> Download file; it lands in Downloads, never the repo folder), then `shred -u ~/ops-reader.kubeconfig`. The token expires after 30 days (`--duration`); rerun to renew.
+2. In Tailscale -> Settings -> Keys, generate an auth key: **Ephemeral** on, pre-approved, no tag (the node belongs to you, so the ACL lets it reach `tag:prod`). It disappears from the tailnet when the container stops.
+3. On your computer (PowerShell), start Tailscale in a throwaway container (userspace networking; nothing installed on Windows). The key is read hidden and passed through the environment, never on the command line:
+   ```powershell
+   $s = Read-Host -AsSecureString "TS key"; $env:TS_AUTHKEY = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
+   docker run -d --name ts-prod -p 127.0.0.1:3000:3000 -e TS_AUTHKEY -e TS_USERSPACE=true -e TS_HOSTNAME=ops-docker -e TS_SOCKS5_SERVER=127.0.0.1:1055 tailscale/tailscale:v1.104.7
+   Remove-Item Env:TS_AUTHKEY
+   ```
+   The image tag is `TAILSCALE_VERSION` in `infra/bootstrap/versions.env`.
+4. kubectl runs in the pinned tools image inside the container's network, through its SOCKS5 proxy (which resolves `platform-prod`):
+   ```powershell
+   docker run --rm --network container:ts-prod -e HTTPS_PROXY=socks5://127.0.0.1:1055 -e KUBECONFIG=/k -v "$HOME\Downloads\ops-reader.kubeconfig:/k:ro" alpine/k8s:1.33.4 kubectl get pods -A
+   ```
+   Logs: the same command with `kubectl -n apps logs deploy/reading-tuvi --since=1h`.
+5. Grafana: `docker run --rm -d --name grafana-pf --network container:ts-prod -e HTTPS_PROXY=socks5://127.0.0.1:1055 -e KUBECONFIG=/k -v "$HOME\Downloads\ops-reader.kubeconfig:/k:ro" alpine/k8s:1.33.4 kubectl -n observability port-forward --address 0.0.0.0 svc/lgtm 3000:3000`, then open http://localhost:3000 (published on 127.0.0.1 only).
+6. Done: `docker rm -f grafana-pf ts-prod`.
+
 ## 7. First deploy
 
 `main` has the tags `main` until CD pins them. Publish every image for one commit, and let CD pin all 7:

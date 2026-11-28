@@ -23,7 +23,7 @@ libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service, k8s, contracts, registration}   # rendered by scripts/new-service.sh (tokens __SERVICE__ etc.); registration/ snippets go in at `new-service: <point>` marker comments
 deploy/{local/docker-compose.yml, k8s/{base,platform,components/{cloudflared-quick,cloudflared-named},overlays/{e2e,prod/{platform,tunnel,apps,sealed,domain}}}, argocd/{root.yaml,apps/}}   # k8s: Kustomize; overlays/e2e = CI kind test values; overlays/prod = Argo CD slices (prod-sealed/-platform/-tunnel/-apps), secrets.tsv = prod secret inventory, domain/domain.yaml = APP_DOMAIN
 infra/bootstrap/   # idempotent prod host setup (x86/ARM): ufw, k3s, Tailscale, Sealed Secrets, Argo CD, gitops root; pins in versions.env
-scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh, check-system-docs.sh; tests in scripts/test/*.test.sh
+scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, ops-kubeconfig.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh, check-system-docs.sh; tests in scripts/test/*.test.sh
 docs/{system, adr, superpowers/{specs,plans}, runbooks, lessons}   # system/index.html = owner-facing system overview (kept current per PR)
 .github/{workflows, dependabot.yml}
 ```
