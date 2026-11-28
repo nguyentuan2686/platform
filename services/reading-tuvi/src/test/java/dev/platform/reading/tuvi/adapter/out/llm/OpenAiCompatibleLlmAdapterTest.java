@@ -179,6 +179,22 @@ class OpenAiCompatibleLlmAdapterTest {
   }
 
   @Test
+  void cut_off_reply_is_unavailable() {
+    stub.body =
+        "{\"choices\":[{\"message\":{\"content\":\"Con à, ta\"},\"finish_reason\":\"length\"}],"
+            + "\"usage\":{\"prompt_tokens\":30,\"completion_tokens\":350}}";
+
+    assertThatThrownBy(() -> adapter().complete(REQ)).isInstanceOf(LlmUnavailableException.class);
+  }
+
+  @Test
+  void stop_reply_is_served() {
+    stub.body = "{\"choices\":[{\"message\":{\"content\":\"Con à.\"},\"finish_reason\":\"stop\"}]}";
+
+    assertThat(adapter().complete(REQ).text()).isEqualTo("Con à.");
+  }
+
+  @Test
   void blank_content_is_unavailable() throws Exception {
     stub.body = fixture("completion-empty.json");
 
