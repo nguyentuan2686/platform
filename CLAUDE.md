@@ -9,6 +9,7 @@ brainstorm -> spec -> plan -> TDD (red, green, refactor) -> review -> verify (ru
 - Any failure (CI, unexpected test fail, prod bug, failed deploy) triggers a retro: write a lesson (see Lessons loop).
 - Never claim "done" without running the verification command and reading its output.
 - Before each commit read `git diff --stat`: no deletions or files outside the task's scope. Never call a failure "pre-existing" without reproducing it on the base commit.
+- System docs: `docs/system/index.html` (Vietnamese, for the owner) describes the end-to-end flows, deploy, domain and where every secret lives. A PR that changes contracts, deploy/k8s or argocd (except CD image tags), infra/bootstrap, workflows, DB migrations or web `app/api` routes updates that page in the same PR and adds one dated line to its "Lịch sử" section; if nothing it describes changed, put `docs-system: n/a <reason>` in the PR description. Hard check: CI job `system-docs` (`scripts/check-system-docs.sh`).
 - CI triage: read the failing log first. HTTP 429/5xx or "could not transfer artifact" from a package registry, or a `next/font` download error, is an external flake: `gh run rerun --failed` and record a lesson, no code change.
 
 ## Repo map
@@ -22,8 +23,8 @@ libs/{java/platform-starter, rust/platform-core}
 templates/{java-service, rust-service, k8s, contracts, registration}   # rendered by scripts/new-service.sh (tokens __SERVICE__ etc.); registration/ snippets go in at `new-service: <point>` marker comments
 deploy/{local/docker-compose.yml, k8s/{base,platform,components/{cloudflared-quick,cloudflared-named},overlays/{e2e,prod/{platform,tunnel,apps,sealed,domain}}}, argocd/{root.yaml,apps/}}   # k8s: Kustomize; overlays/e2e = CI kind test values; overlays/prod = Argo CD slices (prod-sealed/-platform/-tunnel/-apps), secrets.tsv = prod secret inventory, domain/domain.yaml = APP_DOMAIN
 infra/bootstrap/   # idempotent prod host setup (x86/ARM): ufw, k3s, Tailscale, Sealed Secrets, Argo CD, gitops root; pins in versions.env
-scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh; tests in scripts/test/*.test.sh
-docs/{adr, superpowers/{specs,plans}, runbooks, lessons}
+scripts/           # cargo.sh/cargo.ps1 (Docker Rust), k8s-validate.sh, k8s-e2e.sh + e2e-observability.sh (CI kind only), smoke-*, new-service, seal-secrets.sh, public-url, cd-bump.sh, verify-deploy.sh, deploy-rollback.sh, pg-restore.sh, alerts-promtool.sh, check-action-pins.sh, check-system-docs.sh; tests in scripts/test/*.test.sh
+docs/{system, adr, superpowers/{specs,plans}, runbooks, lessons}   # system/index.html = owner-facing system overview (kept current per PR)
 .github/{workflows, dependabot.yml}
 ```
 

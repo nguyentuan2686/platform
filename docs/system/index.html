@@ -1,0 +1,619 @@
+<!doctype html>
+<!--
+  Tài liệu hệ thống (docs/system). Cập nhật trong cùng PR với thay đổi code ảnh hưởng tới luồng, API, event, secret
+  hoặc deploy (luật trong CLAUDE.md, check cứng: scripts/check-system-docs.sh, CI job system-docs).
+  Mỗi lần sửa: thêm một dòng vào mục "Lịch sử" (id="lich-su") và cập nhật data-updated ở thẻ <html>.
+-->
+<html lang="vi" data-updated="2026-11-28">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Luồng end-to-end xemtuvingay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Noto+Serif:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sổ tay kỹ thuật, mục lục dính bên trái (desktop), nội dung một cột ~72ch; mỗi luồng = tóm tắt -> sơ đồ -> bảng chi tiết */
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --ink: #1b2230;
+  --muted: #586174;
+  --line: #dce0e7;
+  --son: #b3352b;        /* son đỏ: nhấn chính */
+  --gold: #8f6c17;       /* vàng lá: nhãn phụ */
+  --code-bg: #eceef2;
+  --ok: #2f7a4b; --warn: #9a6400; --bad: #b3352b;
+  --ok-bg: #e5f2ea; --warn-bg: #fbf0dc; --bad-bg: #f8e4e2;
+  --f-display: "Noto Serif", Georgia, "Times New Roman", serif;
+  --f-body: "Be Vietnam Pro", "Segoe UI", Roboto, Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11141a; --surface: #181c24; --ink: #e5e8ee; --muted: #9aa3b4; --line: #2a303c;
+  --son: #e46b60; --gold: #d2ac52; --code-bg: #20252f;
+  --ok: #6cc28c; --warn: #e0ad4f; --bad: #ee7c72; --ok-bg: #18301f; --warn-bg: #332714; --bad-bg: #3a1c1a;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #11141a; --surface: #181c24; --ink: #e5e8ee; --muted: #9aa3b4; --line: #2a303c;
+  --son: #e46b60; --gold: #d2ac52; --code-bg: #20252f;
+  --ok: #6cc28c; --warn: #e0ad4f; --bad: #ee7c72; --ok-bg: #18301f; --warn-bg: #332714; --bad-bg: #3a1c1a;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15.5px; line-height: 1.65; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 16px; } nav.toc { position: static !important; max-height: none !important; } }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; max-height: calc(100vh - 48px); overflow: auto;
+  font-size: 13.5px; border-left: 2px solid var(--line); padding-left: 14px; }
+nav.toc .brand { font-family: var(--f-display); font-size: 17px; color: var(--son); margin-bottom: 10px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+nav.toc ol ol { padding-left: 12px; margin-top: 2px; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--son); }
+main { min-width: 0; max-width: 820px; }
+header.top h1 { font-family: var(--f-display); font-size: clamp(28px, 4vw, 38px); line-height: 1.2; margin: 0 0 8px; text-wrap: balance; }
+header.top .lede { color: var(--muted); font-size: 16.5px; max-width: 68ch; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.chip { font-family: var(--f-mono); font-size: 12px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--surface); }
+section { margin-top: 56px; }
+h2 { font-family: var(--f-display); font-size: 26px; line-height: 1.25; margin: 0 0 6px; text-wrap: balance; }
+h2 .no { color: var(--son); margin-right: 10px; }
+h3 { font-size: 18px; font-weight: 600; margin: 32px 0 6px; }
+h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--gold); margin: 22px 0 6px; }
+p { margin: 8px 0; max-width: 72ch; }
+.sub { color: var(--muted); margin-top: 0; }
+code, .mono { font-family: var(--f-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--son); }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 14px 0; }
+.diagram pre.mermaid { margin: 0; background: none; font-family: var(--f-body); }
+.tbl { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; background: var(--code-bg); }
+tr:last-child td { border-bottom: none; }
+ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+ol.steps > li { counter-increment: s; position: relative; padding-left: 38px; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--son); color: var(--son); font-size: 13px; font-weight: 600; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.note { border-left: 3px solid var(--gold); background: var(--surface); padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; }
+.note.bad { border-color: var(--bad); }
+.note b:first-child { color: var(--gold); }
+.note.bad b:first-child { color: var(--bad); }
+.pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); background: var(--ok-bg); }
+.pill.warn { color: var(--warn); background: var(--warn-bg); }
+.pill.bad { color: var(--bad); background: var(--bad-bg); }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 12px 0; }
+details summary { cursor: pointer; font-weight: 600; }
+details[open] summary { margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 12px 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.card .k { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.card .v { font-family: var(--f-mono); font-size: 14px; overflow-wrap: anywhere; }
+footer { margin-top: 64px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+:focus-visible { outline: 2px solid var(--son); outline-offset: 2px; }
+body { margin: 0; }
+ol.hist { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 10px; }
+ol.hist li { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+ol.hist time { font-family: var(--f-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { ol.hist li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<nav class="toc" aria-label="Mục lục">
+  <div class="brand">Lão Thiên Cơ · platform</div>
+  <ol>
+    <li><a href="#tong-quan">0. Bức tranh tổng thể</a></li>
+    <li><a href="#duong-di">1. Một request đi đường nào</a></li>
+    <li><a href="#luong">2. Các luồng nghiệp vụ</a>
+      <ol>
+        <li><a href="#la-so">2.1 Lập lá số</a></li>
+        <li><a href="#dang-nhap">2.2 Đăng nhập magic link</a></li>
+        <li><a href="#hoi-thay">2.3 Hỏi thầy (LLM)</a></li>
+        <li><a href="#nap-tien">2.4 Nạp tiền SePay</a></li>
+        <li><a href="#xem-so">2.5 Xem số hợp mệnh</a></li>
+        <li><a href="#chia-se">2.6 Chia sẻ lá số</a></li>
+      </ol>
+    </li>
+    <li><a href="#deploy">3. Code đến prod</a>
+      <ol>
+        <li><a href="#ci">3.1 CI và ảnh</a></li>
+        <li><a href="#cd">3.2 CD và Argo CD</a></li>
+        <li><a href="#rollback">3.3 Verify và rollback</a></li>
+        <li><a href="#host">3.4 Host và bootstrap</a></li>
+      </ol>
+    </li>
+    <li><a href="#secrets">4. Secret nằm ở đâu</a></li>
+    <li><a href="#quan-sat">5. Log, trace, cảnh báo, backup</a></li>
+    <li><a href="#trang-thai">6. Trạng thái hiện tại</a></li>
+    <li><a href="#lich-su">7. Lịch sử và cách cập nhật</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="top">
+  <h1>Luồng end-to-end của xemtuvingay.com</h1>
+  <p class="lede">Đi từ tổng quan đến chi tiết: request của người dùng đi qua những đâu, từng luồng nghiệp vụ chạy thế nào, code lên prod ra sao, và mỗi loại secret được cất ở chỗ nào. Viết cho người đã quen Spring Boot.</p>
+  <div class="meta">
+    <span class="chip">repo nguyentuan2686/platform</span>
+    <span class="chip">cập nhật 2026-11-28</span>
+    <a class="chip" href="#lich-su">lịch sử thay đổi</a>
+  </div>
+</header>
+
+<!-- 0 -->
+<section id="tong-quan">
+  <h2><span class="no">0</span>Bức tranh tổng thể</h2>
+  <p class="sub">Một VM, một cluster k3s, mọi thứ khai báo trong Git.</p>
+  <div class="grid2">
+    <div class="card"><div class="k">Domain công khai</div><div class="v">https://xemtuvingay.com</div></div>
+    <div class="card"><div class="k">Nguồn của domain trong repo</div><div class="v">deploy/k8s/overlays/prod/domain/domain.yaml → APP_DOMAIN</div></div>
+    <div class="card"><div class="k">Host prod</div><div class="v">GCP tuvi-prod-1 · asia-southeast1-b · 2 vCPU / 12 GB · x86 · hết trial 2027-02-24</div></div>
+    <div class="card"><div class="k">Runtime</div><div class="v">k3s v1.37 + Argo CD v3.6 + Sealed Secrets 0.41</div></div>
+  </div>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph Internet
+    U["Trình duyệt"]
+    SP["SePay (ngân hàng báo có)"]
+  end
+  subgraph Cloudflare
+    CF["Edge: DNS + HTTPS<br/>đặt Cf-Connecting-IP"]
+  end
+  subgraph VM["VM tuvi-prod-1 (k3s một node)"]
+    CFD["cloudflared<br/>ns edge"]
+    TR["Traefik ClusterIP<br/>rate limit"]
+    subgraph apps["ns apps"]
+      WEB["web Next.js :3000<br/>BFF"]
+      ID["identity-svc :8084"]
+      RD["reading-tuvi :8083"]
+      PAY["payment-svc :8085"]
+      CH["chart-svc :8082 Rust"]
+    end
+    subgraph data["ns data"]
+      PG[("Postgres 17<br/>5 DB")]
+      RP[("Redpanda")]
+    end
+    subgraph obs["ns observability"]
+      COL["otel-collector"]
+      LGTM["otel-lgtm<br/>Grafana Prom Loki Tempo"]
+    end
+  end
+  LLM["Groq / Gemini / paid"]
+  U --> CF
+  SP --> CF
+  CF -- "tunnel outbound" --> CFD --> TR
+  TR --> WEB
+  TR -- "chỉ POST /webhooks/sepay" --> PAY
+  WEB --> ID & RD & PAY & CH
+  RD --> CH
+  RD --> ID
+  RD --> LLM
+  PAY -- outbox --> RP -- consume --> ID
+  ID & RD & PAY --> PG
+  apps -. OTLP .-> COL --> LGTM
+  </pre></div>
+  <p>Ba ý để nhớ toàn bộ hệ thống:</p>
+  <ol class="steps">
+    <li><b>Không có cổng public nào.</b> VM chặn mọi kết nối vào (ufw). Traffic web đi vào qua một tunnel do cloudflared mở <i>từ trong ra</i>. Quản trị (SSH, kube API) chỉ qua Tailscale.</li>
+    <li><b>Trình duyệt chỉ nói chuyện với web.</b> Next.js là BFF: giữ cookie session, tự gọi các backend Java/Rust bằng mạng nội bộ cluster, kèm token nội bộ. Backend duy nhất lộ ra ngoài là đúng một đường webhook SePay.</li>
+    <li><b>Prod = trạng thái trong Git.</b> Argo CD trên VM kéo <code>deploy/k8s/overlays/prod</code> từ nhánh <code>main</code>. Deploy là một commit đổi tag ảnh, rollback là revert commit đó.</li>
+  </ol>
+</section>
+
+<!-- 1 -->
+<section id="duong-di">
+  <h2><span class="no">1</span>Một request đi đường nào</h2>
+  <p class="sub">Từ lúc gõ xemtuvingay.com đến lúc vào một container.</p>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  participant B as Trình duyệt
+  participant E as Cloudflare edge
+  participant C as cloudflared (pod)
+  participant T as Traefik
+  participant W as web
+  participant S as backend
+  B->>E: HTTPS GET xemtuvingay.com/vi
+  Note over E: TLS kết thúc ở đây<br/>gắn Cf-Connecting-IP = IP thật
+  E->>C: qua named tunnel (kết nối do pod mở sẵn)
+  C->>T: http://traefik.kube-system.svc:80, Host xemtuvingay.com
+  T->>T: chọn Ingress theo host + path, áp middleware rate limit
+  T->>W: web.apps:3000
+  W->>S: REST nội bộ (X-Internal-Token, Bearer session)
+  S-->>W: JSON hoặc Problem Details
+  W-->>B: HTML SSR / JSON / SSE
+  </pre></div>
+
+  <h4>Định tuyến ở Traefik (overlays/prod/apps/ingress.yaml)</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Tên</th><th>Khớp</th><th>Đích</th><th>Giới hạn (theo Cf-Connecting-IP)</th></tr></thead>
+    <tbody>
+      <tr><td><code>web</code></td><td>mọi đường <code>/</code></td><td>web:3000</td><td>20 req/s, burst 40</td></tr>
+      <tr><td><code>web-strict</code></td><td><code>/vi/dang-nhap</code>, <code>/api/auth</code>, <code>/api/qa</code>, <code>/api/xem-so</code></td><td>web:3000</td><td>20 req/phút</td></tr>
+      <tr><td><code>web-actions</code> (IngressRoute)</td><td>POST có header <code>Next-Action</code> (Server Action), priority 1000</td><td>web:3000</td><td>60 req/phút, burst 30</td></tr>
+      <tr><td><code>payment-webhook</code></td><td>đúng <code>/webhooks/sepay</code> (pathType Exact)</td><td>payment-svc:8085</td><td>60 req/phút + body tối đa 64 KiB</td></tr>
+    </tbody>
+  </table></div>
+  <p>Mọi đường khác của backend (<code>/admin/*</code>, <code>/internal/*</code>, <code>/webhooks/paypal</code>, toàn bộ chart-svc, order-svc, notify-svc) không có Ingress nên từ internet không tới được. Chúng chỉ nhận request trong cluster.</p>
+
+  <h4>Ba lớp xác thực giữa các service</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Lớp</th><th>Cơ chế</th><th>Ai dùng</th></tr></thead>
+    <tbody>
+      <tr><td>Trình duyệt → web</td><td>Cookie <code>__Host-tv_sid</code> (HttpOnly, Secure, SameSite=Lax). Mọi POST thay đổi dữ liệu kiểm tra <code>Origin == WEB_ORIGIN</code> (chống CSRF, <code>lib/sameOrigin.ts</code>).</td><td>web</td></tr>
+      <tr><td>web → backend</td><td><code>X-Internal-Token</code> (secret dùng chung, so sánh constant-time trong <code>InternalTokenFilter</code> của platform-starter) + <code>Authorization: Bearer &lt;session token&gt;</code> của người dùng.</td><td>identity, reading, payment</td></tr>
+      <tr><td>Bên ngoài → payment-svc</td><td>SePay gửi <code>Authorization: Apikey &lt;secret&gt;</code> (hoặc chữ ký HMAC-SHA256 trong <code>X-SePay-Signature</code>).</td><td>webhook SePay</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><b>Session là gì?</b> identity-svc sinh 32 byte ngẫu nhiên, chỉ lưu SHA-256 của nó trong bảng <code>session</code>. Web giữ token gốc trong cookie. Khách (guest) có session 180 ngày, tài khoản 30 ngày. Một request backend biết "ai đang hỏi" bằng cách gọi <code>GET /me</code> với Bearer đó.</div>
+</section>
+
+<!-- 2 -->
+<section id="luong">
+  <h2><span class="no">2</span>Các luồng nghiệp vụ</h2>
+  <p class="sub">Mỗi luồng: tóm tắt các bước, sơ đồ, rồi chi tiết quy tắc.</p>
+
+  <h3 id="la-so">2.1 Lập lá số và luận cơ bản (miễn phí, không LLM)</h3>
+  <ol class="steps">
+    <li>Form trang chủ <code>/vi</code> gọi Server Action <code>submitBirth</code> (<code>app/vi/actions.ts</code>).</li>
+    <li>Chưa có cookie thì web tạo khách: <code>POST /guests</code> ở identity-svc, rồi đặt cookie.</li>
+    <li>Web lưu hồ sơ: <code>PUT /me/profile</code>. identity-svc mã hóa ngày giờ sinh bằng AES-256-GCM (<code>PROFILE_ENC_KEY</code>, AAD = id hồ sơ) trước khi ghi DB.</li>
+    <li>Chuyển sang <code>/vi/la-so</code>. Trang SSR đọc hồ sơ (<code>GET /me/profile</code>) rồi gọi song song ba thứ: <code>chart-svc /tuvi/chart</code>, <code>reading-tuvi /tuvi/readings/basic</code>, <code>reading-tuvi /tuvi/readings/today</code>.</li>
+    <li>reading-tuvi tự gọi chart-svc, chọn danh sách khóa kho (ví dụ <code>tuvi:star=TuVi:palace=Menh:...</code>), ghép 17 mục luận theo khung lời Lão Thiên Cơ, cache theo <code>chart_hash</code>.</li>
+  </ol>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  participant B as Trình duyệt
+  participant W as web
+  participant I as identity-svc
+  participant R as reading-tuvi
+  participant C as chart-svc
+  B->>W: submitBirth(ngày, giờ, giới tính, nơi sinh)
+  W->>I: POST /guests (nếu chưa có session)
+  W->>I: PUT /me/profile (Bearer)
+  Note over I: mã hóa AES-GCM rồi ghi chart_profile
+  W-->>B: redirect /vi/la-so
+  B->>W: GET /vi/la-so
+  W->>I: GET /me/profile
+  par song song
+    W->>C: POST /tuvi/chart
+    W->>R: POST /tuvi/readings/basic
+    W->>R: POST /tuvi/readings/today
+  end
+  R->>C: POST /tuvi/chart, /tuvi/daily
+  R-->>W: 17 mục luận + 4 mảng Hôm nay
+  W-->>B: bàn 12 cung SVG + hội thoại
+  </pre></div>
+  <details><summary>Chi tiết engine chart-svc</summary>
+    <p>Rust, không DB, là hàm thuần: cùng input trả JSON giống hệt từng byte. Dùng crate <code>x-iztro</code> cho an sao, lịch âm theo thuật toán Hồ Ngọc Đức (UTC+7 cho lịch Việt, UTC+8 cho lịch Trung Hoa), luật phái Việt chép từ <code>lasotuvi</code> (MIT). Giờ 23:xx tính sang ngày hôm sau là giờ Tý. Hỗ trợ năm 1900–2100, có golden test đối chiếu.</p>
+    <p>Lịch được chọn theo giao diện: giao diện tiếng Việt mặc định lịch Việt. Người dùng đổi được trong trang tài khoản, cho tới khi hồ sơ bị khóa.</p>
+  </details>
+
+  <h3 id="dang-nhap">2.2 Đăng nhập bằng magic link</h3>
+  <ol class="steps">
+    <li>Người dùng nhập email ở <code>/vi/dang-nhap</code>. Server Action <code>requestLogin</code> đảm bảo có session khách, rồi gọi <code>POST /auth/magic-links</code> kèm email, Bearer khách và <code>X-Client-Ip</code> (IP thật lấy từ <code>Cf-Connecting-IP</code>).</li>
+    <li>identity-svc luôn trả 202, dù email có tồn tại hay không, để không lộ ai đã có tài khoản. Nó kiểm tra ba giới hạn rồi mới gửi thư qua SMTP. Link sống 15 phút.</li>
+    <li>Web gắn yêu cầu này vào trình duyệt hiện tại bằng cookie <code>tv_login</code>.</li>
+    <li>Người dùng bấm link, mở <code>/vi/dang-nhap/xac-nhan</code>. Trang này chỉ xác nhận bằng POST (<code>confirmLogin</code>), để trình quét link trong hộp thư không tự đăng nhập hộ.</li>
+    <li><b>Cùng trình duyệt đã yêu cầu:</b> gọi <code>POST /auth/magic-links/verify</code> kèm Bearer khách. identity gộp hồ sơ khách vào tài khoản; web gọi thêm <code>reading-tuvi /internal/qa/merge</code> để gộp lịch sử hỏi thầy.</li>
+    <li><b>Trình duyệt khác</b> (hoặc link do người khác gửi): verify <i>không</i> kèm khách, không gộp gì. Trang hỏi lại "mở tài khoản t***@... ?" rồi mới đổi cookie.</li>
+  </ol>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  participant B as Trình duyệt
+  participant W as web
+  participant I as identity-svc
+  participant M as SMTP relay
+  participant R as reading-tuvi
+  B->>W: requestLogin(email)
+  W->>I: POST /auth/magic-links (Bearer khách, X-Client-Ip)
+  I->>I: giới hạn 3/email/15 phút, 20/IP/ngày, 200 toàn hệ thống/ngày
+  I->>M: gửi thư chứa link (TTL 15 phút)
+  I-->>W: 202 (luôn luôn)
+  W-->>B: cookie tv_login, "đã gửi thư"
+  B->>W: mở link, bấm xác nhận (POST)
+  alt cùng trình duyệt
+    W->>I: POST /auth/magic-links/verify (Bearer khách)
+    I-->>W: session tài khoản + gộp hồ sơ khách
+    W->>R: POST /internal/qa/merge
+  else trình duyệt khác
+    W->>I: verify không kèm khách
+    W-->>B: hỏi lại trước khi chuyển tài khoản
+  end
+  W-->>B: Set-Cookie __Host-tv_sid (tài khoản)
+  </pre></div>
+  <div class="note bad"><b>Đang chặn trên prod:</b> <code>MAIL_HOST</code> vẫn là <code>smtp.example.invalid</code> và chưa có SMTP relay, nên bước gửi thư trả 503. Cần relay SMTP (cổng 587 STARTTLS) và bản ghi SPF/DKIM cho <code>xemtuvingay.com</code>. Google login cũng chưa bật (<code>GOOGLE_LOGIN=0</code>).</div>
+
+  <h3 id="hoi-thay">2.3 Hỏi thầy (Q&amp;A có LLM)</h3>
+  <p>Hai loại: <b>FREE</b> (3 câu/ngày/người, trần chung 500/ngày, chỉ dùng provider miễn phí) và <b>PAID</b> (trừ 1 lượt, kèm 2 câu hỏi nối tiếp cùng chủ đề). Chủ đề: tình duyên, sự nghiệp, tài lộc, sức khỏe, gia đạo, vận năm.</p>
+  <ol class="steps">
+    <li>Trình duyệt gửi <code>POST /api/qa/readings</code> với <code>reading_id</code> (UUID do client sinh, dùng làm khóa idempotent), loại, chủ đề và câu hỏi.</li>
+    <li>web kiểm tra CSRF, kiểm tra cookie đồng ý gửi dữ liệu cho nhà cung cấp AI (<code>tv_ai_ok</code>), tạo session khách nếu cần, rồi mở stream SSE tới reading-tuvi.</li>
+    <li>reading-tuvi chạy phần chuẩn bị theo thứ tự: <b>guard câu hỏi</b> (<code>QuestionGuard</code>: che PII, từ chối tự hại, cờ bạc, y tế, giải hạn...), đọc hồ sơ, gọi chart-svc, ghi hàng <code>qa_reading</code>, và với PAID thì <b>trừ lượt</b> qua identity <code>/internal/credits/consume</code>.</li>
+    <li>Prompt chỉ gồm persona, chủ đề, dữ kiện cung và các đoạn kho được chọn theo khóa, cùng câu hỏi đã che PII. Không bao giờ có tên, email, ngày sinh hay chart_hash.</li>
+    <li>LLM gateway thử lần lượt theo <code>LLM_PROVIDERS</code> (prod: <code>groq,gemini</code>, PAID còn có thể rơi xuống <code>paid</code>). Có đủ câu trả lời mới chạy <code>AnswerFilter</code>; bị chặn thì sinh lại một lần. Sau đó trả về dạng SSE theo từng câu và nối disclaimer phía server.</li>
+    <li>Câu hỏi và trả lời được lưu mã hóa AES-GCM (<code>QA_ENC_KEY</code>). Log chỉ có id, trạng thái, provider, độ trễ và số token.</li>
+  </ol>
+  <div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> PREPARE: POST /tuvi/qa/readings
+  PREPARE --> REFUSED: guard từ chối (không trừ lượt)
+  PREPARE --> CHARGED: PAID, consume ok
+  PREPARE --> GENERATING: FREE trong quota
+  CHARGED --> GENERATING
+  GENERATING --> ANSWERED: LLM trả lời + qua filter
+  GENERATING --> RETRYING: hết provider / lỗi
+  GENERATING --> REFUNDED: model từ chối, kho không đủ
+  RETRYING --> ANSWERED: job thử lại mỗi 1 phút
+  RETRYING --> REFUND_PENDING: quá 24h
+  REFUND_PENDING --> REFUNDED: identity /internal/credits/refund
+  ANSWERED --> [*]
+  REFUNDED --> [*]
+  </pre></div>
+  <details><summary>Quy tắc trừ lượt ở identity-svc</summary>
+    <p>Mỗi lần trừ khóa hàng account. Thứ tự ưu tiên: thẻ năm còn hạn → thẻ tháng sắp hết hạn nhất → credits lẻ. Thẻ năm không giới hạn nhưng có trần ngầm 30 câu/ngày. Lần trừ đầu tiên khóa ngày giờ sinh của hồ sơ, để một tài khoản không xem hộ nhiều người.</p>
+    <p>Trừ và hoàn đều idempotent theo <code>reading_id</code>. Khi lời gọi trừ bị timeout (có thể đã trừ), hệ thống lên lịch hoàn sau <code>QA_CONSUME_REFUND_GRACE</code> (2 phút).</p>
+  </details>
+  <div class="note"><b>Cần kiểm tra trên prod:</b> <code>GROQ_API_KEY</code> và <code>GEMINI_API_KEY</code> là khóa tùy chọn trong <code>reading-tuvi-secrets</code>. Provider không có key sẽ bị bỏ qua. Nếu chưa seal key thật, câu hỏi PAID rơi vào nhánh RETRYING rồi được hoàn lượt sau 24h. Em chưa kiểm tra giá trị trên cluster.</div>
+
+  <h3 id="nap-tien">2.4 Nạp tiền qua SePay / VietQR</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Gói</th><th>Giá</th><th>Nhận được</th></tr></thead>
+    <tbody>
+      <tr><td><code>CREDIT_1</code></td><td>29.000đ</td><td>1 lượt, không hết hạn</td></tr>
+      <tr><td><code>CREDIT_5</code></td><td>119.000đ</td><td>5 lượt, không hết hạn</td></tr>
+      <tr><td><code>PASS_MONTH</code></td><td>49.000đ</td><td>30 ngày, xem ngày chi tiết + 2 câu hỏi</td></tr>
+      <tr><td><code>PASS_YEAR</code></td><td>399.000đ</td><td>365 ngày, mở tất cả, hỏi không giới hạn (trần 30/ngày)</td></tr>
+    </tbody>
+  </table></div>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  participant B as Trình duyệt
+  participant W as web
+  participant P as payment-svc
+  participant NH as Ngân hàng + SePay
+  participant K as Redpanda
+  participant I as identity-svc
+  B->>W: buyAction(CREDIT_5)
+  W->>P: POST /orders (X-Internal-Token, account_id)
+  P-->>W: mã đơn TV8K2Q, 119000 VND
+  W-->>B: /vi/thanh-toan/{id}: ảnh VietQR (STK, số tiền, nội dung TV8K2Q)
+  B->>NH: chuyển khoản trong app ngân hàng
+  NH->>P: POST xemtuvingay.com/webhooks/sepay (Apikey)
+  P->>P: tách mã đơn, khớp số tiền
+  Note over P: 1 transaction: orders.status = PAID<br/>+ ghi outbox_event
+  P-->>NH: 200
+  P->>K: OutboxRelay đẩy payments.payment-succeeded.v1
+  K->>I: PaymentSucceededListener
+  I->>I: processed_event(event_id) chống trùng, +5 credits
+  B->>W: poll /api/orders/{id}
+  W-->>B: "đã nhận tiền"
+  </pre></div>
+  <details><summary>Ngoại lệ và đối soát</summary>
+    <ul>
+      <li><b>Webhook lặp</b> không gây hại: idempotent theo mã giao dịch của SePay, consumer idempotent theo <code>event_id</code> và cả <code>order_id</code>.</li>
+      <li><b>Không khớp</b> (thiếu mã, sai mã, chuyển thiếu, đơn đã trả): giao dịch vào hàng "chưa khớp". Anh xử lý tay ở <code>/vi/quan-tri</code> (gán đơn hoặc ghi đã hoàn). Chuyển thừa vẫn PAID, ghi chú số dư.</li>
+      <li><b>Đơn</b> hiển thị hết hạn sau 30 phút, nhưng tiền đến muộn vẫn khớp được theo mã.</li>
+      <li><b>Mất webhook:</b> job đối soát gọi API SePay mỗi chu kỳ. Hiện đang tắt (<code>SEPAY_RECONCILE_ENABLED=false</code>) cho tới khi kiểm tra định dạng API thật.</li>
+      <li><b>Hoàn tiền</b> chỉ áp dụng cho gói lượt chưa dùng: identity thu lại lượt trước, rồi anh chuyển trả bằng app ngân hàng và bấm hoàn tất.</li>
+      <li><b>Message lỗi hợp đồng</b> (sản phẩm hay account lạ) vào topic <code>payments.payment-succeeded.v1.DLT</code>.</li>
+    </ul>
+  </details>
+  <div class="note"><b>Vì sao dùng outbox?</b> Tương tự <code>@Transactional</code> ghi DB rồi gửi Kafka, nhưng không mất message khi gửi Kafka lỗi sau commit. Event nằm trong bảng <code>outbox_event</code> cùng transaction; <code>OutboxRelay</code> (platform-starter) quét bằng <code>FOR UPDATE SKIP LOCKED</code> mỗi 500 ms, gửi với acks=all, kèm header <code>traceparent</code> để trace nối xuyên service.</div>
+
+  <h3 id="xem-so">2.5 Xem số hợp mệnh <span class="pill warn">PR #48 đang mở</span></h3>
+  <ol class="steps">
+    <li><code>/vi/xem-so/{sim|so-tai-khoan|bien-so-xe}</code>: nhập dãy số, năm sinh, đánh dấu sinh trước Tết hay không, giới tính.</li>
+    <li>JS gửi <code>POST /api/xem-so</code> (luôn POST, không bao giờ đặt số lên URL). web kiểm tra CSRF và đảm bảo có session, rồi gọi <code>reading-tuvi /tuvi/number-check</code> kèm <code>X-Client-Ip</code>.</li>
+    <li>reading-tuvi chuẩn hóa số, chấm 6 tiêu chí trên thang 10 (ngũ hành, quẻ Kinh Dịch, âm dương, cung phi, số nút, cặp số dân gian), ghép lời luận từ <code>number.vi.jsonl</code>. Không dùng LLM.</li>
+    <li>Quota 2 số/người/ngày theo giờ Việt Nam, 20 số/IP/ngày. Xem lại đúng số cũ trong ngày không tính lượt. DB chỉ giữ HMAC-SHA256 của số và IP (<code>NUMBER_CHECK_HMAC_KEY</code>), xóa sau 2 ngày.</li>
+  </ol>
+
+  <h3 id="chia-se">2.6 Chia sẻ lá số</h3>
+  <p>Server Action <code>createShareAction</code> gọi identity <code>PUT /me/profile/share</code>, nhận một share id ngẫu nhiên 16 byte. Trang <code>/vi/chia-se/[shareId]</code> (noindex, no-store) dùng token nội bộ gọi <code>GET /shares/{id}</code>, rồi tính lại lá số và luận cơ bản. Trang chỉ hiện năm can chi và giờ địa chi, không hiện ngày dương lịch đầy đủ. Thẻ ảnh OG nằm ở <code>the.png</code>. Tắt chia sẻ bằng <code>DELETE /me/profile/share</code>.</p>
+</section>
+
+<!-- 3 -->
+<section id="deploy">
+  <h2><span class="no">3</span>Từ code đến prod</h2>
+  <p class="sub">Không ai SSH vào server để deploy. Mọi thay đổi đi qua Git.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  A["Nhánh ngắn + PR"] --> B["ci.yml: lọc theo path<br/>chỉ chạy job của phần bị đổi"]
+  B --> G{"ci-gate<br/>check bắt buộc duy nhất"}
+  G -- xanh --> M["Claude squash-merge vào main"]
+  M --> B2["ci.yml trên main:<br/>build ảnh amd64 + arm64 native<br/>push ghcr.io/nguyentuan2686/svc:sha-commit"]
+  B2 --> CD1["cd.yml gate: kiểm run ci, kiểm secrets"]
+  CD1 --> CD2["bump: GitHub App xemtuvingay-cd<br/>cd-bump.sh sửa đúng 1 file<br/>overlays/prod/apps/kustomization.yaml"]
+  CD2 --> C["commit 'deploy: ... [skip ci]' lên main"]
+  C --> AR["Argo CD trên VM poll Git ~3 phút<br/>sync prod-apps, rolling update"]
+  CD2 --> V["verify-deploy: vào tailnet tag:ci<br/>chờ Synced + Healthy, smoke-web qua Traefik"]
+  V -- ok --> T["dời tag deploy-verified"]
+  V -- "exit 1: deploy hỏng" --> R["deploy-rollback.sh: revert các bump<br/>kể từ deploy-verified + issue deploy-failed"]
+  V -- "exit 4: không tới được cluster" --> U["issue deploy-unverified, không revert"]
+  </pre></div>
+
+  <h3 id="ci">3.1 CI và ảnh container</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Job</th><th>Làm gì</th><th>Khi nào chạy</th></tr></thead>
+    <tbody>
+      <tr><td><code>changes</code></td><td>dorny/paths-filter chọn job cần chạy; tính <code>WEB_ORIGIN</code> từ domain.yaml</td><td>luôn chạy</td></tr>
+      <tr><td>Java (<code>_java-service.yml</code>)</td><td><code>mvn -pl svc -am verify</code>: Spotless, unit test, Testcontainers, JaCoCo ≥ 80%, ArchUnit; Trivy fs (CRITICAL)</td><td>order, reading, identity, payment bị đổi</td></tr>
+      <tr><td>Rust (<code>_rust-service.yml</code>)</td><td>fmt, clippy -D warnings, cargo deny (giấy phép, CVE), llvm-cov ≥ 80%</td><td>notify, chart bị đổi</td></tr>
+      <tr><td>Node (<code>_node-service.yml</code>)</td><td>lint, typecheck, test (≥ 80% <code>src/lib</code>), build, <code>check:bundle</code> (bundle client không chứa secret hay URL nội bộ), Playwright e2e</td><td>web bị đổi</td></tr>
+      <tr><td><code>k8s-manifests</code></td><td>kustomize + kubeconform + chính sách jq của <code>k8s-validate.sh</code> + Trivy config</td><td>deploy/** bị đổi</td></tr>
+      <tr><td><code>k8s-e2e</code></td><td>dựng cluster kind, deploy overlay e2e, chạy mọi smoke script, kiểm trace, metrics, log, backup và restore</td><td>mọi push lên main + PR đổi hạ tầng</td></tr>
+      <tr><td><code>bootstrap</code></td><td>chạy <code>bootstrap.sh</code> hai lần trên runner x86 và ARM, kiểm firewall, khôi phục khóa seal, kiểm rate limit qua Traefik thật</td><td>mọi push lên main + PR đổi infra</td></tr>
+      <tr><td><code>ops-scripts</code>, <code>scaffold</code>, CodeQL</td><td>shellcheck, actionlint, action phải ghim SHA, test script, promtool; render service mẫu từ template; CodeQL (chỉ Java)</td><td>theo path / hằng tuần</td></tr>
+      <tr><td><code>ci-gate</code></td><td>gom kết quả: fail nếu có job failure/cancelled, skipped tính là đạt</td><td>luôn chạy</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>Ảnh:</b> chỉ build và push khi chạy trên <code>main</code>. Mỗi kiến trúc build trên runner native (<code>ubuntu-24.04</code> và <code>ubuntu-24.04-arm</code>, không dùng QEMU), push theo digest, rồi gộp thành manifest đa kiến trúc với tag <code>sha-&lt;40 ký tự commit&gt;</code> và <code>main</code>. Image chạy non-root (uid 10001), root filesystem chỉ đọc. Package GHCR để public nên VM kéo ảnh không cần pull secret.</p>
+  <p><b>Riêng web:</b> <code>WEB_ORIGIN=https://xemtuvingay.com</code> được nướng vào lúc build (canonical URL, sitemap) và đặt lại lúc chạy (kiểm CSRF). Đổi domain thì web phải build lại.</p>
+
+  <h3 id="cd">3.2 CD và Argo CD</h3>
+  <ol class="steps">
+    <li><code>cd.yml</code> chạy sau mỗi run <code>ci</code> xanh trên <code>main</code> (hoặc chạy tay với một sha). Concurrency theo từng commit, để một loạt merge liên tiếp không làm rơi deploy nào.</li>
+    <li><b>bump</b> lấy token của GitHub App <code>xemtuvingay-cd</code>, checkout <code>main</code> (không bao giờ checkout code của run kích hoạt), rồi kiểm từng service xem ảnh <code>sha-&lt;commit&gt;</code> đã có trên GHCR chưa. Chỉ service nào có ảnh mới được bump.</li>
+    <li><code>cd-bump.sh</code> chỉ đổi tag tiến lên: tag hiện tại phải là tổ tiên của commit mới, tag ghim tay được giữ nguyên. Workflow kiểm có đúng 1 file đổi, rồi push commit <code>deploy: &lt;svcs&gt; to sha-xxxxxxx [skip ci]</code> lên <code>main</code>. App là bypass actor duy nhất của ruleset bảo vệ <code>main</code>.</li>
+    <li>Argo CD poll Git (không cần webhook vào), thấy commit mới thì sync. Kubernetes rolling update; readiness probe <code>/health/ready</code> giữ traffic ở pod cũ cho tới khi pod mới sẵn sàng.</li>
+  </ol>
+  <h4>Cấu trúc Argo CD (app-of-apps, deploy/argocd)</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Application</th><th>Wave</th><th>Path</th><th>Chứa</th></tr></thead>
+    <tbody>
+      <tr><td><code>root</code></td><td>–</td><td><code>deploy/argocd/apps</code></td><td>AppProject <code>prod</code> và 4 app con</td></tr>
+      <tr><td>AppProject <code>prod</code></td><td>-2</td><td></td><td>chỉ nhận nguồn từ repo này; <b>cấm <code>Secret</code> thường</b>, chỉ cho SealedSecret</td></tr>
+      <tr><td><code>prod-sealed</code></td><td>-1</td><td><code>overlays/prod/sealed</code></td><td>namespaces + 8 SealedSecret</td></tr>
+      <tr><td><code>prod-platform</code></td><td>0</td><td><code>overlays/prod/platform</code></td><td>Postgres, Redpanda, otel-collector, otel-lgtm, CronJob backup và heartbeat</td></tr>
+      <tr><td><code>prod-tunnel</code></td><td>1</td><td><code>overlays/prod/tunnel</code></td><td>cloudflared (named tunnel, <code>TUNNEL_TOKEN</code>)</td></tr>
+      <tr><td><code>prod-apps</code></td><td>1</td><td><code>overlays/prod/apps</code></td><td>7 service, Ingress, middleware rate limit, tag ảnh</td></tr>
+    </tbody>
+  </table></div>
+  <p>Mọi app con chạy automated prune + selfHeal + ServerSideApply. Một health check Lua trong <code>argocd-cm</code> buộc wave sau chờ wave trước Healthy. <code>APP_DOMAIN</code> khai báo đúng một chỗ, rồi Kustomize <code>replacements</code> chép vào Ingress host, <code>WEB_ORIGIN</code>, <code>WEB_BASE_URL</code> và <code>MAIL_FROM</code>.</p>
+
+  <h3 id="rollback">3.3 Verify và rollback</h3>
+  <ol class="steps">
+    <li><b>verify-deploy</b> vào Tailscale với tag <code>tag:ci</code>. ACL chỉ cho tag này tới <code>tcp:6443</code> của host. Job dùng <code>PROD_KUBECONFIG</code> (ServiceAccount <code>cd-verify</code> chỉ đọc được Application và port-forward Traefik).</li>
+    <li>Nó chờ <code>prod-platform</code>, <code>prod-tunnel</code> và <code>prod-apps</code> cùng Synced + Healthy ở commit bump (hoặc một commit mới hơn), rồi port-forward Traefik và chạy <code>smoke-web.sh</code> với <code>Host: xemtuvingay.com</code>.</li>
+    <li><b>Thành công:</b> <code>deploy-mark-verified.sh</code> dời tag <code>deploy-verified</code> tới commit đó. Tag chỉ tiến, không lùi.</li>
+    <li><b>Exit 1 (deploy xong nhưng hỏng):</b> chỉ run có bump mới nhất mới được revert. Nó revert <i>mọi</i> commit bump của bot kể từ <code>deploy-verified</code> trong một commit, rồi mở issue <code>deploy-failed</code>. Gặp commit không phải của bot hoặc đổi file ngoài <code>overlays/</code> thì từ chối; gặp xung đột thì dừng (exit 3), cần người xử lý.</li>
+    <li><b>Exit 4 (không tới được cluster):</b> không revert, chỉ mở hoặc bình luận issue <code>deploy-unverified</code>. Chưa xác minh được không có nghĩa là deploy hỏng.</li>
+  </ol>
+  <div class="note"><b>Lưu ý:</b> commit #47 <code>pin prod images to sha-66a1b2b</code> là commit tay, không phải của bot. Rollback tự động không lùi qua mốc đó. Muốn về trước nữa thì sửa tag bằng một PR.</div>
+
+  <h3 id="host">3.4 Host và bootstrap</h3>
+  <p><code>infra/bootstrap/bootstrap.sh</code> chạy được lặp lại nhiều lần, trên Ubuntu 24.04 x86 hoặc ARM. Mọi artifact ghim phiên bản + sha256 trong <code>versions.env</code>. Thứ tự các bước:</p>
+  <ol class="steps">
+    <li><b>Preflight k3s:</b> từ chối k3s lạ hoặc k3s mới hơn bản ghim.</li>
+    <li><b>Firewall trước tiên:</b> ufw chặn mọi kết nối vào, chỉ cho <code>lo</code>, <code>tailscale0</code> và CIDR pod/service. SSH public chỉ đóng khi bật <code>BOOTSTRAP_CLOSE_PUBLIC_SSH=1</code> và Tailscale đã kết nối.</li>
+    <li><b>k3s:</b> tắt servicelb, Traefik đặt kiểu ClusterIP, NodePort chỉ nghe loopback, <code>tls-san</code> là tên tailnet <code>platform-prod</code>.</li>
+    <li><b>Tailscale</b> (dùng <code>TS_AUTHKEY</code> một lần, tag <code>tag:prod</code>).</li>
+    <li><b>Sealed Secrets:</b> khôi phục mọi khóa từ <code>SEALED_SECRETS_KEYS_FILE</code> (khi chuyển host), rồi cài controller.</li>
+    <li><b>Argo CD</b> + patch <code>argocd-cm</code>, rồi apply Application <code>root</code> trỏ vào repo. Từ đây Argo tự kéo phần còn lại.</li>
+  </ol>
+  <p>Kiểm tra sau bootstrap: <code>sudo infra/bootstrap/verify.sh</code>. Chuyển host là bootstrap máy mới, khôi phục khóa seal, rồi <code>pg-restore.sh</code> từ backup.</p>
+</section>
+
+<!-- 4 -->
+<section id="secrets">
+  <h2><span class="no">4</span>Secret nằm ở đâu</h2>
+  <p class="sub">Không có giá trị secret nào ở dạng plaintext trong Git. Trang này chỉ liệt kê tên.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  PM["Password manager<br/>(bản gốc)"] --> L["secrets.local/*.env<br/>trên máy seal, gitignored"]
+  CERT["sealing-cert.crt<br/>khóa công khai, có trong Git"] --> S
+  L --> S["scripts/seal-secrets.sh<br/>theo secrets.tsv, chạy offline"]
+  S --> Y["overlays/prod/sealed/*.sealedsecret.yaml<br/>bản mã hóa, commit qua PR"]
+  Y --> A["Argo CD prod-sealed"]
+  A --> SC["sealed-secrets controller<br/>giữ khóa bí mật trong kube-system"]
+  SC --> K["Secret thường trong cluster"]
+  K --> P["envFrom vào pod<br/>(INTERNAL_API_TOKEN, DB_PASSWORD, ...)"]
+  </pre></div>
+
+  <h4>Năm chỗ cất secret</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Chỗ</th><th>Chứa gì</th><th>Ai đọc được</th></tr></thead>
+    <tbody>
+      <tr><td><b>Git</b>: <code>deploy/k8s/overlays/prod/sealed/</code></td><td>SealedSecret (đã mã hóa) + <code>sealing-cert.crt</code> (public)</td><td>ai cũng thấy file, nhưng chỉ controller trên cluster giải mã được</td></tr>
+      <tr><td><b>Cluster</b>: ns <code>kube-system</code></td><td>khóa bí mật của Sealed Secrets; tự gia hạn mỗi 30 ngày và giữ cả các khóa cũ</td><td>admin cluster</td></tr>
+      <tr><td><b>Password manager</b> của anh</td><td>bản gốc mọi giá trị; file export <i>toàn bộ</i> khóa seal (xuất lại sau mỗi lần gia hạn 30 ngày); private key <code>.pem</code> của GitHub App</td><td>chỉ anh</td></tr>
+      <tr><td><b>Máy seal</b>: <code>overlays/prod/secrets.local/*.env</code></td><td>giá trị thật dạng plaintext, chỉ để chạy seal; gitignored</td><td>máy dev; nên xóa hoặc chuyển vào password manager sau khi seal</td></tr>
+      <tr><td><b>GitHub Environment <code>prod</code></b> (chỉ nhánh main)</td><td>variable <code>CD_APP_ID</code>; secrets <code>CD_APP_PRIVATE_KEY</code>, <code>TS_OAUTH_CLIENT_ID</code>, <code>TS_OAUTH_SECRET</code>, <code>PROD_KUBECONFIG</code></td><td>chỉ job chạy trên main có khai <code>environment: prod</code> (gate, bump, verify-deploy); PR branch không đọc được</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Danh mục secret trong cluster (deploy/k8s/overlays/prod/secrets.tsv)</h4>
+  <div class="tbl"><table>
+    <thead><tr><th>Secret</th><th>NS</th><th>Khóa (dấu ? là được để trống)</th><th>Trạng thái</th></tr></thead>
+    <tbody>
+      <tr><td><code>postgres-secrets</code></td><td>data</td><td>POSTGRES_PASSWORD, *_DB_PASSWORD cho 5 DB</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>identity-svc-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, PROFILE_ENC_KEY, OIDC_GOOGLE_CLIENT_SECRET?, MAIL_USERNAME?, MAIL_PASSWORD?</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>reading-tuvi-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, QA_ENC_KEY, NUMBER_CHECK_HMAC_KEY, GROQ_API_KEY?, GEMINI_API_KEY?</td><td><span class="pill ok">đã seal</span> (HMAC key ở nhánh xem số)</td></tr>
+      <tr><td><code>payment-svc-secrets</code></td><td>apps</td><td>DB_USER, DB_PASSWORD, INTERNAL_API_TOKEN, ADMIN_API_TOKEN, SEPAY_WEBHOOK_SECRET, PAYPAL_FAKE_WEBHOOK_SECRET, SEPAY_BANK_CODE, SEPAY_ACCOUNT_NUMBER, SEPAY_ACCOUNT_NAME</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>web-secrets</code></td><td>apps</td><td>INTERNAL_API_TOKEN, ADMIN_API_TOKEN</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>order-svc-secrets</code>, <code>notify-svc-secrets</code></td><td>apps</td><td>thông tin DB</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>cloudflared-secrets</code></td><td>edge</td><td>TUNNEL_TOKEN</td><td><span class="pill ok">đã seal</span></td></tr>
+      <tr><td><code>alerting-secrets</code></td><td>observability</td><td>TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID</td><td><span class="pill bad">chưa có</span></td></tr>
+      <tr><td><code>ops-secrets</code></td><td>data</td><td>S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, HEALTHCHECKS_URL, HEALTHCHECKS_BACKUP_URL</td><td><span class="pill bad">chưa có</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><b>Quy tắc khi tạo giá trị:</b> <code>INTERNAL_API_TOKEN</code> phải giống nhau ở mọi secret có nó. Mỗi <code>*_DB_PASSWORD</code> trong <code>postgres-secrets</code> phải khớp với <code>DB_PASSWORD</code> của service tương ứng. Token sinh bằng <code>openssl rand -hex 32</code>; khóa AES và HMAC sinh bằng <code>openssl rand -base64 32</code>. <code>seal-secrets.sh</code> từ chối giá trị trông giống giá trị test và không bao giờ in giá trị ra.</div>
+  <div class="note bad"><b>Mất khóa seal là mất hết:</b> SealedSecret gắn với khóa đang active lúc seal, và gia hạn không mã hóa lại bản cũ. Bản export trong password manager phải chứa <i>mọi</i> khóa và phải xuất lại hằng tháng. Nếu không, chuyển host xong sẽ không giải mã được các secret cũ.</div>
+</section>
+
+<!-- 5 -->
+<section id="quan-sat">
+  <h2><span class="no">5</span>Log, trace, cảnh báo, backup</h2>
+  <ol class="steps">
+    <li><b>Log:</b> JSON trên stdout, mỗi dòng một object với các trường <code>timestamp, level, service, trace_id, span_id, message</code>. Java và Rust dùng cùng định dạng. DaemonSet otel-collector đọc <code>/var/log/pods</code> rồi đẩy sang Loki. Log không chứa ngày sinh, email, câu hỏi hay dãy số.</li>
+    <li><b>Trace:</b> Java dùng OpenTelemetry Java agent, Rust dùng <code>tracing-opentelemetry</code>. W3C <code>traceparent</code> đi qua cả HTTP header lẫn Kafka header, nên một lần thanh toán là một trace xuyên payment → Redpanda → identity, xem được trong Tempo.</li>
+    <li><b>Metrics:</b> service đẩy OTLP sang collector rồi sang Prometheus (không scrape service). Dashboard <code>platform-red</code> (rate, error, duration) và <code>platform-messaging</code> (outbox lag, consumer lag) nằm trong Git. Lỗi HTTP trả Problem Details có <code>trace_id</code>, từ lỗi tra ngược ra trace được.</li>
+    <li><b>Cảnh báo</b> (Grafana): error-rate-high, latency-p95-high, pod-restart-loop, consumer-lag-rising, disk-usage-high, deploy-failed, backup-skipped, mail-cap-reached, mail-client-cap-hits. Thông báo đi Telegram khi có <code>alerting-secrets</code>.</li>
+    <li><b>Backup:</b> CronJob <code>pg-backup</code> 03:00 giờ Việt Nam, chạy <code>pg_dump -Fc</code> 5 DB, đẩy lên S3/R2, giữ 14 ngày. CronJob <code>heartbeat</code> 5 phút một lần ping Healthchecks.io: VM chết thì mất ping và có cảnh báo từ bên ngoài. Diễn tập khôi phục bằng <code>scripts/pg-restore.sh</code> (mặc định khôi phục vào DB <code>*_restore_check</code>).</li>
+  </ol>
+  <p>Grafana, Argo CD UI và kube API chỉ mở trong tailnet, không có domain công khai.</p>
+</section>
+
+<!-- 6 -->
+<section id="trang-thai">
+  <h2><span class="no">6</span>Trạng thái hiện tại</h2>
+  <p class="sub">Đọc từ repo ngày 2026-11-28. Chưa kiểm tra trực tiếp trên cluster.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Hạng mục</th><th>Trạng thái</th><th>Việc cần làm</th></tr></thead>
+    <tbody>
+      <tr><td>Domain + named tunnel</td><td><span class="pill ok">chạy</span></td><td>xemtuvingay.com, <code>cloudflared-named</code></td></tr>
+      <tr><td>CD tự động + ruleset main</td><td><span class="pill ok">chạy</span></td><td>GitHub App <code>xemtuvingay-cd</code> là bypass actor duy nhất</td></tr>
+      <tr><td>Thanh toán SePay</td><td><span class="pill ok">đã seal tài khoản nhận</span></td><td>trỏ webhook SePay tới <code>/webhooks/sepay</code>; chuyển thử 1.000đ</td></tr>
+      <tr><td>Backup off-host</td><td><span class="pill bad">chưa bật</span></td><td>seal <code>ops-secrets</code> và đặt <code>BACKUP_REQUIRED="1"</code> trong cùng một PR; diễn tập khôi phục</td></tr>
+      <tr><td>Cảnh báo Telegram</td><td><span class="pill bad">chưa bật</span></td><td>seal <code>alerting-secrets</code>, rollout restart lgtm</td></tr>
+      <tr><td>Mail magic link</td><td><span class="pill bad">chưa có relay</span></td><td>relay SMTP + SPF/DKIM; sửa <code>MAIL_HOST</code>/<code>MAIL_PORT</code> trong patch identity-svc</td></tr>
+      <tr><td>LLM thật</td><td><span class="pill warn">cần xác nhận</span></td><td>kiểm tra key Groq/Gemini đã seal chưa, đọc điều khoản dùng thương mại</td></tr>
+      <tr><td>Google login, Turnstile</td><td><span class="pill warn">chưa làm</span></td><td>tùy chọn</td></tr>
+      <tr><td>Xem số hợp mệnh</td><td><span class="pill warn">PR #48</span></td><td>đang review</td></tr>
+      <tr><td>Chiêm tinh F2</td><td><span class="pill warn">đang làm</span></td><td>worktree <code>C:\platform-f2</code></td></tr>
+      <tr><td>Trial GCP</td><td><span class="pill warn">hết 2027-02-24</span></td><td>lên kế hoạch chuyển host trước ngày đó</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 7 -->
+<section id="lich-su">
+  <h2><span class="no">7</span>Lịch sử và cách cập nhật</h2>
+  <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
+  <ol class="hist">
+    <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>Bản đầu tiên: đường đi request, 6 luồng nghiệp vụ, CI/CD và Argo CD, nơi cất secret, observability, trạng thái go-live. Thêm luật cập nhật trong CLAUDE.md và CI job <code>system-docs</code>.</div></li>
+  </ol>
+  <h4>Khi nào phải sửa trang này</h4>
+  <p>Một PR phải sửa <code>docs/system/</code> nếu nó đổi một trong các path sau. CI job <code>system-docs</code> (<code>scripts/check-system-docs.sh</code>) chặn PR nếu thiếu.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Path</th><th>Vì sao</th></tr></thead>
+    <tbody>
+      <tr><td><code>contracts/**</code></td><td>API và event giữa các service</td></tr>
+      <tr><td><code>deploy/k8s/**</code>, <code>deploy/argocd/**</code> (trừ tag ảnh trong <code>overlays/prod/apps/kustomization.yaml</code>)</td><td>định tuyến, rate limit, secret, slice Argo</td></tr>
+      <tr><td><code>infra/bootstrap/**</code></td><td>host, firewall, Tailscale</td></tr>
+      <tr><td><code>.github/workflows/**</code></td><td>CI, CD, verify, rollback</td></tr>
+      <tr><td>migration DB (<code>services/*/src/main/resources/db/migration/**</code>, <code>services/*/migrations/**</code>)</td><td>dữ liệu từng service</td></tr>
+      <tr><td><code>services/web/src/app/api/**</code></td><td>route BFF mà trình duyệt gọi</td></tr>
+    </tbody>
+  </table></div>
+  <p>Thay đổi không ảnh hưởng tới nội dung trang (chỉ sửa comment, đổi phiên bản dependency...) thì thêm một dòng <code>docs-system: n/a &lt;lý do&gt;</code> vào mô tả PR. PR của Dependabot được miễn.</p>
+  <footer>Tổng hợp từ CLAUDE.md, spec, ADR 0002–0005, runbook go-live, web, payments, llm-gateway, alerts, các workflow, manifest k8s, infra/bootstrap và mã nguồn các service.</footer>
+</section>
+</main>
+</div>
+<script type="module">
+  // Vẽ sơ đồ mermaid khi mở file trực tiếp (trình duyệt hoặc GitHub Pages); cần mạng để tải thư viện.
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const dark = document.documentElement.dataset.theme === "dark"
+    || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "strict" });
+</script>
+</body>
+</html>
