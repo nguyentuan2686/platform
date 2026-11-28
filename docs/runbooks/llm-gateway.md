@@ -31,7 +31,7 @@ How it behaves:
 - Free questions also use Claude (`ANTHROPIC_SERVE_FREE_TIER=true`, default); the free global daily cap (`QA_FREE_GLOBAL_DAILY_CAP`) and the budget bound the spend. Set it to `false` to keep free chat on Groq/Gemini only.
 - 429 (rate limit or the console spend limit) marks Claude exhausted (short `Retry-After`, else until UTC midnight); 5xx/529, timeouts (`ANTHROPIC_TIMEOUT`, default 30 s), a `refusal` stop reason or an empty answer fall through to the next provider; 400/401/402/403/404 log `llm provider rejected request provider=claude status=<code>` (check the key, billing and model id). Keys, prompts, questions and answers are never logged.
 
-Owner steps (Tuấn), once:
+Owner steps (Tuấn), only if Claude is wanted (today Hỏi thầy runs on the free Gemini and Groq keys; without this key Claude is skipped):
 1. Sign in at https://console.anthropic.com (an organization for the business; add billing in Settings > Billing and buy a small prepaid credit, e.g. 5 USD).
 2. Settings > Workspaces: create a workspace `xemtuvingay-prod` and give it a monthly spend limit a little above `ANTHROPIC_MONTHLY_BUDGET_USD` (e.g. 6 USD). This is the hard stop if the app's own budget ever fails. Also check Settings > Limits for the organization-wide limit.
 3. Settings > API Keys > Create Key, workspace `xemtuvingay-prod`, name `reading-tuvi-prod`. Copy it once into a password manager.
