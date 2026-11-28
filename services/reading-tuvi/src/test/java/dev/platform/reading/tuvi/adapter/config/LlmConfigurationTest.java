@@ -162,6 +162,18 @@ class LlmConfigurationTest {
   }
 
   @Test
+  void bad_rate_limit_backoff_fails_startup() {
+    runner.withPropertyValues("LLM_RATE_LIMIT_BACKOFF=1h").run(ctx -> assertThat(ctx).hasFailed());
+  }
+
+  @Test
+  void rate_limit_backoff_is_configurable() {
+    runner
+        .withPropertyValues("LLM_RATE_LIMIT_BACKOFF=PT15M")
+        .run(ctx -> assertThat(ctx).hasNotFailed().hasSingleBean(LlmGateway.class));
+  }
+
+  @Test
   void gateway_bean_is_built() {
     runner.run(ctx -> assertThat(ctx).hasSingleBean(LlmGateway.class));
   }

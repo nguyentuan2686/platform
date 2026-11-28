@@ -115,8 +115,12 @@ class LlmConfiguration {
       LlmUsagePort usage,
       ProviderPricing providerPricing,
       PaidPricing pricing,
-      Clock clock) {
-    return new LlmGateway(providers.ordered(), usage, providerPricing.byId(), pricing, clock);
+      Clock clock,
+      Environment env) {
+    // a 429 without Retry-After skips the provider this long (quotas reset on the provider's clock)
+    Duration backoff = Duration.parse(env.getProperty("LLM_RATE_LIMIT_BACKOFF", "PT1H").strip());
+    return new LlmGateway(
+        providers.ordered(), usage, providerPricing.byId(), pricing, clock, backoff);
   }
 
   /**

@@ -33,6 +33,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(
+    org.springframework.boot.test.system.OutputCaptureExtension.class)
 class QaServiceTest {
 
   static final String Q = "Năm nay chuyện tình duyên của tôi thế nào";
@@ -215,6 +217,19 @@ class QaServiceTest {
     // a retry of the same id is told to wait, never charged twice
     assertThat(paid(id)).isInstanceOf(Queued.class);
     assertThat(identity.consumed).hasSize(1);
+  }
+
+  /** The decline log names the provider, so a prod refusal can be traced to a model. */
+  @Test
+  void model_decline_log_names_the_provider(
+      org.springframework.boot.test.system.CapturedOutput out) {
+    provider.then("NGOAI_PHAM_VI");
+
+    paid(UUID.randomUUID());
+
+    assertThat(out.getAll())
+        .contains("qa model declined")
+        .contains("reason=OFF_TOPIC provider=scripted");
   }
 
   @Test
