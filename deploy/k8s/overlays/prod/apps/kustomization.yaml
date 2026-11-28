@@ -50,8 +50,8 @@ images:
   - {name: ghcr.io/nguyentuan2686/order-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
   - {name: ghcr.io/nguyentuan2686/notify-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
   - {name: ghcr.io/nguyentuan2686/chart-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
-  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
+  - {name: ghcr.io/nguyentuan2686/reading-tuvi, newTag: sha-3cb418f27ee7501b8ddac114539a86037acf0f46}
   - {name: ghcr.io/nguyentuan2686/identity-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
   - {name: ghcr.io/nguyentuan2686/payment-svc, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
-  - {name: ghcr.io/nguyentuan2686/web, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584,}
+  - {name: ghcr.io/nguyentuan2686/web, newTag: sha-66a1b2b467cf0fd8722c4cbcfd93077c39098584}
   # new-service: prod-images (scripts/new-service.sh inserts above this line; CD bumps these tags)
