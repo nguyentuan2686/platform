@@ -108,3 +108,8 @@ fn check_bodies(bodies: &[Body]) {
         assert_close(body, case, got, want);
     }
 }
+
+#[test]
+fn pluto_and_chiron_match_horizons_within_one_arcminute() {
+    check_bodies(&[Body::Pluto, Body::Chiron]);
+}

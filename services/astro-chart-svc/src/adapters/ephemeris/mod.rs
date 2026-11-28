@@ -1,16 +1,36 @@
 //! Ephemeris adapter: the Sun and planets from VSOP87D, the Moon and its true node from
-//! Meeus ch. 47; Pluto and Chiron follow in a later task.
+//! Meeus ch. 47; Pluto and Chiron interpolated from JPL Horizons tables.
 
 pub mod moon;
 mod planets;
+pub mod table;
 
-use anyhow::bail;
+use std::sync::OnceLock;
+
+use anyhow::Context;
 
 use crate::application::ports::EphemerisPort;
 use crate::domain::body::{Body, Ecliptic};
 use crate::domain::time::Moment;
 
 use planets::Planet;
+use table::{Table, TableError};
+
+static PLUTO: OnceLock<Result<Table, TableError>> = OnceLock::new();
+static CHIRON: OnceLock<Result<Table, TableError>> = OnceLock::new();
+
+fn tabulated(
+    cell: &'static OnceLock<Result<Table, TableError>>,
+    text: &str,
+    m: Moment,
+) -> anyhow::Result<Ecliptic> {
+    let table = cell.get_or_init(|| Table::parse(text));
+    table
+        .as_ref()
+        .map_err(Clone::clone)
+        .and_then(|t| t.at(m.jde))
+        .context("tabulated ephemeris")
+}
 
 /// [`EphemerisPort`] over the analytical theories.
 #[derive(Debug, Clone, Copy, Default)]
@@ -40,9 +60,8 @@ impl EphemerisPort for EphemerisAdapter {
             Body::Saturn => Planet::Saturn,
             Body::Uranus => Planet::Uranus,
             Body::Neptune => Planet::Neptune,
-            Body::Pluto | Body::Chiron => {
-                bail!("ephemeris for {body:?} is not implemented yet")
-            }
+            Body::Pluto => return tabulated(&PLUTO, include_str!("../../../data/pluto.csv"), m),
+            Body::Chiron => return tabulated(&CHIRON, include_str!("../../../data/chiron.csv"), m),
         };
         Ok(planets::apparent_planet(planet, m.jde))
     }
@@ -53,11 +72,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unimplemented_bodies_are_errors() {
-        let m = Moment::from_unix(0);
+    fn epochs_outside_the_tables_are_errors() {
+        let m = Moment::from_unix(-5_000_000_000);
         for body in [Body::Pluto, Body::Chiron] {
-            let err = EphemerisAdapter::new().apparent(body, m).unwrap_err();
-            assert!(err.to_string().contains(&format!("{body:?}")), "{err}");
+            assert!(EphemerisAdapter::new().apparent(body, m).is_err());
         }
     }
 
