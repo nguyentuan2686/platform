@@ -576,7 +576,7 @@ flowchart LR
       <tr><td>LLM thật</td><td><span class="pill warn">đang bật</span></td><td>key Gemini và Groq đã seal (Gemini trả lời trước, hết lượt chuyển Groq); còn: đọc điều khoản gói free về dùng thương mại và dữ liệu, key Anthropic khi cần Claude</td></tr>
       <tr><td>Google login, Turnstile</td><td><span class="pill warn">chưa làm</span></td><td>tùy chọn</td></tr>
       <tr><td>Xem số hợp mệnh</td><td><span class="pill ok">chạy</span></td><td>miễn phí, 2 số/người/ngày</td></tr>
-      <tr><td>Chiêm tinh F2</td><td><span class="pill warn">đang làm</span></td><td>worktree <code>C:\platform-f2</code></td></tr>
+      <tr><td>Chiêm tinh F2</td><td><span class="pill warn">đang làm</span></td><td>F2.1 <code>astro-chart-svc</code> (:8086, Rust, không DB) có trong CI và kind e2e, chưa lên prod (đăng ký <code>--prod</code> ở F2.5); tiếp theo F2.2 tách theo trang</td></tr>
       <tr><td>Trial GCP</td><td><span class="pill warn">hết 2027-02-24</span></td><td>lên kế hoạch chuyển host trước ngày đó</td></tr>
     </tbody>
   </table></div>
@@ -588,6 +588,7 @@ flowchart LR
   <p class="sub">Bản đầy đủ của mọi lần sửa nằm trong git: <code>git log -p -- docs/system</code>.</p>
   <ol class="hist">
     <!-- Mới nhất ở trên. Mỗi PR sửa trang này thêm đúng một dòng: ngày, PR, thay đổi gì. -->
+    <li><time datetime="2026-11-28">2026-11-28</time><div>PR #62: service mới <code>astro-chart-svc</code> (Rust, :8086, stateless): <code>POST /astro/chart</code> (bản đồ sao natal) và <code>POST /astro/transits</code> (dữ kiện "Hôm nay"), contract <code>contracts/openapi/astro-chart-svc.yaml</code>; có job CI, image, kind e2e (smoke + RED metric); chưa có Ingress và chưa vào prod.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Job CI <code>bootstrap</code> (15–20 phút) chỉ chạy cho PR đổi những gì nó thật sự kiểm (infra, Argo, platform, secret prod, workflow CI), không chạy cho PR chỉ đổi app/domain/tunnel hay workflow khác; push lên main vẫn luôn chạy.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Cảnh báo Telegram bật: <code>alerting-secrets</code> đã seal (bot riêng, chat của chủ dự án). lgtm chờ secret rồi tự restart (annotation <code>platform.dev/alerting-secrets-rev</code>), không cần lệnh tay.</div></li>
     <li><time datetime="2026-11-28">2026-11-28</time><div>Seal key thật <code>GEMINI_API_KEY</code> và <code>GROQ_API_KEY</code> trong <code>reading-tuvi-secrets</code>: Hỏi thầy dùng LLM thật: prod <code>LLM_PROVIDERS=gemini,groq</code> (Gemini trước, hết lượt hoặc 429 thì Groq).</div></li>
