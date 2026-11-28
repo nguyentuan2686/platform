@@ -13,11 +13,12 @@ The public ECR registry rate-limited anonymous pulls from GitHub runners. This i
 the PR.
 
 ## Fix
-`gh run rerun --failed`, no code change (CLAUDE.md CI triage rule).
+Rerun (`gh run rerun --failed`). This was the second Argo CD readiness timeout (the first, PR #58, had no root cause:
+lesson 2026-11-28-bootstrap-x86-argocd-ready-timeout), so the bootstrap now pre-pulls every image in the pinned Argo CD
+install.yaml through the CRI with backoff (10..160 s) before applying it (`prepull_images` in infra/bootstrap/lib/argocd.sh).
 
 ## How to catch earlier
-Read `events.txt` in the bootstrap-diagnostics artifact first. An ImagePullBackOff with 429 means rerun. If this registry
-429 shows up again, mirror or pre-pull the redis image on the runner rather than rerunning.
+Read `events.txt` in the bootstrap-diagnostics artifact first: ImagePullBackOff with 429 means a registry rate limit.
 
 ## Escalation
-none (first occurrence for public.ecr.aws)
+check: `prepull_images` in the bootstrap (PR #64), exercised by every CI bootstrap job.

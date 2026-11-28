@@ -28,10 +28,31 @@ render_argocd_cm() {
   fi
 }
 
+# prepull_images <manifest>: pull (through the CRI) every image the manifest names before the pods need them, retrying
+# with backoff. Anonymous registries (public.ecr.aws for argocd-redis) answer 429 to busy shared IPs such as CI
+# runners, and kubelet's own ImagePullBackOff alone outlasted the 600 s readiness deadline (lesson 2026-11-28).
+prepull_images() {
+  local manifest="$1" images img out delay
+  out="$(grep -E '^[[:space:]]+image:[[:space:]]' "$manifest")" || return 0
+  images="$(awk '{print $2}' <<<"$out" | tr -d '"'"'" | sort -u)"
+  for img in $images; do
+    "$K3S_BIN" crictl inspecti "$img" >/dev/null 2>&1 && continue
+    delay=10
+    until "$K3S_BIN" crictl pull "$img" >/dev/null 2>&1; do
+      [ "$delay" -le 160 ] || die "cannot pull $img (gave up after backoff up to 160s)"
+      note "pull $img failed, retrying in ${delay}s"
+      sleep "$delay"
+      delay=$((delay * 2))
+    done
+    note "pulled $img"
+  done
+}
+
 step_argocd() {
   local file="$CACHE_DIR/argocd-$ARGOCD_VERSION/install.yaml" what=() ns_file cm_file
   fetch_verified "https://raw.githubusercontent.com/argoproj/argo-cd/$ARGOCD_COMMIT/manifests/install.yaml" \
     "$(pin_sha ARGOCD)" "$file"
+  prepull_images "$file"
 
   ns_file="$(mktemp)"
   argocd_ns_manifest >"$ns_file"
